@@ -55,6 +55,13 @@ Baron is expected at `../baron/build/src/baron` or on the PATH.
   language (Spectrum key names, `KL KR KU KD KF` for Kempston, `>name` saves
   a snapshot, `--map FILE` logs executed addresses).
 - `python3 tools/grid.py out.png cols a.png b.png ...` tiles screenshots.
+- Speed: `node tools/frametime.mjs [--move] [--spots n] [rooms]` gives each
+  room's longest stretch between waits for VSync (over 40,000 cycles is a
+  4-frame pass); `tools/passcost.mjs` and `tools/callcost.mjs` break a
+  pass and a routine down; `tools/sample.mjs` profiles.
+- `node tools/screencmp.mjs old.ssd new.ssd [rooms]` runs two test discs
+  side by side and compares the screen at every wait: a change to the
+  drawing must leave every pixel as it was (collisions read the screen).
 
 ## The screen
 
@@ -109,6 +116,12 @@ handoff, the front end or anything paged.
 - `FOR n = 0..15` (inclusive), not BeebASM's `FOR n, 0, 15`.
 - A zero-page array is `ZA_AUTO 8, name`, indexed with `ZA_INDEXEDBY` after
   the access; eight `ZA_AUTO1`s aren't contiguous.
+- The allocator follows both ways out of every branch. A branch that is
+  always taken (`LDA #0 : BEQ x`) still "falls through", and a variable
+  read on that path, or read only when a condition the allocator can't
+  see holds, looks live everywhere and eats the pool (`No free zero-page
+  byte`, or "held live across recursion"). Where that bites, use `JMP`
+  for the always-taken branch, and set such variables on every path.
 
 ## Reading the original
 

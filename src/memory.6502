@@ -119,12 +119,6 @@ SECTION LowState, org = &0D00, guard = &0E00
 .score      SKIP 10         ; the score's digits, most significant first (&A445)
 .lives      SKIP 1          ; (&A3FA)
 .carrying_name SKIP 1       ; the carried thing's name in the status bar
-\ screen_bits' looked-up cells (collide.6502), one for each of Harry's columns.
-.sbc_lo     SKIP 2
-.sbc_hi     SKIP 2
-.sbc_glo    SKIP 2
-.sbc_ghi    SKIP 2
-.sbc_paper  SKIP 2
 \ This room's palette bands (bands.6502), set when the room is drawn: not
 \ a game's state, but free here, where they were sideways RAM. (band_count
 \ and band_rows are in the scratch zero page.)
@@ -161,10 +155,9 @@ SECTION Scratch, org = &90, guard = &FC
 .room_ula      SKIP 16
 \ (screen.6502)
 .dg_band       SKIP 1          ; draw_glyph's band offset
-.sp_row        SKIP 1          ; draw_sprite's screen row
+.sp_row        SKIP 1          ; the row draw_sprite or erase_image is at
 .sb_p          SKIP 2          ; setup_bands' pointer (bands.6502: no allocator there)
 .irq_split     SKIP 1          ; the next T1 split: 0 the status bar's, then bands 1, 2
-.sb_slot       SKIP 1          ; screen_bits' column of Harry, 0 or 1
 .gbyte         SKIP 1
 \ (status.6502)
 .status_i      SKIP 1
@@ -185,7 +178,6 @@ SECTION Scratch, org = &90, guard = &FC
 .m_h           SKIP 1
 .dl_i          SKIP 1
 \ (collide.6502)
-.ccol          SKIP 1
 .c_m           SKIP 1          ; who_was_hit's monster
 .box_l         SKIP 1
 .box_r         SKIP 1

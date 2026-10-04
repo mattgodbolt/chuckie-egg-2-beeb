@@ -4,9 +4,10 @@
     .venv/bin/python tools/mkgfx.py [--snap build/zx_start.z80]
 
 Writes, committed (the build never runs this):
-    src/data/sprites.bin    the sprite block &DFA2-&FDF7 verbatim: Harry,
-                            the monsters, truck, train and lifts
-                            (docs/research/monsters.md, section 8)
+    src/data/sprites.bin    the sprite block &DFA2-&FDF7: Harry, the
+                            monsters, truck, train and lifts
+                            (docs/research/monsters.md, section 8), each
+                            frame a column at a time
     src/data/gfx.6502       pointer tables into it, relocated to `sprites`
     src/data/monsters.bin   the monster table (&6B00, four 256-byte columns:
                             room, row, column, type)
@@ -14,8 +15,11 @@ Writes, committed (the build never runs this):
                             frame, flags, speed): docs/research/monsters.md,
                             section 3. (Apart, because it lives in page 3.)
 
-A sprite frame is the original's format: height in character rows, width
-in bytes, then height*8 rows of width bytes, row-major, 1 bit a pixel.
+A sprite frame is the original's: height in character rows, width in
+bytes, then its pixels, 1 bit a pixel; but the pixels are stored a column
+at a time (height*8 bytes for each byte across) where the original has a
+row at a time (decision 20): the BBC draws a column at a time, and steps
+down a column with an index alone (sprite.6502).
 """
 import argparse
 import os
@@ -30,6 +34,17 @@ SPRITE_FRAMES = 0x91B7      # 152 pointers: monsters, truck, train, lifts
 MONSTERS, MONTYPES, MONTYPES_END = 0x6B00, 0x6F00, 0x6FD0
 
 
+def by_columns(block, offsets):
+    """Each frame at these offsets in block, its rows made columns (frames
+    one byte wide are the same either way). The frames don't overlap."""
+    out = bytearray(block)
+    for o in sorted(set(offsets)):
+        h8, w = block[o] * 8, block[o + 1]
+        pixels = block[o + 2:o + 2 + h8 * w]
+        out[o + 2:o + 2 + h8 * w] = bytes(pixels[line * w + col] for col in range(w) for line in range(h8))
+    return bytes(out)
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--snap", default="build/zx_start.z80")
@@ -37,8 +52,9 @@ def main():
     args = ap.parse_args()
     m = Spectrum(args.snap).mem
     word = lambda a: m[a] | m[a + 1] << 8
+    frames = [word(HARRY_FRAMES + 2 * i) for i in range(12)] + [word(SPRITE_FRAMES + 2 * i) for i in range(152)]
     with open(f"{args.out}/sprites.bin", "wb") as f:
-        f.write(bytes(m[SPRITES:SPRITES_END]))
+        f.write(by_columns(m[SPRITES:SPRITES_END], [p - SPRITES for p in frames]))
 
     def rel(ptr):
         assert SPRITES <= ptr < SPRITES_END, hex(ptr)

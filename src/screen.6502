@@ -80,6 +80,31 @@ ZA_AUTO1 diff               ; ink pixels EOR paper pixels
 
 \ How `cell` looks: glyph = its tile's 8 bytes, paper and diff its colours.
 .cell_looks
+    JSR cell_glyph
+\ paper and diff alone (erase_image wants the glyph only for some cells).
+.cell_colours
+{
+    ZA_AUTO2 ap
+    LDA cell : STA ap
+    CLC : LDA cell+1 : ADC #HI(attr_map) : STA ap+1
+    LDY #0 : LDA (ap),Y
+    \ Fall into attr_colours.
+}
+\ paper and diff for Spectrum attribute A in `cell`'s band.
+.attr_colours
+    TAY                         ; (cell_band keeps Y)
+    JSR cell_band : STX dg_band
+    TYA
+    LSR A : LSR A : LSR A : AND #7 : ORA dg_band : TAX
+    LDA band_cmaps,X
+    TAX : LDA colour_bytes,X : STA paper
+    TYA : AND #7 : ORA dg_band : TAX
+    LDA band_cmaps,X
+    TAX : LDA colour_bytes,X : EOR paper : STA diff
+    RTS
+
+\ glyph alone: `cell`'s tile's 8 bytes.
+.cell_glyph
 {
     ZA_AUTO2 mp
     LDA cell : STA mp
@@ -91,25 +116,10 @@ ZA_AUTO1 diff               ; ink pixels EOR paper pixels
     TYA : ASL A : ASL A : ASL A
     CLC : ADC font_lo,X : STA glyph
     LDA font_hi,X : ADC #0 : STA glyph+1
-    \ The attribute, from its map three pages below.
-    LDA mp+1 : SEC : SBC #HI(tile_map) - HI(attr_map) : STA mp+1
-    LDY #0 : LDA (mp),Y
-    \ Fall into attr_colours.
-}
-\ paper and diff for Spectrum attribute A in `cell`'s band.
-.attr_colours
-    PHA
-    JSR cell_band : STX dg_band
-    PLA : PHA
-    LSR A : LSR A : LSR A : AND #7 : ORA dg_band : TAX
-    LDA band_cmaps,X
-    TAX : LDA colour_bytes,X : STA paper
-    PLA : AND #7 : ORA dg_band : TAX
-    LDA band_cmaps,X
-    TAX : LDA colour_bytes,X : EOR paper : STA diff
     RTS
+}
 
-\ cell_looks' glyph addresses, by a code's top three bits: 256 * those bits
+\ cell_glyph's glyph addresses, by a code's top three bits: 256 * those bits
 \ (their share of 8 * the code) plus the font less 8 * its first code. Tiles
 \ start at &20; text, bit 7 set, at &A0 in the OS's font (decision 4).
 .font_lo

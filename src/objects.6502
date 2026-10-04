@@ -107,10 +107,13 @@ KIND_FIXED = &40            ; kind bit 6 (with bit 7): a machine part
 .next_object
 {
     LDX o_index
-    LDY #128
+    LDA room
+    LDY #128 / 4                    ; four a time: this runs twice a pass
 .loop
-    INX
-    LDA t_room,X : CMP room : BEQ found
+    INX : CMP t_room,X : BEQ found
+    INX : CMP t_room,X : BEQ found
+    INX : CMP t_room,X : BEQ found
+    INX : CMP t_room,X : BEQ found
     DEY : BNE loop
     STX o_index
     LDA #0 : STA o_sel

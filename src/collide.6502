@@ -16,100 +16,119 @@
 \ pixels from 2*xf (a 1-byte frame is the left column alone).
 \ ***************************************************************************
 
+ZA_AUTO2 c_cell0            ; the left column's cell in this cell row
+ZA_AUTO1 c_yl               ; the line in the cell, through the look-ups
+ZA_AUTO1 c_mask             ; the pixels to test in a column, this line
+ZA_AUTO1 c_paper1           ; the right column's paper
+ZA_AUTO1 c_lines            ; Harry's lines left
 ZA_AUTO1 cw_lo              ; the window mask
 ZA_AUTO1 cw_hi
-ZA_AUTO1 cs_lo              ; window AND NOT Harry, one line
-ZA_AUTO1 cs_hi
-ZA_AUTO2 cimg               ; Harry's frame rows
-ZA_AUTO1 cline              ; the screen line being tested, 0-191
-ZA_AUTO1 crow               ; Harry's row 0-15
+ZA_AUTO2 cimg               ; who_was_hit's frames
 
+\ Down Harry's 16 lines a cell row at a time, as the sprites are drawn
+\ (sprite.6502): Y is the line in the cell, which indexes the tile's lines,
+\ the screen bytes from the cell's top, and Harry's frame (a column at a
+\ time, decision 20) through hp and hp1; so each column looks its cell up
+\ once for the eight lines it serves. A pixel that isn't paper shows in
+\ (screen byte EOR paper), either of its two bits. A hit anywhere goes to
+\ who_was_hit, which doesn't ask where.
 .collide
 {
-    ZA_AUTO1 hw
-    \ Harry's frame: width, and the window it gives.
-    LDY #1 : LDA (h_frame),Y : STA hw
-    CLC : LDA h_frame : ADC #2 : STA cimg
-    LDA h_frame+1 : ADC #0 : STA cimg+1
+    ZA_AUTO2 hp                 ; Harry's left column, for Y = 0
+    ZA_AUTO2 hp1                ; ... and right
+    ZA_AUTO2 s0                 ; the left column's screen: the cell's top, left
+    ZA_AUTO2 s08                ; ... and right four pixels
+    ZA_AUTO2 s1                 ; the right column's
+    ZA_AUTO2 s18
+    ZA_AUTO2 g1                 ; ... and its glyph (the left's is `glyph`)
+    \ Harry's frame: the window its width gives.
     LDA #&FF : STA cw_hi : LDA #0 : STA cw_lo
-    LDA hw : CMP #1 : BEQ window
+    LDY #1 : LDA (h_frame),Y : CMP #1 : BEQ window
     LDX h_xf : BEQ window
 .shift
     LSR cw_hi : ROR cw_lo : LSR cw_hi : ROR cw_lo
     DEX : BNE shift
 .window
-    LDA #&FF : STA sbc_hi : STA sbc_hi+1        ; nothing looked up yet
-    \ Harry's top line.
-    LDA h_cell : LDX h_cell+1 : JSR cell_row
-    ASL A : ASL A : ASL A : ORA h_yf : STA cline
-    LDA #0 : STA crow
+    \ His columns, each 16 lines, less his first line's Y.
+    CLC : LDA h_frame : ADC #2 : STA hp
+    LDA h_frame+1 : ADC #0 : STA hp+1
+    SEC : LDA hp : SBC h_yf : STA hp
+    BCS columns
+    DEC hp+1
+.columns
+    CLC : LDA hp : ADC #16 : STA hp1
+    LDA hp+1 : ADC #0 : STA hp1+1
+    \ (The right column's pointers and paper are only read when they're
+    \ set, but the allocator can't see that: set them, so that they hold
+    \ nothing between calls.)
+    LDA #0
+    STA g1 : STA g1+1 : STA s1 : STA s1+1 : STA s18 : STA s18+1 : STA c_paper1
+    LDA #16 : STA c_lines
+    LDA h_cell : STA c_cell0
+    LDA h_cell+1 : STA c_cell0+1
+    LDY h_yf
+.each_row
+    STY c_yl
+    \ The right column only if the window reaches it (cw_lo is 0 for a
+    \ 1-byte frame). Its cell is row * 32 OR column + 1, as the line's
+    \ cell has always been found.
+    LDA cw_lo : BEQ left
+    LDA h_cell : AND #31 : CLC : ADC #1 : STA cell
+    LDA c_cell0 : AND #&E0 : ORA cell : STA cell
+    LDA c_cell0+1 : STA cell+1
+    JSR cell_looks
+    LDA glyph : STA g1
+    LDA glyph+1 : STA g1+1
+    LDA paper : STA c_paper1
+    LDA cell : LDX cell+1 : JSR cell_screen
+    STA s1 : STY s1+1 : STY s18+1
+    ORA #8 : STA s18
+.left
+    LDA c_cell0 : STA cell
+    LDA c_cell0+1 : STA cell+1
+    JSR cell_looks                  ; glyph, paper
+    LDA cell : LDX cell+1 : JSR cell_screen
+    STA s0 : STY s0+1 : STY s08+1
+    ORA #8 : STA s08
+    LDY c_yl
 .line
-    \ The window less Harry's own pixels. (A 1-byte frame's window has no
-    \ right-hand column, so whatever follows its row there is masked out.)
-    LDA crow : LDX hw : DEX : BEQ one_byte
-    ASL A
-.one_byte
-    TAY
-    LDA (cimg),Y : EOR #&FF : AND cw_hi : STA cs_hi
-    INY : LDA (cimg),Y : EOR #&FF : AND cw_lo : STA cs_lo
-    LDA h_cell : AND #31 : STA ccol
-    LDX #0 : JSR screen_bits : AND cs_hi : BNE hit
-    LDA cs_lo : BEQ next_line
-    INC ccol
-    LDX #1 : JSR screen_bits : AND cs_lo : BNE hit
-.next_line
-    INC cline
-    INC crow : LDA crow : CMP #16 : BNE line
+    \ The window less Harry's and the tile's own pixels, against the screen.
+    LDA (hp),Y : ORA (glyph),Y : EOR #&FF : AND cw_hi : BEQ right
+    STA c_mask
+    LSR A : LSR A : LSR A : LSR A : TAX
+    LDA (s0),Y : EOR paper : AND spread_lo,X : BNE hit
+    LDA c_mask : AND #15 : TAX
+    LDA (s08),Y : EOR paper : AND spread_lo,X : BNE hit
+.right
+    LDA cw_lo : BEQ next
+    LDA (hp1),Y : ORA (g1),Y : EOR #&FF : AND cw_lo : BEQ next
+    STA c_mask
+    LSR A : LSR A : LSR A : LSR A : TAX
+    LDA (s1),Y : EOR c_paper1 : AND spread_lo,X : BNE hit
+    LDA c_mask : AND #15 : TAX
+    LDA (s18),Y : EOR c_paper1 : AND spread_lo,X : BNE hit
+.next
+    INY
+    DEC c_lines : BEQ done
+    CPY #8 : BNE line
+    \ The cell row below, from its top: Y goes back 8, so hp and hp1 on 8.
+    CLC : LDA hp : ADC #8 : STA hp
+    BCC hp_ok
+    INC hp+1
+.hp_ok
+    CLC : LDA hp1 : ADC #8 : STA hp1
+    BCC hp1_ok
+    INC hp1+1
+.hp1_ok
+    CLC : LDA c_cell0 : ADC #32 : STA c_cell0
+    BCC down
+    INC c_cell0+1
+.down
+    LDY #0 : JMP each_row
+.done
     RTS
 .hit
     JMP who_was_hit
-}
-
-\ On screen line cline, column ccol: the pixels that aren't the cell's
-\ paper, less the tile's own pixels; 1 bit a pixel, leftmost in bit 7.
-\ X is Harry's column, 0 or 1: each keeps the last cell it looked up, as
-\ one cell serves eight lines.
-.screen_bits
-{
-    ZA_AUTO2 sp
-    ZA_AUTO1 tb
-    ZA_AUTO1 left
-    ZA_AUTO1 right
-    STX sb_slot
-    \ cell = (line / 8) * 32 + column
-    LDA cline : ASL A : ASL A : AND #&E0 : ORA ccol : STA cell
-    LDA cline : ASL A : ROL A : ROL A : AND #3 : STA cell+1    ; line / 64
-    LDA cell : CMP sbc_lo,X : BNE look
-    LDA cell+1 : CMP sbc_hi,X : BNE look
-    LDA sbc_glo,X : STA glyph
-    LDA sbc_ghi,X : STA glyph+1
-    LDA sbc_paper,X : STA paper
-    JMP looked
-.look
-    JSR cell_looks                  ; glyph, paper
-    LDX sb_slot
-    LDA cell : STA sbc_lo,X
-    LDA cell+1 : STA sbc_hi,X
-    LDA glyph : STA sbc_glo,X
-    LDA glyph+1 : STA sbc_ghi,X
-    LDA paper : STA sbc_paper,X
-.looked
-    \ The screen bytes: screen + 16 * cell + line, and 8 on.
-    LDA cell : LDX cell+1 : JSR cell_screen
-    STA sp : STY sp+1
-    LDA cline : AND #7 : TAY
-    LDA (glyph),Y : STA tb
-    \ A pixel isn't paper if either of its bits differs: fold the two
-    \ nibbles of (byte EOR paper) together, the left byte's into the top
-    \ nibble, the right's into the bottom.
-    LDA (sp),Y : EOR paper : STA left
-    ASL A : ASL A : ASL A : ASL A : ORA left : AND #&F0 : STA left
-    TYA : ORA #8 : TAY
-    LDA (sp),Y : EOR paper : STA right
-    LSR A : LSR A : LSR A : LSR A : ORA right : AND #15 : ORA left
-    \ Less the tile's own pixels.
-    ORA tb : EOR tb
-    RTS
 }
 
 \ Who was hit (&940A): character-cell boxes, the first monster in record

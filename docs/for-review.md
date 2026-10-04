@@ -61,7 +61,13 @@ things parked for discussion. The reasoning for each is in
    jsbeeb: worth a run on Matt's real Master. If a ROM on it claims HAZEL
    `&D000-&D6FF`, the reset snapshot will need to move (to shadow RAM,
    driven from HAZEL).
-12. **Speed**: the original keeps to 3 frames a pass everywhere; the port
-   does in all but rooms 85 and 97, where 1 or 2 passes in 20 take 4
-   (`tools/perf.mjs`). The next savings would be in `draw_sprite` and
-   `erase_image`'s inner loops.
+12. **Speed**: the original keeps to 3 frames a pass everywhere, and now
+   so does the port, idle and moving: the longest stretch between two
+   waits for VSync (`tools/frametime.mjs`) is 25,700 cycles idle and
+   28,500 moving, of a frame's 40,000 (it was 44,800 and 48,400, with 2
+   and 9 rooms taking 4 frames for some passes). Decision 20 (frames
+   stored a column at a time) is part of it. Left: the movement tick
+   still waits out its two cycles, as the original's beeper loop did (up
+   to 2,900 cycles in each of the first two stretches while Harry moves);
+   ending the tone from the interrupt would free that, if the
+   interrupt's sound write can be kept from breaking into the game's.

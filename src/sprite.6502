@@ -7,9 +7,16 @@
 \ from the same two maps.
 \
 \ Frames are the original's: height in character rows, width in bytes,
-\ then height * 8 rows of width bytes, 1 bit a pixel. Positions are whole
-\ cells across (the frames are pre-shifted in 2-pixel steps) and a cell
-\ plus a pixel line (yf) down.
+\ then height * 8 lines of width bytes, 1 bit a pixel, but stored a column
+\ at a time (decision 20). Positions are whole cells across (the frames
+\ are pre-shifted in 2-pixel steps) and a cell plus a pixel line (yf)
+\ down.
+\
+\ Both routines work a cell row at a time, and in it a column at a time
+\ from the right: a frame byte's two screen bytes are touched by no other
+\ byte, so the order doesn't change what's drawn. Y is the line in the
+\ cell, which indexes the screen bytes from the cell's top, the tile's
+\ lines, and the frame's column through sp_p.
 \ ***************************************************************************
 
 ZA_AUTO2 sp_frame           ; the frame's header
@@ -18,74 +25,51 @@ ZA_AUTO1 sp_yf              ; the pixel line in that cell, 0-7
 ZA_AUTO1 sp_ink             ; the sprite's Spectrum colour, 0-7
 ZA_AUTO1 sp_colour          ; that colour in this row's band: a byte of four pixels
 
-\ What sprite_setup gives draw_sprite and erase_image.
-ZA_AUTO2 spr_src            ; the frame's first row
-ZA_AUTO2 spr_scr            ; the screen byte of its top-left pixel
-ZA_AUTO1 spr_lines          ; its height in lines
-ZA_AUTO1 spr_width          ; ... and width in bytes
-
-\ The frame at sp_frame, sp_cell, sp_yf: its size, its first row and the
-\ screen address of its top line.
-.sprite_setup
-    LDY #0 : LDA (sp_frame),Y
-    ASL A : ASL A : ASL A : STA spr_lines
-    INY : LDA (sp_frame),Y : STA spr_width
-    CLC : LDA sp_frame : ADC #2 : STA spr_src
-    LDA sp_frame+1 : ADC #0 : STA spr_src+1
-    LDA sp_cell : LDX sp_cell+1 : JSR cell_screen
-    ORA sp_yf : STA spr_scr : STY spr_scr+1
-    RTS
+\ The frame as it is drawn (sp_row is in memory.6502's scratch): ...
+ZA_AUTO1 sp_h8              ; its lines: a column's bytes
+ZA_AUTO1 sp_width           ; its width in bytes
+ZA_AUTO1 sp_w16             ; 16 * (width - 1): its last column on the screen
+ZA_AUTO1 sp_lines           ; its lines below this cell row
+\ ... this cell row ...
+ZA_AUTO2 sp_rowcell         ; its first cell
+ZA_AUTO2 sp_rowscr          ; its screen address
+ZA_AUTO2 sp_rowp            ; sp_p for its last column
+ZA_AUTO1 sp_y               ; its first line
+ZA_AUTO1 sp_end             ; Y after its last line
+\ ... and the column.
+ZA_AUTO1 sp_c               ; from width - 1 down to 0
+ZA_AUTO2 sp_p               ; its frame bytes, for Y = 0
+ZA_AUTO2 sp_scr             ; the screen: this cell's top, its left four pixels
+ZA_AUTO2 sp_scr8            ; ... and its right four (sp_scr + 8)
+ZA_AUTO1 sp_yl              ; (erase_image's Y, kept through a look-up)
 
 \ Draw the frame at sp_frame, sp_cell, sp_yf in Spectrum colour sp_ink,
 \ looked up afresh in each row's band (decision 15).
 .draw_sprite
 {
-    ZA_AUTO1 yf
-    ZA_AUTO1 bcol
-    ZA_AUTO1 soff
     ZA_AUTO1 img
-    JSR sprite_setup
-    LDA sp_yf : STA yf
-    \ Its first row, and its colour there.
-    LDA sp_cell : LDX sp_cell+1 : JSR cell_row : STA sp_row
-    JSR sprite_colour
-.row
-    LDA #0 : STA bcol : STA soff
-.byte
-    LDY bcol : LDA (spr_src),Y : BEQ next_byte
-    STA img
-    LSR A : LSR A : LSR A : LSR A : TAX
-    LDY soff                    ; the left four pixels
-    LDA (spr_scr),Y : EOR sp_colour : AND spread_lo,X : EOR (spr_scr),Y : STA (spr_scr),Y
-    LDA img : AND #15 : TAX
-    TYA : ORA #8 : TAY          ; the right four
-    LDA (spr_scr),Y : EOR sp_colour : AND spread_lo,X : EOR (spr_scr),Y : STA (spr_scr),Y
-.next_byte
-    LDA soff : CLC : ADC #16 : STA soff
-    INC bcol : LDA bcol : CMP spr_width : BNE byte
-    \ The next row of the frame, the next line down the screen.
-    CLC : LDA spr_src : ADC spr_width : STA spr_src
-    BCC src_ok
-    INC spr_src+1
-.src_ok
-    INC yf : LDA yf : AND #7 : BEQ next_cell
-    INC spr_scr                 ; (never carries: yf < 8 in a 16-byte cell)
-    JMP more
-.next_cell
-    \ From line 7 of this cell row to line 0 of the next, 512 bytes on.
-    LDA spr_scr : AND #&F0 : STA spr_scr
-    INC spr_scr+1 : INC spr_scr+1
-    INC sp_row : JSR sprite_colour
-.more
-    DEC spr_lines : BNE row
-    RTS
-}
-
-\ sp_colour = sp_ink in row sp_row's band.
-.sprite_colour
+    JSR sprite_start
+.each_row
+    \ The colour in this row's band.
     LDX sp_row : LDA band_off,X : ORA sp_ink : TAX
     LDA band_cmaps,X : TAX : LDA colour_bytes,X : STA sp_colour
+    JSR sprite_row
+.line
+    LDA (sp_p),Y : BEQ next
+    STA img
+    LSR A : LSR A : LSR A : LSR A : BEQ right
+    TAX                         ; the left four pixels
+    LDA (sp_scr),Y : EOR sp_colour : AND spread_lo,X : EOR (sp_scr),Y : STA (sp_scr),Y
+.right
+    LDA img : AND #15 : BEQ next
+    TAX                         ; the right four
+    LDA (sp_scr8),Y : EOR sp_colour : AND spread_lo,X : EOR (sp_scr8),Y : STA (sp_scr8),Y
+.next
+    INY : CPY sp_end : BNE line
+    JSR sprite_left : BCC line
+    JSR sprite_down : BCC each_row
     RTS
+}
 
 \ Erase the frame at sp_frame, sp_cell, sp_yf the original's way (&7FC9):
 \ under each set pixel of the image, put back the room's pixel (the tile
@@ -94,70 +78,182 @@ ZA_AUTO1 spr_width          ; ... and width in bytes
 \ shape out of them, as in the original, until they are redrawn.
 .erase_image
 {
-    ZA_AUTO2 col_src
-    ZA_AUTO2 col_scr
-    ZA_AUTO1 yf
-    ZA_AUTO1 bcol
-    ZA_AUTO1 left
     ZA_AUTO1 img
-    ZA_AUTO1 mask
     ZA_AUTO1 tb
-    JSR sprite_setup
-    \ A column at a time (the bytes are independent), so a cell is looked
-    \ up once for each cell row it covers, not once a line.
-    LDA #0 : STA bcol
+    ZA_AUTO1 mask
+    JSR sprite_start
+.each_row
+    JSR sprite_row
 .column
-    CLC : LDA spr_src : ADC bcol : STA col_src
-    LDA spr_src+1 : ADC #0 : STA col_src+1
-    LDA bcol : ASL A : ASL A : ASL A : ASL A        ; 16 bytes a cell across
-    CLC : ADC spr_scr : STA col_scr
-    LDA spr_scr+1 : ADC #0 : STA col_scr+1
-    CLC : LDA sp_cell : ADC bcol : STA cell
-    LDA sp_cell+1 : ADC #0 : STA cell+1
-    LDA sp_yf : STA yf
-    LDA spr_lines : STA left
-    JSR cell_looks
-.line
-    LDY #0 : LDA (col_src),Y : BEQ next_line
+    \ A cell is looked up only if the column has a pixel in it.
+    LDA (sp_p),Y : BNE found
+    INY : CPY sp_end : BNE column
+    JMP column_done
+.found
+    \ The cell: the row's first plus the column (past column 31 the next
+    \ row's, as the maps have it).
+    STY sp_yl
+    CLC : LDA sp_rowcell : ADC sp_c : STA cell
+    LDA sp_rowcell+1 : ADC #0 : STA cell+1
+    JSR cell_colours                ; paper, diff
+    LDA paper : ORA diff : BEQ clear
+    JSR cell_glyph
+    LDY sp_yl
+    LDA (sp_p),Y
+    JMP have
+.clear
+    \ Paper 0 and ink the same, as in most of a room: the room's pixels
+    \ here are all 0, so the image's pixels are cleared (AND NOT spread(n)
+    \ is AND spread(n EOR 15)).
+    LDY sp_yl
+    LDA (sp_p),Y
+.clear_have
     STA img
-    \ The room's pixels here: the tile's line, in the cell's colours.
-    LDY yf : LDA (glyph),Y : STA tb
-    LDA img : LSR A : LSR A : LSR A : LSR A : TAX
-    LDA spread_lo,X : STA mask
+    LSR A : LSR A : LSR A : LSR A : EOR #15 : TAX
+    LDA (sp_scr),Y : AND spread_lo,X : STA (sp_scr),Y
+    LDA img : AND #15 : EOR #15 : TAX
+    LDA (sp_scr8),Y : AND spread_lo,X : STA (sp_scr8),Y
+.clear_next
+    INY : CPY sp_end : BEQ column_done
+    LDA (sp_p),Y : BNE clear_have
+    JMP clear_next                  ; (not BEQ: the allocator would see a
+                                    ; way on into .line, which reads glyph)
+.line
+    LDA (sp_p),Y : BEQ next
+.have
+    STA img
+    LDA (glyph),Y : BNE tiled
+    \ The tile's line is blank: the room's pixels here are paper.
+    LDA img : LSR A : LSR A : LSR A : LSR A : BEQ plain_right
+    TAX
+    LDA (sp_scr),Y : EOR paper : AND spread_lo,X : EOR (sp_scr),Y : STA (sp_scr),Y
+.plain_right
+    LDA img : AND #15 : BEQ next
+    TAX
+    LDA (sp_scr8),Y : EOR paper : AND spread_lo,X : EOR (sp_scr8),Y : STA (sp_scr8),Y
+.next
+    INY : CPY sp_end : BNE line
+.column_done
+    JSR sprite_left : BCS row_done
+    JMP column
+.row_done
+    JSR sprite_down : BCS done
+    JMP each_row
+.done
+    RTS
+.tiled
+    \ The room's pixels: the tile's line, in the cell's colours.
+    STA tb
+    LDA img : LSR A : LSR A : LSR A : LSR A : BEQ tiled_right
+    TAX : LDA spread_lo,X : STA mask
     LDA tb : LSR A : LSR A : LSR A : LSR A : TAX
     LDA spread_lo,X : AND diff : EOR paper
-    LDY #0
-    EOR (col_scr),Y : AND mask : EOR (col_scr),Y : STA (col_scr),Y
-    LDA img : AND #15 : TAX
-    LDA spread_lo,X : STA mask
+    EOR (sp_scr),Y : AND mask : EOR (sp_scr),Y : STA (sp_scr),Y
+.tiled_right
+    LDA img : AND #15 : BEQ next
+    TAX : LDA spread_lo,X : STA mask
     LDA tb : AND #15 : TAX
     LDA spread_lo,X : AND diff : EOR paper
-    LDY #8
-    EOR (col_scr),Y : AND mask : EOR (col_scr),Y : STA (col_scr),Y
-.next_line
-    CLC : LDA col_src : ADC spr_width : STA col_src
-    BCC src_ok
-    INC col_src+1
-.src_ok
-    DEC left : BEQ next_column
-    INC yf : LDA yf : CMP #8 : BEQ next_cell
-    INC col_scr                 ; (never carries: yf < 8 in a 16-byte cell)
-    JMP line
-.next_cell
-    \ From line 7 of this cell row to line 0 of the next, 512 bytes on.
-    LDA #0 : STA yf
-    LDA col_scr : AND #&F0 : STA col_scr
-    INC col_scr+1 : INC col_scr+1
-    CLC : LDA cell : ADC #32 : STA cell
-    BCC looks
-    INC cell+1
-.looks
-    JSR cell_looks
-    JMP line
-.next_column
-    INC bcol : LDA bcol : CMP spr_width : BEQ done
-    JMP column
+    EOR (sp_scr8),Y : AND mask : EOR (sp_scr8),Y : STA (sp_scr8),Y
+    JMP next
+}
+
+\ Set up the frame at sp_frame, sp_cell, sp_yf for drawing or erasing, at
+\ its first cell row.
+.sprite_start
+{
+    LDY #0 : LDA (sp_frame),Y
+    ASL A : ASL A : ASL A : STA sp_h8 : STA sp_lines
+    INY : LDA (sp_frame),Y : STA sp_width
+    \ sp_rowp = the last column's first line, less yf: frame + 2 +
+    \ (width - 1) * lines - yf.
+    CLC : LDA sp_frame : ADC #2 : STA sp_rowp
+    LDA sp_frame+1 : ADC #0 : STA sp_rowp+1
+    LDX sp_width
+.across
+    DEX : BEQ top
+    CLC : LDA sp_rowp : ADC sp_h8 : STA sp_rowp
+    BCC across
+    INC sp_rowp+1
+    BCS across                      ; (always)
+.top
+    SEC : LDA sp_rowp : SBC sp_yf : STA sp_rowp
+    BCS screen_addr
+    DEC sp_rowp+1
+.screen_addr
+    \ The first cell's screen address; the last column 16 * (width - 1) on.
+    LDA sp_width : SEC : SBC #1 : ASL A : ASL A : ASL A : ASL A : STA sp_w16
+    LDA sp_cell : LDX sp_cell+1 : JSR cell_screen
+    STA sp_rowscr : STY sp_rowscr+1
+    LDA sp_cell : STA sp_rowcell
+    LDX sp_cell+1 : STX sp_rowcell+1
+    JSR cell_row : STA sp_row
+    LDA sp_yf : STA sp_y
+    RTS
+}
+
+\ Start a cell row: its lines are Y = sp_y up to sp_end (the frame's lines
+\ below it left in sp_lines), at its last column (sp_c).
+.sprite_row
+{
+    LDA sp_y : CLC : ADC sp_lines
+    SEC : SBC #8 : BCC last
+    STA sp_lines
+    LDA #8
+    JMP ended
+.last
+    ADC #8                          ; (carry clear)
+    LDX #0 : STX sp_lines
+.ended
+    STA sp_end
+    LDX sp_width : DEX : STX sp_c
+    LDA sp_rowp : STA sp_p
+    LDA sp_rowp+1 : STA sp_p+1
+    CLC : LDA sp_rowscr : ADC sp_w16 : STA sp_scr : ORA #8 : STA sp_scr8
+    LDA sp_rowscr+1 : ADC #0 : STA sp_scr+1 : STA sp_scr8+1
+    LDY sp_y
+    RTS
+}
+
+\ On to the column on the left, Y back at the row's first line: carry
+\ clear, or carry set when the row is done.
+.sprite_left
+{
+    DEC sp_c : BMI done
+    SEC : LDA sp_p : SBC sp_h8 : STA sp_p
+    LDA sp_p+1 : SBC #0 : STA sp_p+1
+    SEC : LDA sp_scr : SBC #16 : STA sp_scr : ORA #8 : STA sp_scr8
+    LDA sp_scr+1 : SBC #0 : STA sp_scr+1 : STA sp_scr8+1
+    LDY sp_y
+    CLC
+    RTS
 .done
+    SEC
+    RTS
+}
+
+\ After a cell row: on to the one below, carry clear; carry set when the
+\ frame is done.
+.sprite_down
+{
+    LDA sp_lines : BEQ done
+    \ Y goes back 8, to the top of the cells below, so sp_p goes on 8.
+    CLC : LDA sp_rowp : ADC #8 : STA sp_rowp
+    BCC screen_row
+    INC sp_rowp+1
+.screen_row
+    ASSERT LO(ROW_BYTES) = 0
+    CLC : LDA sp_rowscr+1 : ADC #HI(ROW_BYTES) : STA sp_rowscr+1
+    CLC : LDA sp_rowcell : ADC #32 : STA sp_rowcell
+    BCC row
+    INC sp_rowcell+1
+.row
+    INC sp_row
+    LDA #0 : STA sp_y
+    CLC
+    RTS
+.done
+    SEC
     RTS
 }
 

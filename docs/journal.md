@@ -849,3 +849,54 @@ gathers any number of one ingredient (and makes jumps lower).
   cell's low byte alone, so left of a page's first cell it reads the
   page's last (row 23's column 31, solid there), not the row above's.
   Transcribed, with a scenario (wall-wrap). 18 scenarios.
+
+### Three frames a pass, with room to spare
+
+- Measured differently first: `tools/perf.mjs` counts frames a pass,
+  which says only whether a pass overran. `tools/frametime.mjs` logs the
+  cycles between the main loop's waits for VSync: each of a pass's three
+  stretches must fit in a frame, 40,000 cycles with the interrupts, and
+  what's left is the slack. Idle in every room, and moving (a cycle of
+  walk, jump and climb keys, `--move`). Before, on fde22f5: the worst
+  stretch 44,800 cycles idle and 48,400 moving (room 30, the stretch that
+  draws tick A's monsters and tests contact), 2 and 9 rooms over a frame;
+  from three spots a room, moving, 28 of 285 over.
+- `tools/passcost.mjs` (each call in a pass) and `tools/callcost.mjs`
+  (each call to a routine) said where: room 30's two monsters' erase and
+  draw took 36,600 cycles in one stretch, the contact test 5,700 twice a
+  pass (9,600 with Harry walking), the round robin 2,100 twice.
+- What changed, all exact, checked by `tools/screencmp.mjs`, which runs
+  the old and new test discs side by side and compares the screen at
+  every wait (collisions read it, so it must not change by a pixel):
+  - Sprites are drawn and erased a cell row at a time and in it a column
+    at a time, with Y the line in the cell indexing the screen, the tile
+    and the frame together, each screen half through its own pointer, and
+    nibbles with no pixels skipped. Decision 20 stores the frames a column
+    at a time, so going down a column is `INY` alone.
+  - The erase looks a cell up only if the column has a pixel in it, takes
+    its colours before its tile (`cell_looks` is now `cell_glyph` and
+    `cell_colours`), and where the cell is paper 0 with the ink the same
+    (most of a room) just clears the image's pixels.
+  - The contact test goes down Harry's lines a cell row at a time, each
+    column's cell looked up once, testing (Harry OR tile) against the
+    window and the screen's not-paper bits without folding them to a
+    bit a pixel. screen_bits and its cache go.
+  - The round robin compares four things a loop, `CMP t_room,X`.
+- After: the worst stretch 25,700 cycles idle and 28,500 moving (slack
+  14,300 and 11,500), from one spot or three. Room 30's monsters take
+  22,000, the contact test 2,100 (3,800 walking), the round robin 1,300.
+  Main RAM 221 bytes more (2,868 free becoming 2,647): the sprite code
+  is 162 bigger than part A's.
+- The allocator was the trap. A branch that is always taken still has a
+  fall-through for baron, and a variable read on that path (or read only
+  when a condition baron can't see holds) is live everywhere: the first
+  build of this ran out of zero page in the room drawer, nowhere near the
+  change. Now in CLAUDE.md's baron gotchas.
+- Also learnt: a comparison of two builds must keep them at the same
+  point in the game. After a death the test hook can wait for a pass that
+  never ends, and the faster build gets further in the same time; the
+  first full run reported a difference that was only that. `screencmp`
+  now restarts both machines after a death.
+- Left: the movement tick still waits out its two cycles (up to 2,900
+  cycles in each of the first two stretches while Harry moves), as the
+  original's beeper loop does.

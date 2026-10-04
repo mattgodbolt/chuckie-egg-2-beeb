@@ -55,10 +55,10 @@ things parked for discussion. The reasoning for each is in
    tables then, so the reset that follows may misbehave. CTRL-BREAK, then
    SHIFT-BREAK, gets back to the menu. Making BREAK return to the menu
    cleanly would mean keeping `&0258` and `&027F-&029B` free of tables.
-11. **The Master is wanted after all** (Matt: "Master support is important
-   as I only have a physical Master to test on"): decision 14 is to be
-   revisited. What it takes is being explored (the font, perhaps patched in
-   at start-up; the reset back to `MENU` on MOS 3.20).
+11. **The Master** is supported again (decision 16), checked only in
+   jsbeeb: worth a run on Matt's real Master. If a ROM on it claims HAZEL
+   `&D000-&D6FF`, the reset snapshot will need to move (to shadow RAM,
+   driven from HAZEL).
 12. **Speed**: the original keeps to 3 frames a pass everywhere; the port
    does in all but rooms 85 and 97, where 1 or 2 passes in 20 take 4
    (`tools/perf.mjs`). The next savings would be in `draw_sprite` and

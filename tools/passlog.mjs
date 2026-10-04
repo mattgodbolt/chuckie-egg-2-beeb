@@ -38,7 +38,7 @@ try {
     if (start) {
         // --start room,row,col,yf,xf,state,face: placed during the first
         // pass, put in the room at its end (teleport in game.6502).
-        await b.run(10);
+        await b.run(30);
         const [room, row, col, yf, xf, state, face] = start;
         const cell = row * 32 + col;
         await b.write("dbg_start", [cell & 0xff, cell >> 8, yf, xf, state, face]);
@@ -52,7 +52,7 @@ try {
         }
     }
     for (let n = 0; n < passes; n++) {
-        const r = await b.run(10);
+        const r = await b.run(n === 0 ? 30 : 10);
         if (r.stopped_reason === undefined && !String(JSON.stringify(r)).includes("breakpoint"))
             throw new Error(`pass ${n}: never reached game_loop: ${JSON.stringify(r)}`);
         for (const { key, a, b: last } of inputs) {

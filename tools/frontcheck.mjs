@@ -55,12 +55,18 @@ const state = async () => {
 };
 
 try {
+    // A page is up once its text is, but MENU may still be printing it and
+    // empty the keyboard buffer after; and a Master repeats a key held 0.3s
+    // (CMOS delay 30cs against OS 1.20's 32cs), skipping a page.
     check(await waitText("INSTRUCTIONS!"), "first boot: the instructions' title page");
-    await hold("SPACE");
+    await b.run(0.5);
+    await hold("SPACE", 0.2);
     check(await waitText("Harry has to make"), "instructions page 1");
-    await hold("SPACE");
+    await b.run(0.5);
+    await hold("SPACE", 0.2);
     check(await waitText("Henhouse Harry"), "instructions page 2");
-    await hold("SPACE");
+    await b.run(0.5);
+    await hold("SPACE", 0.2);
     check(await menuReady(), "the menu");
 
     // R: the keys in the original's order (up, down, left, right, jump,

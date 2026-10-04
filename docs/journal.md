@@ -707,3 +707,32 @@ gathers any number of one ingredient (and makes jumps lower).
 - RAM: the game no longer searches the banks for its data with a 33-byte
   magic; MENU, which has just found or filled the bank, leaves its number
   in zero page `&8F`. Main RAM 124 bytes free.
+
+### The Master back
+
+- Matt: "Master support is important as I only have a physical Master to
+  test on". A subagent investigated in its own worktree, disassembling MOS
+  3.20 and tracing its reset in jsbeeb, and came back with a working
+  patch (decision 16):
+  - The font: MOS 3.20 keeps it in bank 15 at `&B900`, byte for byte OS
+    1.20's, but the data bank must stay paged in (the interrupt reads the
+    bands from it). So on a Master the loader builds the font through
+    OSWORD 10 and copies it into HAZEL at `&C000`, and HAZEL stays paged
+    in: the game's font address doesn't change. Matt's self-modifying
+    patch wasn't needed.
+  - The reset hung because MOS 3.20's soft BREAK trusts what the game had
+    overwritten: an EXEC handle of `&82` from `thing_types` in `&0256`
+    sent it into a BRK loop; `&0355` chose MODE 5, which would have wiped
+    the state block; a junk extended vector under LowState jumped to
+    bank 0. The loader now snapshots pages 2, 3 and `&0D` into HAZEL,
+    and `master_reset` puts them back before resetting.
+  - It all runs in the loader, which is discarded: no RAM lost; main RAM
+    gained 10 bytes (OSBYTE 229 moved there).
+- Applied here (one hunk by hand: `find_data_bank` had changed since),
+  with ACCCON's shadow bits cleared too, and checked on both machines:
+  120 of 120 rooms, 16 scenarios and the front end, on the Model B and on
+  jsbeeb's Master. `make check MODEL=Master` runs it all on the Master.
+- The test tools needed patience on the Master: it boots about a second
+  slower (the first wait for the main loop is now 30s), and its key repeat
+  starts at 30cs against OS 1.20's 32cs, so frontcheck's 0.3s presses
+  skipped an instructions page; it now waits half a second and holds 0.2s.

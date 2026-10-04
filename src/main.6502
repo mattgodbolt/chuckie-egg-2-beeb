@@ -167,6 +167,9 @@ ENDIF
 \ reset (state.6502) the DFS must still be there to boot MENU. (With *TAPE
 \ selected here, that reset came up in the cassette filing system.)
 .loader
+    LDA #229 : LDX #1 : LDY #0 : JSR osbyte    ; ESCAPE is an ordinary key
+    LDA #0 : LDX #1 : JSR osbyte                ; X = the MOS's version
+    STX loader_os
     LDX #HI(code_end - start + &FF)
     LDY #0
 .copy_down
@@ -174,7 +177,90 @@ ENDIF
     INY : BNE copy_down
     INC copy_down+2 : INC copy_down+5
     DEX : BNE copy_down
+    LDA loader_os : CMP #3 : BCC model_b
+    JSR master_setup
+.model_b
+    SEI                         ; the interrupts stay off until install_irq
     JMP start
+.loader_os EQUB 0
+
+\ A Master (MOS 3.20 or later): its font isn't at &C000, so put one there,
+\ in HAZEL (the 8K of RAM that pages over the MOS's &C000-&DFFF with
+\ ACCCON bit 3), and leave HAZEL paged in for the game. Its reset needs
+\ more of OS pages 2 and 3 than OS 1.20's (the ROM table, the EXEC and
+\ SPOOL handles, the screen mode), so keep them in HAZEL too, and point
+\ the game's reset at master_reset, which puts them back first.
+MS_C    = &70
+MS_P    = &71
+FONT_BUF = &5000                ; screen memory, unseen in MODE 7
+M_PAGE2 = &D000
+M_PAGE3 = &D100
+M_D0    = &D200
+M_RESET = &D210
+M_HAZEL = &D300                 ; what the font displaces (the DFS's catalogue)
+M_PAGED = &D600                 ; page &0D: the extended vectors, under LowState
+.master_setup
+{
+    \ Characters 127 down to 32 through OSWORD 10: each call's block starts
+    \ a byte early, on the last row of the character below, read later.
+    LDA #127 : STA MS_C
+.char
+    LDA MS_C : SEC : SBC #32 : STA MS_P : LDA #0 : STA MS_P+1
+    ASL MS_P : ROL MS_P+1 : ASL MS_P : ROL MS_P+1 : ASL MS_P : ROL MS_P+1
+    CLC : LDA MS_P : ADC #LO(FONT_BUF - 1) : STA MS_P
+    LDA MS_P+1 : ADC #HI(FONT_BUF - 1) : STA MS_P+1
+    LDY #0 : LDA MS_C : STA (MS_P),Y
+    LDA #10 : LDX MS_P : LDY MS_P+1 : JSR osword
+    DEC MS_C : LDA MS_C : CMP #31 : BNE char
+    SEI
+    \ HAZEL in; the display and the CPU's &3000-&7FFF on main RAM, not
+    \ shadow, in case MENU ran in a shadow mode.
+    LDA &FE34 : AND #&F0 : ORA #8 : STA &FE34
+    LDX #0
+.copy
+    LDA text_font,X : STA M_HAZEL,X
+    LDA text_font + &100,X : STA M_HAZEL + &100,X
+    LDA text_font + &200,X : STA M_HAZEL + &200,X
+    LDA FONT_BUF,X : STA text_font,X
+    LDA FONT_BUF + &100,X : STA text_font + &100,X
+    LDA FONT_BUF + &200,X : STA text_font + &200,X
+    LDA &0200,X : STA M_PAGE2,X
+    LDA &0300,X : STA M_PAGE3,X
+    LDA &0D00,X : STA M_PAGED,X
+    INX : BNE copy
+    LDA &D0 : STA M_D0
+    LDX #master_reset_end - master_reset - 1
+.code
+    LDA master_reset_load,X : STA master_reset,X
+    DEX : BPL code
+    LDA #&4C : STA handoff.reset_jump
+    LDA #LO(master_reset) : STA handoff.reset_jump + 1
+    LDA #HI(master_reset) : STA handoff.reset_jump + 2
+    RTS
+}
+.master_reset_load
+    SECTION MasterReset, org = M_RESET, guard = &D300
+\ The game's reset on a Master, from HAZEL: OS pages 2 and 3 and the VDU
+\ status as they were when the game was loaded, then handoff's start-up
+\ option flip again, and the reset.
+.master_reset
+{
+    LDX #0
+.pages
+    LDA M_PAGE2,X : STA &0200,X
+    LDA M_PAGE3,X : STA &0300,X
+    LDA M_PAGED,X : STA &0D00,X
+    LDA M_HAZEL,X : STA text_font,X
+    LDA M_HAZEL + &100,X : STA text_font + &100,X
+    LDA M_HAZEL + &200,X : STA text_font + &200,X
+    INX : BNE pages
+    LDA M_D0 : STA &D0
+    LDA #0 : STA &0258
+    LDA &028F : EOR #8 : STA &028F
+    JMP (&FFFC)
+}
+.master_reset_end
+    ENDSECTION
 .loader_end
     ASSERT loader_end <= SAVE_HDR   ; the game's state above it survives the load
 ENDSECTION

@@ -70,7 +70,9 @@ in MODE 7, and an OS mode change would clear the state block at `&5F00`.
 ## Checks
 
 **`make check` before every commit, and read its output.** (Once, a commit
-claimed a check that hadn't run.)
+claimed a check that hadn't run.) `make check MODEL=Master` runs it all on
+a Master 128 too (decision 16); do that after touching start-up, the
+handoff, the front end or anything paged.
 
 - `.venv/bin/python tools/zxrooms.py` draws every room with the original's
   code (the oracle, `build/rooms`); `node tools/roomcheck.mjs` dumps the

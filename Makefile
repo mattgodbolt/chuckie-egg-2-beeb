@@ -3,6 +3,7 @@
 #   make          assemble build/ce2.ssd, and build/test.ssd for the tools
 #   make run      boot it in jsbeeb and grab a screenshot
 #   make check    every check: make rooms, make passes and make front
+#                 (MODEL=Master to run them on a Master 128; default B-DFS1.2)
 #   make rooms    check every room the BBC draws against the original's
 #   make passes   replay tests/scenarios.txt on both, compare Harry pass by pass
 #   make front    drive the front end: menu, keys, save, load, high scores
@@ -16,6 +17,9 @@
 #   make venv     the Python tools' environment (.venv with SkoolKit, Pillow)
 
 BARON   ?= $(firstword $(wildcard ../baron/build/src/baron) baron)
+# The jsbeeb model the test tools use (tools/beeb.mjs reads CE2_MODEL).
+MODEL   ?= B-DFS1.2
+export CE2_MODEL = $(MODEL)
 PYTHON  ?= .venv/bin/python
 TARGET   = build/ce2.ssd
 TEST     = build/test.ssd

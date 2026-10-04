@@ -14,8 +14,6 @@
     LDA crtc_regs,X : STA crtc_reg
     LDA crtc_regs+1,X : STA crtc_data
     DEX : DEX : BPL crtc
-    \ ESCAPE is an ordinary key.
-    LDA #229 : LDX #1 : LDY #0 : JSR osbyte
     LDA #0 : STA vsyncs
     JMP install_irq
 }

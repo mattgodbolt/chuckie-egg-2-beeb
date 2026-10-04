@@ -31,7 +31,7 @@ export function loadSymbols(path = "build/symbols.json") {
 // bootUntil names a symbol to run to after booting (up to 30s): the way to
 // know the program is running, since loading takes a while (4.6s measured,
 // with the sideways RAM image).
-export async function startBeeb({ disc, model = "B-DFS1.2", bootSecs = 0, bootUntil, symbols = "build/symbols.json" } = {}) {
+export async function startBeeb({ disc, model = process.env.CE2_MODEL || "B-DFS1.2", bootSecs = 0, bootUntil, symbols = "build/symbols.json" } = {}) {
     const transport = new StdioClientTransport(MCP);
     const client = new Client({ name: "ce2-harness", version: "1.0.0" });
     await client.connect(transport);

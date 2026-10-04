@@ -20,8 +20,8 @@ instructions again. Keys in play are the Spectrum's until redefined:
 take/drop, **S** save, **0** abort. The menu's bottom line (and `*TYPE
 !BOOT`) shows when the disc was built and from which commit.
 
-It needs a BBC Model B with 16K of sideways RAM; the browser link above
-provides one. It doesn't run on a Master (decision 14).
+It needs a BBC Model B with 16K of sideways RAM, or a Master 128; the
+browser link above provides a Model B.
 
 See [docs/journal.md](docs/journal.md) for the story so far,
 [docs/research.md](docs/research.md) for what the original is, and

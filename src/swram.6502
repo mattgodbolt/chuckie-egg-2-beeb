@@ -8,5 +8,4 @@
 .find_data_bank
     SEI
     LDA DATA_BANK_ZP : STA romshad : STA romsel
-    CLI
-    RTS
+    RTS                         ; interrupts stay off until install_irq

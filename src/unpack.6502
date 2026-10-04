@@ -19,7 +19,7 @@ MTF_ATTR = 0
 MTF_TILE = 3
 MTF_TYPE = 6
 
-\ Read X bits (1-8) as a number in A.
+\ Read X bits (1-8) as a number in A (Z set if it's 0).
 .getbits
 {
     ZA_AUTO1 val
@@ -57,8 +57,8 @@ MTF_TYPE = 6
 
 \ A move-to-front coded value from the list at mtf + X (MTF_ATTR, _TILE or
 \ _TYPE): 0 = the front entry, 10 = the second, 110 = the third, 111 = a
-\ new value in the next 8 bits. Whatever it is moves to the front, and is
-\ emitted.
+\ value from the field's vocabulary, its index in the bits that follow.
+\ Whatever it is moves to the front, and is emitted.
 .emit_mtf
 {
     ZA_AUTO1 base
@@ -67,8 +67,7 @@ MTF_TYPE = 6
     STX base
     LDA #0 : STA n
 .count
-    LDX #1 : JSR getbits
-    CMP #0 : BEQ hit
+    LDX #1 : JSR getbits : BEQ hit
     INC n : LDA n : CMP #3 : BNE count
     \ A miss: a value from the field's vocabulary, and the rest shift down.
     LDY base : LDX vocab_width,Y : JSR getbits
@@ -104,7 +103,10 @@ MTF_TYPE = 6
     CLC : LDA packed_offsets-2,X : ADC #LO(packed_rooms) : STA bp
     LDA packed_offsets-1,X : ADC #HI(packed_rooms) : STA bp+1
     LDA #0 : STA bleft : STA rec_len : STA rec_pos
-    \ (The lists start empty; clearing them lets the allocator see that.)
+    \ The lists start empty. (Clearing them shows the allocator, and the
+    \ ZA_DISCARD tells it the clearing writes all of them: without it, it
+    \ keeps their bytes from everything, all the time.)
+    ZA_DISCARD mtf
     LDX #8
 .clear
     STA mtf,X
@@ -126,45 +128,62 @@ MTF_TYPE = 6
     RTS
 }
 
+\ unpack_record's kinds from 3: single, diagonal up and down, text, block,
+\ bend, hopper. The command byte (a bend's is in its bits)...
+.kind_cmds
+    EQUB 10, 8, 9, 2, 1, 0, 7
+\ ... and how many 5-bit fields come before the type.
+.kind_fives
+    EQUB 0, 1, 1, 0, 2, 0
+
 \ Unpack the next record into rec_buf.
 .unpack_record
 {
     ZA_AUTO1 ones
+    ZA_AUTO1 kind
+    ZA_AUTO1 n
     \ The class: count 1s up to five; then, unless that was none or five,
-    \ one more bit picks one of a pair.
+    \ one more bit picks one of a pair. kind = 2 * ones + that bit, or 0.
     LDA #0 : STA ones
 .count
-    LDX #1 : JSR getbits
-    CMP #0 : BEQ counted
+    LDX #1 : JSR getbits : BEQ counted
     INC ones : LDA ones : CMP #5 : BNE count
     LDA #0 : JMP emit           ; 11111: the end
 .counted
-    LDA ones : BNE pair
-    JMP run
-.pair
+    LDA ones : STA kind : BEQ runs      ; 0: a run
+    ASL A : STA kind
     LDX #1 : JSR getbits
-    STA unpack_pick
-    LDA ones : ASL A : ORA unpack_pick
-    CMP #2 : JEQ capped
-    CMP #3 : JEQ single
-    CMP #4 : JEQ diag_up
-    CMP #5 : JEQ diag_down
-    CMP #6 : JEQ text
-    CMP #7 : JEQ block
-    CMP #8 : JEQ bend
-    \ hopper: attr row col rows(5) width(6)
-    LDA #7 : JSR emit
+    ORA kind : STA kind
+    CMP #2 : BEQ runs           ; 2: a capped run
+    \ 3-9: the command byte (a bend's from 2 bits), the attribute, a
+    \ single's tile, row and column.
+    CMP #8 : BNE fixed
+    LDX #2 : JSR getbits
+    CLC : ADC #3                ; &03-&06
+    BNE command                 ; (always)
+.fixed
+    LDX kind : LDA kind_cmds-3,X
+.command
+    JSR emit
     LDX #MTF_ATTR : JSR emit_mtf
+    LDA kind : CMP #3 : BNE place
+    LDX #MTF_TILE : JSR emit_mtf
+.place
     JSR emit_place
+    LDA kind : CMP #6 : BEQ text
+    CMP #9 : BEQ hopper
+    \ The others: 5-bit fields (a diagonal's length, a block's height and
+    \ width), then the type.
+    TAX : LDA kind_fives-3,X : STA n
+.fives
+    DEC n : BMI type_last
     LDX #5 : JSR emit_bits
+    JMP fives
+.hopper
+    LDX #5 : JSR emit_bits      ; rows(5) width(6)
     LDX #6 : JMP emit_bits
 
 \ run: tile attr row col vert len-1 type; capped adds ends(8) before type.
-.run
-    LDA #0 : STA unpack_capped
-    JMP runs
-.capped
-    LDA #1 : STA unpack_capped
 .runs
     LDX #MTF_TILE : JSR emit_mtf
     LDX #MTF_ATTR : JSR emit_mtf
@@ -173,60 +192,19 @@ MTF_TYPE = 6
     LSR A : ROR A : STA unpack_vert     ; to bit 7
     LDX #5 : JSR getbits
     CLC : ADC #1 : ORA unpack_vert : JSR emit
-    LDA unpack_capped : BEQ type_last
+    LDA kind : BEQ type_last
     LDX #8 : JSR emit_bits
 .type_last
     LDX #MTF_TYPE : JMP emit_mtf
 
-\ single: attr tile row col type
-.single
-    LDA #10 : JSR emit
-    LDX #MTF_ATTR : JSR emit_mtf
-    LDX #MTF_TILE : JSR emit_mtf
-    JSR emit_place
-    JMP type_last
-
-\ diag: attr row col len type
-.diag_up
-    LDA #8 : JMP diag
-.diag_down
-    LDA #9
-.diag
-    JSR emit
-    LDX #MTF_ATTR : JSR emit_mtf
-    JSR emit_place
-    LDX #5 : JSR emit_bits
-    JMP type_last
-
-\ text: attr row col, then characters (5 bits) until 31
+\ text: characters (5 bits) until 31
 .text
-    LDA #2 : JSR emit
-    LDX #MTF_ATTR : JSR emit_mtf
-    JSR emit_place
-.char
     LDX #5 : JSR getbits
     CMP #31 : BEQ text_end
     TAX : LDA text_chars,X : JSR emit
-    JMP char
+    JMP text
 .text_end
     LDA #&80 : JMP emit
-
-\ block: attr row col h w type
-.block
-    LDA #1 : JSR emit
-    LDX #MTF_ATTR : JSR emit_mtf
-    JSR emit_place
-    LDX #5 : JSR emit_bits
-    LDX #5 : JSR emit_bits
-    JMP type_last
-
-\ bend: which(2) attr row col type
-.bend
-    LDX #2 : JSR getbits
-    CLC : ADC #3 : JSR emit
-    LDX #MTF_ATTR : JSR emit_mtf
-    JSR emit_place
-    JMP type_last
 }
 
 \ (TEXT_CHARS in tools/packrooms.py, text_chars, is in page 2: pages.6502.)

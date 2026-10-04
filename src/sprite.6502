@@ -18,67 +18,66 @@ ZA_AUTO1 sp_yf              ; the pixel line in that cell, 0-7
 ZA_AUTO1 sp_ink             ; the sprite's Spectrum colour, 0-7
 ZA_AUTO1 sp_colour          ; that colour in this row's band: a byte of four pixels
 
+\ What sprite_setup gives draw_sprite and erase_image.
+ZA_AUTO2 spr_src            ; the frame's first row
+ZA_AUTO2 spr_scr            ; the screen byte of its top-left pixel
+ZA_AUTO1 spr_lines          ; its height in lines
+ZA_AUTO1 spr_width          ; ... and width in bytes
+
+\ The frame at sp_frame, sp_cell, sp_yf: its size, its first row and the
+\ screen address of its top line.
+.sprite_setup
+    LDY #0 : LDA (sp_frame),Y
+    ASL A : ASL A : ASL A : STA spr_lines
+    INY : LDA (sp_frame),Y : STA spr_width
+    CLC : LDA sp_frame : ADC #2 : STA spr_src
+    LDA sp_frame+1 : ADC #0 : STA spr_src+1
+    LDA sp_cell : LDX sp_cell+1 : JSR cell_screen
+    ORA sp_yf : STA spr_scr : STY spr_scr+1
+    RTS
+
 \ Draw the frame at sp_frame, sp_cell, sp_yf in Spectrum colour sp_ink,
 \ looked up afresh in each row's band (decision 15).
 .draw_sprite
 {
-    ZA_AUTO2 src
-    ZA_AUTO2 scr
-    ZA_AUTO1 lines
-    ZA_AUTO1 width
     ZA_AUTO1 yf
     ZA_AUTO1 bcol
     ZA_AUTO1 soff
-    ZA_AUTO1 mask
-    ZA_AUTO1 under
-    LDY #0 : LDA (sp_frame),Y
-    ASL A : ASL A : ASL A : STA lines
-    INY : LDA (sp_frame),Y : STA width
-    CLC : LDA sp_frame : ADC #2 : STA src
-    LDA sp_frame+1 : ADC #0 : STA src+1
-    \ scr = screen + 16 * cell + yf
-    LDA sp_cell : ASL A : ASL A : ASL A : ASL A : ORA sp_yf : STA scr
-    LDA sp_cell+1 : STA scr+1
-    LDA sp_cell
-    LSR scr+1 : ROR A : LSR scr+1 : ROR A : LSR scr+1 : ROR A : LSR scr+1 : ROR A
-    CLC : ADC #HI(screen) : STA scr+1
+    ZA_AUTO1 img
+    JSR sprite_setup
     LDA sp_yf : STA yf
     \ Its first row, and its colour there.
-    LDA sp_cell+1 : ASL A : ASL A : ASL A : STA sp_row
-    LDA sp_cell : LSR A : LSR A : LSR A : LSR A : LSR A : ORA sp_row : STA sp_row
+    LDA sp_cell : LDX sp_cell+1 : JSR cell_row : STA sp_row
     JSR sprite_colour
 .row
     LDA #0 : STA bcol : STA soff
 .byte
-    LDY bcol : LDA (src),Y : BEQ next_byte
-    TAX
-    LSR A : LSR A : LSR A : LSR A : TAY
-    LDA spread_lo,Y : STA mask  ; the left four pixels
-    LDY soff
-    LDA (scr),Y : STA under
-    EOR sp_colour : AND mask : EOR under : STA (scr),Y
-    TXA : AND #15 : TAX
-    LDA spread_lo,X : STA mask  ; the right four
-    TYA : ORA #8 : TAY
-    LDA (scr),Y : STA under
-    EOR sp_colour : AND mask : EOR under : STA (scr),Y
+    LDY bcol : LDA (spr_src),Y : BEQ next_byte
+    STA img
+    LSR A : LSR A : LSR A : LSR A : TAX
+    LDY soff                    ; the left four pixels
+    LDA (spr_scr),Y : EOR sp_colour : AND spread_lo,X : EOR (spr_scr),Y : STA (spr_scr),Y
+    LDA img : AND #15 : TAX
+    TYA : ORA #8 : TAY          ; the right four
+    LDA (spr_scr),Y : EOR sp_colour : AND spread_lo,X : EOR (spr_scr),Y : STA (spr_scr),Y
 .next_byte
     LDA soff : CLC : ADC #16 : STA soff
-    INC bcol : LDA bcol : CMP width : BNE byte
+    INC bcol : LDA bcol : CMP spr_width : BNE byte
     \ The next row of the frame, the next line down the screen.
-    CLC : LDA src : ADC width : STA src
+    CLC : LDA spr_src : ADC spr_width : STA spr_src
     BCC src_ok
-    INC src+1
+    INC spr_src+1
 .src_ok
     INC yf : LDA yf : AND #7 : BEQ next_cell
-    INC scr                     ; (never carries: yf < 8 in a 16-byte cell)
+    INC spr_scr                 ; (never carries: yf < 8 in a 16-byte cell)
     JMP more
 .next_cell
-    CLC : LDA scr : ADC #LO(ROW_BYTES - 7) : STA scr
-    LDA scr+1 : ADC #HI(ROW_BYTES - 7) : STA scr+1
+    \ From line 7 of this cell row to line 0 of the next, 512 bytes on.
+    LDA spr_scr : AND #&F0 : STA spr_scr
+    INC spr_scr+1 : INC spr_scr+1
     INC sp_row : JSR sprite_colour
 .more
-    DEC lines : BNE row
+    DEC spr_lines : BNE row
     RTS
 }
 
@@ -95,48 +94,34 @@ ZA_AUTO1 sp_colour          ; that colour in this row's band: a byte of four pix
 \ shape out of them, as in the original, until they are redrawn.
 .erase_image
 {
-    ZA_AUTO2 src
-    ZA_AUTO2 scr
     ZA_AUTO2 col_src
     ZA_AUTO2 col_scr
-    ZA_AUTO1 lines
-    ZA_AUTO1 width
     ZA_AUTO1 yf
     ZA_AUTO1 bcol
     ZA_AUTO1 left
     ZA_AUTO1 img
     ZA_AUTO1 mask
     ZA_AUTO1 tb
-    LDY #0 : LDA (sp_frame),Y
-    ASL A : ASL A : ASL A : STA lines
-    INY : LDA (sp_frame),Y : STA width
-    CLC : LDA sp_frame : ADC #2 : STA src
-    LDA sp_frame+1 : ADC #0 : STA src+1
-    LDA sp_cell : ASL A : ASL A : ASL A : ASL A : ORA sp_yf : STA scr
-    LDA sp_cell+1 : STA scr+1
-    LDA sp_cell
-    LSR scr+1 : ROR A : LSR scr+1 : ROR A : LSR scr+1 : ROR A : LSR scr+1 : ROR A
-    CLC : ADC #HI(screen) : STA scr+1
+    JSR sprite_setup
     \ A column at a time (the bytes are independent), so a cell is looked
     \ up once for each cell row it covers, not once a line.
     LDA #0 : STA bcol
 .column
-    CLC : LDA src : ADC bcol : STA col_src
-    LDA src+1 : ADC #0 : STA col_src+1
+    CLC : LDA spr_src : ADC bcol : STA col_src
+    LDA spr_src+1 : ADC #0 : STA col_src+1
     LDA bcol : ASL A : ASL A : ASL A : ASL A        ; 16 bytes a cell across
-    CLC : ADC scr : STA col_scr
-    LDA scr+1 : ADC #0 : STA col_scr+1
+    CLC : ADC spr_scr : STA col_scr
+    LDA spr_scr+1 : ADC #0 : STA col_scr+1
     CLC : LDA sp_cell : ADC bcol : STA cell
     LDA sp_cell+1 : ADC #0 : STA cell+1
     LDA sp_yf : STA yf
-    LDA lines : STA left
+    LDA spr_lines : STA left
     JSR cell_looks
 .line
     LDY #0 : LDA (col_src),Y : BEQ next_line
     STA img
     \ The room's pixels here: the tile's line, in the cell's colours.
-    LDA yf : TAY
-    LDA (glyph),Y : STA tb
+    LDY yf : LDA (glyph),Y : STA tb
     LDA img : LSR A : LSR A : LSR A : LSR A : TAX
     LDA spread_lo,X : STA mask
     LDA tb : LSR A : LSR A : LSR A : LSR A : TAX
@@ -150,7 +135,7 @@ ZA_AUTO1 sp_colour          ; that colour in this row's band: a byte of four pix
     LDY #8
     EOR (col_scr),Y : AND mask : EOR (col_scr),Y : STA (col_scr),Y
 .next_line
-    CLC : LDA col_src : ADC width : STA col_src
+    CLC : LDA col_src : ADC spr_width : STA col_src
     BCC src_ok
     INC col_src+1
 .src_ok
@@ -159,9 +144,10 @@ ZA_AUTO1 sp_colour          ; that colour in this row's band: a byte of four pix
     INC col_scr                 ; (never carries: yf < 8 in a 16-byte cell)
     JMP line
 .next_cell
+    \ From line 7 of this cell row to line 0 of the next, 512 bytes on.
     LDA #0 : STA yf
-    CLC : LDA col_scr : ADC #LO(ROW_BYTES - 7) : STA col_scr
-    LDA col_scr+1 : ADC #HI(ROW_BYTES - 7) : STA col_scr+1
+    LDA col_scr : AND #&F0 : STA col_scr
+    INC col_scr+1 : INC col_scr+1
     CLC : LDA cell : ADC #32 : STA cell
     BCC looks
     INC cell+1
@@ -169,7 +155,7 @@ ZA_AUTO1 sp_colour          ; that colour in this row's band: a byte of four pix
     JSR cell_looks
     JMP line
 .next_column
-    INC bcol : LDA bcol : CMP width : BEQ done
+    INC bcol : LDA bcol : CMP spr_width : BEQ done
     JMP column
 .done
     RTS
@@ -185,39 +171,5 @@ ZA_AUTO1 sp_colour          ; that colour in this row's band: a byte of four pix
     RTS
 .high
     LDX sprite_frames+257,Y : LDA sprite_frames+256,Y
-    RTS
-}
-
-\ How `cell` looks: glyph = its tile's 8 bytes, paper and diff its colours.
-.cell_looks
-{
-    ZA_AUTO2 mp
-    LDA cell : STA mp
-    CLC : LDA cell+1 : ADC #HI(tile_map) : STA mp+1
-    LDY #0 : LDA (mp),Y
-    BMI text
-    SEC : SBC #&20
-    LDX #LO(tiles) : LDY #HI(tiles)
-    JMP glyph_addr
-.text
-    AND #&7F : SEC : SBC #32
-    LDX #LO(text_font) : LDY #HI(text_font)
-.glyph_addr
-    STA glyph : LDA #0 : STA glyph+1
-    ASL glyph : ROL glyph+1 : ASL glyph : ROL glyph+1 : ASL glyph : ROL glyph+1
-    TXA : CLC : ADC glyph : STA glyph
-    TYA : ADC glyph+1 : STA glyph+1
-    LDA mp+1 : SEC : SBC #HI(tile_map) - HI(attr_map) : STA mp+1
-    LDY #0 : LDA (mp),Y
-    \ paper and diff, as draw_glyph works them out.
-    PHA
-    JSR cell_band : STX dg_band
-    PLA : PHA
-    LSR A : LSR A : LSR A : AND #7 : ORA dg_band : TAX
-    LDA band_cmaps,X
-    TAX : LDA colour_bytes,X : STA paper
-    PLA : AND #7 : ORA dg_band : TAX
-    LDA band_cmaps,X
-    TAX : LDA colour_bytes,X : EOR paper : STA diff
     RTS
 }

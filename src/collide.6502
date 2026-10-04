@@ -40,21 +40,18 @@ ZA_AUTO1 crow               ; Harry's row 0-15
 .window
     LDA #&FF : STA sbc_hi : STA sbc_hi+1        ; nothing looked up yet
     \ Harry's top line.
-    LDA h_cell : LSR A : LSR A : LSR A : LSR A : LSR A : STA cline
-    LDA h_cell+1 : ASL A : ASL A : ASL A : ORA cline
+    LDA h_cell : LDX h_cell+1 : JSR cell_row
     ASL A : ASL A : ASL A : ORA h_yf : STA cline
     LDA #0 : STA crow
 .line
-    \ The window less Harry's own pixels.
-    LDA crow : LDX hw : CPX #1 : BEQ one_byte
-    ASL A : TAY
+    \ The window less Harry's own pixels. (A 1-byte frame's window has no
+    \ right-hand column, so whatever follows its row there is masked out.)
+    LDA crow : LDX hw : DEX : BEQ one_byte
+    ASL A
+.one_byte
+    TAY
     LDA (cimg),Y : EOR #&FF : AND cw_hi : STA cs_hi
     INY : LDA (cimg),Y : EOR #&FF : AND cw_lo : STA cs_lo
-    JMP test_screen
-.one_byte
-    TAY : LDA (cimg),Y : EOR #&FF : AND cw_hi : STA cs_hi
-    LDA #0 : STA cs_lo
-.test_screen
     LDA h_cell : AND #31 : STA ccol
     LDX #0 : JSR screen_bits : AND cs_hi : BNE hit
     LDA cs_lo : BEQ next_line
@@ -77,13 +74,11 @@ ZA_AUTO1 crow               ; Harry's row 0-15
     ZA_AUTO2 sp
     ZA_AUTO1 tb
     ZA_AUTO1 left
+    ZA_AUTO1 right
     STX sb_slot
     \ cell = (line / 8) * 32 + column
-    LDA cline : LSR A : LSR A : LSR A : STA cell
-    LDA #0 : STA cell+1
-    ASL cell : ROL cell+1 : ASL cell : ROL cell+1 : ASL cell : ROL cell+1
-    ASL cell : ROL cell+1 : ASL cell : ROL cell+1
-    LDA ccol : ORA cell : STA cell
+    LDA cline : ASL A : ASL A : AND #&E0 : ORA ccol : STA cell
+    LDA cline : ASL A : ROL A : ROL A : AND #3 : STA cell+1    ; line / 64
     LDA cell : CMP sbc_lo,X : BNE look
     LDA cell+1 : CMP sbc_hi,X : BNE look
     LDA sbc_glo,X : STA glyph
@@ -99,27 +94,21 @@ ZA_AUTO1 crow               ; Harry's row 0-15
     LDA glyph+1 : STA sbc_ghi,X
     LDA paper : STA sbc_paper,X
 .looked
+    \ The screen bytes: screen + 16 * cell + line, and 8 on.
+    LDA cell : LDX cell+1 : JSR cell_screen
+    STA sp : STY sp+1
     LDA cline : AND #7 : TAY
     LDA (glyph),Y : STA tb
-    \ The screen bytes: screen + 16 * cell + line, and 8 on.
-    LDA cell : ASL A : ASL A : ASL A : ASL A : STA sp
-    LDA cell+1 : STA sp+1
-    LDA cell
-    LSR sp+1 : ROR A : LSR sp+1 : ROR A : LSR sp+1 : ROR A : LSR sp+1 : ROR A
-    CLC : ADC #HI(screen) : STA sp+1
     \ A pixel isn't paper if either of its bits differs: fold the two
-    \ nibbles of (byte EOR paper) together.
-    LDA (sp),Y : EOR paper : TAX
-    LSR A : LSR A : LSR A : LSR A : STA left
-    TXA : ORA left : AND #15
-    ASL A : ASL A : ASL A : ASL A : STA left
+    \ nibbles of (byte EOR paper) together, the left byte's into the top
+    \ nibble, the right's into the bottom.
+    LDA (sp),Y : EOR paper : STA left
+    ASL A : ASL A : ASL A : ASL A : ORA left : AND #&F0 : STA left
     TYA : ORA #8 : TAY
-    LDA (sp),Y : EOR paper : TAX
-    LSR A : LSR A : LSR A : LSR A : STA sp
-    TXA : ORA sp : AND #15 : ORA left
+    LDA (sp),Y : EOR paper : STA right
+    LSR A : LSR A : LSR A : LSR A : ORA right : AND #15 : ORA left
     \ Less the tile's own pixels.
-    STA left
-    LDA tb : EOR #&FF : AND left
+    ORA tb : EOR tb
     RTS
 }
 
@@ -127,24 +116,21 @@ ZA_AUTO1 crow               ; Harry's row 0-15
 \ order that overlaps Harry decides. Then the train's rule.
 .who_was_hit
 {
-    ZA_AUTO1 hl                     ; Harry's box
-    ZA_AUTO1 hr
-    ZA_AUTO1 ht
-    ZA_AUTO1 hb
-    LDA h_cell : AND #31 : STA hl
-    LDY #1 : LDA (h_frame),Y : CLC : ADC hl : SEC : SBC #1 : STA hr
-    LDA h_cell : LSR A : LSR A : LSR A : LSR A : LSR A : STA ht
-    LDA h_cell+1 : ASL A : ASL A : ASL A : ORA ht : STA ht
-    LDY #0 : LDA (h_frame),Y : CLC : ADC ht : SEC : SBC #1 : STA hb
+    ZA_AUTO 4, hbox                 ; Harry's box, as box_l-box_b
+    LDA h_frame : STA cimg
+    LDA h_frame+1 : STA cimg+1
+    LDA h_cell : LDY h_cell+1 : JSR frame_box
+    ZA_DISCARD hbox                 ; (the loop rebuilds it all)
+    LDX #3
+.harry
+    LDA box_l,X : STA hbox,X
+    ZA_INDEXEDBY 0..3
+    DEX : BPL harry
     \ The current thing first.
     LDA o_sel : BEQ monsters
-    LDA o_cell : AND #31 : STA box_l
     LDA o_frame : STA cimg
     LDA o_frame+1 : STA cimg+1
-    LDY #1 : LDA (cimg),Y : CLC : ADC box_l : SEC : SBC #1 : STA box_r
-    LDA o_cell : LSR A : LSR A : LSR A : LSR A : LSR A : STA box_t
-    LDA o_cell+1 : ASL A : ASL A : ASL A : ORA box_t : STA box_t
-    LDY #0 : LDA (cimg),Y : CLC : ADC box_t : SEC : SBC #1 : STA box_b
+    LDA o_cell : LDY o_cell+1 : JSR frame_box
     JSR overlap : BCS monsters
     JMP touch_thing
 .monsters
@@ -152,14 +138,9 @@ ZA_AUTO1 crow               ; Harry's row 0-15
 .monster
     CPX m_count : BEQ no_monster
     STX c_m
-    \ Its box against Harry's: overlap unless clear on some side.
-    LDA m_cell_lo,X : AND #31 : STA box_l
     LDA m_frame_lo,X : STA cimg
     LDA m_frame_hi,X : STA cimg+1
-    LDY #1 : LDA (cimg),Y : CLC : ADC box_l : SEC : SBC #1 : STA box_r
-    LDA m_cell_lo,X : LSR A : LSR A : LSR A : LSR A : LSR A : STA box_t
-    LDA m_cell_hi,X : ASL A : ASL A : ASL A : ORA box_t : STA box_t
-    LDY #0 : LDA (cimg),Y : CLC : ADC box_t : SEC : SBC #1 : STA box_b
+    LDA m_cell_lo,X : LDY m_cell_hi,X : JSR frame_box
     JSR overlap : BCS next
     JMP contact
 .next
@@ -176,20 +157,25 @@ ZA_AUTO1 crow               ; Harry's row 0-15
     LDA h_cell : AND #31 : CMP #7 : BCS done
     LDA carried : CMP #&28 : BNE done
     JMP egg_delivered
+\ Carry clear if box_* overlaps Harry's box: unless one ends at or before
+\ where the other starts, across or down.
+.overlap
+    LDA hbox : CMP box_r : BCS done
+    LDA box_l : CMP hbox+1 : BCS done
+    LDA hbox+2 : CMP box_b : BCS done
+    LDA box_t : CMP hbox+3
 .done
     RTS
-\ Carry clear if box_* overlaps Harry's box (inclusive).
-.overlap
-    LDA box_r : CMP hl : BCC clear  ; its right < Harry's left
-    LDA hr : CMP box_l : BCC clear  ; Harry's right < its left
-    LDA box_b : CMP ht : BCC clear
-    LDA hb : CMP box_t : BCC clear
-    CLC
-    RTS
-.clear
-    SEC
-    RTS
 }
+
+\ The character-cell box of the frame at cimg in cell A + 256 * Y: box_l
+\ and box_t its first column and row, box_r and box_b one past its last.
+.frame_box
+    PHA : AND #31 : STA box_l
+    TYA : TAX : PLA : JSR cell_row : STA box_t
+    LDY #1 : LDA (cimg),Y : CLC : ADC box_l : STA box_r
+    DEY : LDA (cimg),Y : CLC : ADC box_t : STA box_b
+    RTS
 
 \ Contact with monster c_m (&94E5).
 .contact

@@ -9,85 +9,60 @@
 \ The room's colour maps (bands.6502): the logical colour of each Spectrum
 \ colour 0-7 (decision 2), for each band of rows (decision 15).
 
+ZA_AUTO2 glyph              ; the tile's 8 bytes
+ZA_AUTO1 paper              ; a byte of four paper pixels
+ZA_AUTO1 diff               ; ink pixels EOR paper pixels
+
 \ Set the palette and colour maps for room A (1-120).
 .set_room_palette
 {
-    ZA_AUTO2 pal
-    ZA_AUTO1 bits
-    STA srp_room
-    \ room_palettes + 4 * (A - 1)
-    SEC : SBC #1
-    STA pal : LDA #0 : STA pal+1
-    ASL pal : ROL pal+1 : ASL pal : ROL pal+1
-    CLC : LDA pal : ADC #LO(room_palettes) : STA pal
-    LDA pal+1 : ADC #HI(room_palettes) : STA pal+1
-    \ Logical colours 0-3, a nibble each.
-    LDY #0 : LDA (pal),Y : AND #15 : LDX #0 : JSR set_logical
-    LDY #0 : LDA (pal),Y : LSR A : LSR A : LSR A : LSR A : LDX #1 : JSR set_logical
-    LDY #1 : LDA (pal),Y : AND #15 : LDX #2 : JSR set_logical
-    LDY #1 : LDA (pal),Y : LSR A : LSR A : LSR A : LSR A : LDX #3 : JSR set_logical
-    \ The colour map, two bits a colour.
+    PHA
+    \ sb_p = room_palettes + 4 * (A - 1), where setup_bands' map reader
+    \ (bands.6502) can read the colour map too.
+    LDY #0 : STY sb_p+1
+    ASL A : ROL sb_p+1 : ASL A : ROL sb_p+1
+    CLC : ADC #LO(room_palettes - 4) : STA sb_p
+    LDA sb_p+1 : ADC #HI(room_palettes - 4) : STA sb_p+1
+    \ Logical colours 0-3, a nibble each, low nibble first.
+    LDX #3
+.logical
+    TXA : LSR A : TAY
+    LDA (sb_p),Y
+    BCC low
+    LSR A : LSR A : LSR A : LSR A
+.low
+    AND #15 : JSR set_logical
+    DEX : BPL logical
+    \ The colour map, two bits a colour, as a band's.
     LDX #0
-.byte
-    TXA : LSR A : LSR A : ORA #2 : TAY   ; byte 2 for colours 0-3, 3 for 4-7
-    LDA (pal),Y : STA bits
-    TXA : AND #3 : TAY                   ; shift it down to this colour
-    LDA bits
-.shift
-    DEY : BMI got
-    LSR A : LSR A
-    JMP shift
-.got
-    AND #3 : STA band_cmaps,X
-    INX : CPX #8 : BNE byte
-    LDA srp_room : JMP setup_bands
-}
-
-\ X = 8 * the band of `cell`'s row: the offset of its colour map in
-\ band_cmaps.
-.cell_band
-{
-    ZA_AUTO1 hi
-    LDA cell+1 : ASL A : ASL A : ASL A : STA hi
-    LDA cell : LSR A : LSR A : LSR A : LSR A : LSR A : ORA hi : TAX
-    LDA band_off,X : TAX
-    RTS
+    LDY #2 : JSR setup_bands.sb_map
+    LDY #3 : JSR setup_bands.sb_map
+    PLA : JMP setup_bands
 }
 
 \ Logical colour X (0-3) shows physical colour A in the room: fill its four
 \ entries of room_ula (irq.6502), which the interrupt writes to the ULA
 \ every frame. Entry = l1 n1 l0 n0, n the "neighbour" (irq.6502): beside
-\ n = 1 sets value bit 4, beside n = 2 bit 6. Logical 2 and 3 go at 0-7;
-\ logical 0 and 1 put their entries beside 2 at 8-9, and beside 0, 1 and 3
-\ (the six the status bar shows) at 10-15, logical 1 first.
+\ n = 1 sets value bit 4, beside n = 2 bit 6. Logical 2 and 3 go at 0-7,
+\ four each; logical 0 and 1 put their entries beside 2 at 8-9, and beside
+\ 0, 1 and 3 (the six the status bar shows) at 10-15, logical 1 first.
+\ X is kept.
 .set_logical
-{
-    ZA_AUTO1 phys
-    ZA_AUTO1 base
-    EOR #7 : STA phys           ; the ULA wants the physical colour EOR 7
-    TXA : AND #2 : ASL A : ASL A : STA set_logical_t
-    TXA : AND #1 : ASL A : ORA set_logical_t
-    ASL A : ASL A : ASL A : ASL A : ORA phys   ; beside colour 0
-    STA base
-    CPX #2 : BCC low
-    \ Logical 2, 3: all four together, at (l - 2) * 4.
-    TXA : SEC : SBC #2 : ASL A : ASL A : TAY
-    LDA base : STA room_ula,Y              ; beside 0
-    ORA #&10 : STA room_ula+1,Y            ; beside 1
-    ORA #&40 : STA room_ula+2,Y            ; beside 3
-    AND #&EF : STA room_ula+3,Y            ; beside 2
+    EOR #7                      ; the ULA wants the physical colour EOR 7
+    ORA logical_bits,X          ; beside colour 0
+    LDY beside013,X
+    STA room_ula,Y              ; beside 0
+    ORA #&10 : STA room_ula+1,Y ; beside 1
+    ORA #&40 : STA room_ula+2,Y ; beside 3
+    LDY beside2,X
+    AND #&EF : STA room_ula,Y   ; beside 2
     RTS
-.low
-    \ Logical 0, 1: beside 2 at 8 + (1 - l); beside 0, 1, 3 at
-    \ 10 + 3 * (1 - l).
-    TXA : EOR #1 : TAY
-    LDA base : ORA #&40 : STA room_ula+8,Y ; beside 2
-    TYA : STA set_logical_t : ASL A : ADC set_logical_t : TAY
-    LDA base : STA room_ula+10,Y           ; beside 0
-    ORA #&10 : STA room_ula+11,Y           ; beside 1
-    ORA #&40 : STA room_ula+12,Y           ; beside 3
-    RTS
-}
+.logical_bits
+    EQUB &00, &20, &80, &A0     ; l0 at bit 5, l1 at bit 7
+.beside013
+    EQUB 13, 10, 0, 4
+.beside2
+    EQUB 9, 8, 3, 7
 
 \ Fill the whole screen with zero (logical colour 0).
 .cls
@@ -103,13 +78,26 @@
     RTS
 }
 
-\ Draw the 8 bytes at glyph into cell `cell` in the colours of Spectrum
-\ attribute A: set bits in its ink, clear ones in its paper.
-ZA_AUTO2 glyph              ; the tile's 8 bytes
-ZA_AUTO1 paper              ; a byte of four paper pixels
-ZA_AUTO1 diff               ; ink pixels EOR paper pixels
-.draw_glyph
+\ How `cell` looks: glyph = its tile's 8 bytes, paper and diff its colours.
+.cell_looks
 {
+    ZA_AUTO2 mp
+    LDA cell : STA mp
+    CLC : LDA cell+1 : ADC #HI(tile_map) : STA mp+1
+    LDY #0 : LDA (mp),Y
+    \ glyph = 8 * the code + its font_lo/hi entry, by its top three bits.
+    TAY
+    LSR A : LSR A : LSR A : LSR A : LSR A : TAX
+    TYA : ASL A : ASL A : ASL A
+    CLC : ADC font_lo,X : STA glyph
+    LDA font_hi,X : ADC #0 : STA glyph+1
+    \ The attribute, from its map three pages below.
+    LDA mp+1 : SEC : SBC #HI(tile_map) - HI(attr_map) : STA mp+1
+    LDY #0 : LDA (mp),Y
+    \ Fall into attr_colours.
+}
+\ paper and diff for Spectrum attribute A in `cell`'s band.
+.attr_colours
     PHA
     JSR cell_band : STX dg_band
     PLA : PHA
@@ -119,20 +107,55 @@ ZA_AUTO1 diff               ; ink pixels EOR paper pixels
     PLA : AND #7 : ORA dg_band : TAX
     LDA band_cmaps,X
     TAX : LDA colour_bytes,X : EOR paper : STA diff
+    RTS
+
+\ cell_looks' glyph addresses, by a code's top three bits: 256 * those bits
+\ (their share of 8 * the code) plus the font less 8 * its first code. Tiles
+\ start at &20; text, bit 7 set, at &A0 in the OS's font (decision 4).
+.font_lo
+FOR x = 0..3
+    EQUB LO(x * 256 + tiles - 8 * &20)
+NEXT
+FOR x = 4..7
+    EQUB LO(x * 256 + text_font - 8 * &A0)
+NEXT
+.font_hi
+FOR x = 0..3
+    EQUB HI(x * 256 + tiles - 8 * &20)
+NEXT
+FOR x = 4..7
+    EQUB HI(x * 256 + text_font - 8 * &A0)
+NEXT
+
+\ X = 8 * the band of `cell`'s row: the offset of its colour map in
+\ band_cmaps.
+.cell_band
+    LDA cell : LSR A : LSR A : LSR A : LSR A : LSR A
+    LDX cell+1 : ORA row_hi,X : TAX         ; the row
+    LDA band_off,X : TAX
+    RTS
+
+\ A = the row of the cell whose low byte is A and high byte X.
+.cell_row
+    LSR A : LSR A : LSR A : LSR A : LSR A
+    ORA row_hi,X
+    RTS
+.row_hi
+    EQUB 0, 8, 16, 24           ; 8 * a cell's high byte (cells to 1023, as band_off)
+
+\ Draw the 8 bytes at glyph into cell `cell` in the colours of Spectrum
+\ attribute A: set bits in its ink, clear ones in its paper.
+.draw_glyph
+    JSR attr_colours
     \ Fall into draw_glyph_pd.
-}
 \ The same with paper and diff already set.
 .draw_glyph_pd
 {
     ZA_AUTO2 scr
     ZA_AUTO2 scr8
-    \ scr = screen + 16 * cell
-    LDA cell : ASL A : ASL A : ASL A : ASL A : STA scr
+    LDA cell : LDX cell+1 : JSR cell_screen
+    STA scr : STY scr+1 : STY scr8+1
     ORA #8 : STA scr8
-    LDA cell+1 : STA scr+1
-    LDA cell
-    LSR scr+1 : ROR A : LSR scr+1 : ROR A : LSR scr+1 : ROR A : LSR scr+1 : ROR A
-    CLC : ADC #HI(screen) : STA scr+1 : STA scr8+1
     LDY #7
 .line
     LDA (glyph),Y : STA gbyte
@@ -145,6 +168,19 @@ ZA_AUTO1 diff               ; ink pixels EOR paper pixels
     DEY : BPL line
     RTS
 }
+
+\ The screen address of cell A + 256 * X, screen + 16 * the cell: its low
+\ byte in A, its high byte in Y.
+.cell_screen
+    PHA
+    LSR A : LSR A : LSR A : LSR A
+    ORA screen_hi,X : TAY
+    PLA
+    ASL A : ASL A : ASL A : ASL A
+    RTS
+.screen_hi
+    EQUB HI(screen), HI(screen) + &10, HI(screen) + &20, HI(screen) + &30
+    ASSERT LO(screen) = 0 AND (HI(screen) AND 15) = 0    ; so the ORA adds
 
 \ (colour_bytes, a byte of four pixels in logical colour 0-3, is in page 2:
 \ pages.6502.)

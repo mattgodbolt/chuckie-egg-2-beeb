@@ -154,9 +154,11 @@ ENDIF
 \ the game's reset at master_reset, which puts them back first.
 MS_C    = &70
 MS_P    = &71
-FONT_BUF = &5000                ; screen memory, unseen in MODE 7
-\ ... below where the page tables loaded, which copy_os_pages wants after.
-ASSERT page1_load >= FONT_BUF + &300
+\ Screen memory, unseen in MODE 7: above this loader and the page tables
+\ (copy_os_pages wants them after) and the game's state block (&5F00 up),
+\ below MODE 7's screen.
+FONT_BUF = &7800
+ASSERT FONT_BUF >= loader_end AND FONT_BUF + &300 <= &7C00
 M_PAGE2 = &D000
 M_PAGE3 = &D100
 M_D0    = &D200

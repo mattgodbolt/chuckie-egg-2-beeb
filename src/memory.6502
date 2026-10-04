@@ -89,8 +89,6 @@ SECTION ZeroPage, org = ZP_FIXED, guard = DATA_BANK_ZP
 .l_ocell    SKIP 2
 .l_oyf      SKIP 1
 .l_oframe   SKIP 2
-\ (Not a game's state: set and read once a room, in the last byte here.)
-.srp_room   SKIP 1          ; set_room_palette's room (screen.6502)
 ENDSECTION
 
 \ The game's other state, in the DFS's NMI page (free once the disc is done).
@@ -167,22 +165,15 @@ SECTION Scratch, org = &90, guard = &FC
 .sb_p          SKIP 2          ; setup_bands' pointer (bands.6502: no allocator there)
 .irq_split     SKIP 1          ; the next T1 split: 0 the status bar's, then bands 1, 2
 .sb_slot       SKIP 1          ; screen_bits' column of Harry, 0 or 1
-.set_logical_t SKIP 1
 .gbyte         SKIP 1
-\ (rooms.6502)
-.back_cells_n  SKIP 1
 \ (status.6502)
 .status_i      SKIP 1
 .status_x      SKIP 1
 \ (unpack.6502)
-.unpack_pick   SKIP 1
 .rec_len       SKIP 1
 .rec_pos       SKIP 1
 .rec_buf       SKIP 18          ; the longest record is 17 bytes, a text
-.unpack_capped SKIP 1
 .unpack_vert   SKIP 1
-\ (harry.6502)
-.harry_vec     SKIP 2
 \ (monsters.6502)
 .m_entry       SKIP 1
 .cf_x          SKIP 1

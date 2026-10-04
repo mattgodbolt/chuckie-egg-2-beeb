@@ -55,7 +55,7 @@ FUNCTION ula_entry(l, n, phys) = ((l AND 2) * 4 + (n AND 2) * 2 + (l AND 1) * 2 
     LDA band_t1+2 : STA usrvia_t1ll
     LDA band_t1+3 : STA usrvia_t1lh
     INC irq_split
-    JMP done
+    BNE done                    ; (always: 1-3)
 .band
     \ A band's split (decision 15): logical 2's four entries for band X.
     TXA : ASL A : ASL A : TAX
@@ -64,7 +64,7 @@ FUNCTION ula_entry(l, n, phys) = ((l AND 2) * 4 + (n AND 2) * 2 + (l AND 1) * 2 
     NEXT
     LDA #&FF : STA usrvia_t1ll : STA usrvia_t1lh
     INC irq_split
-    JMP done
+    BNE done                    ; (always)
 .not_t1
     LDA sysvia_ifr : AND #2 : BEQ done
     STA sysvia_ifr              ; acknowledge

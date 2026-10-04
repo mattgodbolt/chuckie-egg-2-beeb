@@ -41,40 +41,36 @@ ZA_AUTO2 pp                 ; SideWalls' column pointer
     LDA h_state : BEQ keys
     LDA #0 : STA h_fall
 .keys
-    LDX #0                      ; dx = right - left
-    LDA ctrl : AND #2 : BEQ no_r
-    INX
-.no_r
-    LDA ctrl : AND #4 : BEQ no_l
-    DEX
-.no_l
-    STX h_dx
-    LDX #0                      ; dy = 2 * up - 2 * down
-    LDA ctrl : AND #&10 : BEQ no_u
-    INX : INX
-.no_u
-    LDA ctrl : AND #8 : BEQ no_d
-    DEX : DEX
-.no_d
-    STX h_dy
+    LDA ctrl : LSR A : PHA      ; dx = right - left
+    AND #3 : TAX : LDA key_dx,X : STA h_dx
+    PLA : LSR A : LSR A         ; dy = 2 * up - 2 * down
+    AND #3 : TAX : LDA key_dy,X : STA h_dy
     LDA h_state : BEQ dispatch
     CMP #7 : BEQ dispatch
     LDA ctrl : AND #1 : BEQ dispatch
     JMP start_jump
 .dispatch
     LDX h_state
-    LDA states_lo,X : STA harry_vec
-    LDA states_hi,X : STA harry_vec+1
-    JMP (harry_vec)
+    LDA states_hi,X : PHA
+    LDA states_lo,X : PHA
+    RTS                         ; to the state's routine
     ZA_CANJUMP st_fall, st_walk, st_pipe, st_ladder, st_rope, st_slope_up, st_slide, st_jump, st_lift
 }
-\ The states (&8A17).
+\ dx from the right and left keys (ctrl bits 1, 2), dy from down and up
+\ (bits 3, 4).
+.key_dx
+    EQUB 0, 1, -1 AND &FF, 0
+.key_dy
+    EQUB 0, -2 AND &FF, 2, 0
+\ The states (&8A17), less one for the RTS.
 .states_lo
-    EQUB LO(st_fall), LO(st_walk), LO(st_pipe), LO(st_ladder), LO(st_rope)
-    EQUB LO(st_slope_up), LO(st_slide), LO(st_jump), LO(st_lift)
+    EQUB LO(st_fall - 1), LO(st_walk - 1), LO(st_pipe - 1), LO(st_ladder - 1)
+    EQUB LO(st_rope - 1), LO(st_slope_up - 1), LO(st_slide - 1), LO(st_jump - 1)
+    EQUB LO(st_lift - 1)
 .states_hi
-    EQUB HI(st_fall), HI(st_walk), HI(st_pipe), HI(st_ladder), HI(st_rope)
-    EQUB HI(st_slope_up), HI(st_slide), HI(st_jump), HI(st_lift)
+    EQUB HI(st_fall - 1), HI(st_walk - 1), HI(st_pipe - 1), HI(st_ladder - 1)
+    EQUB HI(st_rope - 1), HI(st_slope_up - 1), HI(st_slide - 1), HI(st_jump - 1)
+    EQUB HI(st_lift - 1)
 
 \ StWalk (&8113): state 1, on a platform.
 .st_walk
@@ -218,15 +214,16 @@ ZA_AUTO2 pp                 ; SideWalls' column pointer
 \ StartJump (&82CB)
 .start_jump
 {
-    LDA h_state : CMP #4 : BNE not_rope
+    LDX h_state
+    CPX #4 : BNE not_rope
     LDA h_dx : BNE not_rope
     JMP st_rope                     ; no jumping straight off a rope
 .not_rope
-    LDA h_state : CMP #6 : BNE not_slide
+    CPX #6 : BNE not_slide
     LDA h_mom : STA h_dx            ; jump the way the slide goes
 .not_slide
-    LDA h_state : CMP #3 : BEQ zero_xf
-    CMP #4 : BNE xf_ok
+    CPX #3 : BEQ zero_xf
+    CPX #4 : BNE xf_ok
 .zero_xf
     LDA #0 : STA h_xf
 .xf_ok
@@ -259,7 +256,7 @@ ZA_AUTO2 pp                 ; SideWalls' column pointer
 .vcollide
 {
     LDA h_yf : STA vE
-    LDA h_xf : CLC : ADC h_dx : CLC : ADC #1 : STA vD
+    LDA h_xf : SEC : ADC h_dx : STA vD   ; xf + dx + 1
     LDA h_dy : BEQ descend
     BMI descend
     \ Rising.
@@ -279,7 +276,7 @@ ZA_AUTO2 pp                 ; SideWalls' column pointer
 .hit_ceiling
     LDA h_cnt : CMP #1 : BNE top_of_cell
     LDA #0 : STA h_dy               ; a ceiling right on the head: no jump
-    JMP descend
+    BEQ descend                     ; (always)
 .top_of_cell
     LDA vE : STA h_dy               ; rise to the top of this cell only
     LDA h_cnt : CMP #11 : BCS lg
@@ -305,16 +302,10 @@ ZA_AUTO2 pp                 ; SideWalls' column pointer
     LDA hptr : STA pp
     LDA hptr+1 : SEC : SBC #HI(type_map) - HI(tile_map) : STA pp+1
     LDY vB : LDA (pp),Y : STA vTile
-    CMP #&39 : BNE not39
-    JMP snap39
-.not39
-    CMP #&38 : BNE not38
-    JMP snap38
-.not38
-    CMP #&54 : BEQ surface
-    CMP #&55 : BNE land_test
-.surface
-    JMP snap_surface
+    CMP #&39 : BEQ snap39
+    CMP #&38 : BEQ snap38
+    CMP #&54 : BEQ snap_surface
+    CMP #&55 : BEQ snap_surface
 
 \ LandTest (&83D4)
 .land_test
@@ -349,6 +340,39 @@ ZA_AUTO2 pp                 ; SideWalls' column pointer
     JMP ladder_grab
 .die_land
     JMP harry_died
+
+\ The slope snaps (&84C0, &84F8, &8535). vC is the column Harry's feet are
+\ over (0 or 1), vTile the slope tile there.
+.snap_surface
+    LDA #0 : STA h_xf
+    LDA vC : JSR add_cell
+    LDA #4 : STA h_yf
+    BNE snap_done                   ; (always)
+.snap39
+    DEC vC                          ; one column left of the feet
+    LDA #2
+    BNE snap_row                    ; (always)
+.snap38
+    LDA vTile                       ; (sic: &38, which apply_delta turns
+                                    ;  into xf 0 and a column right)
+.snap_row
+    STA h_xf
+    LDA vC : JSR add_cell
+    \ Up a row, to its top line. The original subtracts 32 from (attribute
+    \ low byte, screen high byte with yf cleared), so leaving the top row
+    \ of a screen third (rows 8, 16) borrows into the third's bits and
+    \ gives yf 7: kept, because it moves Harry.
+    LDX #0
+    LDA h_cell : AND #&E0 : BNE same_third  ; row AND 7 = 0 (cell bits 5-7)
+    LDX #7
+.same_third
+    STX h_yf
+    LDA #-32 AND &FF : JSR add_cell
+.snap_done
+    LDA #0 : STA h_dx : STA h_dy
+    LDA h_face : AND #&F7 : STA h_face
+    LDA vTile : JSR set_slope_state
+    JMP move_nosave
 }
 
 \ LiftLand (the rest of &83FA): over the lift, the feet near its top?
@@ -367,12 +391,10 @@ ZA_AUTO2 pp                 ; SideWalls' column pointer
     LDA vD : CMP #4 : BCS no_lift
 .across
     \ Down: (its top line - 13) - his top line must be 0-5.
-    LDA l_cell : LSR A : LSR A : LSR A : LSR A : LSR A : STA vH
-    LDA l_cell+1 : ASL A : ASL A : ASL A : ORA vH
+    LDA l_cell : LDX l_cell+1 : JSR cell_row
     ASL A : ASL A : ASL A : ORA l_yf
     SEC : SBC #13 : STA vL
-    LDA h_cell : LSR A : LSR A : LSR A : LSR A : LSR A : STA vH
-    LDA h_cell+1 : ASL A : ASL A : ASL A : ORA vH
+    LDA h_cell : LDX h_cell+1 : JSR cell_row
     ASL A : ASL A : ASL A : ORA vE : STA vH
     LDA vL : SEC : SBC vH : CMP #6 : BCS no_lift
     \ dy = 3 - that, and 2 more for the rising bar.
@@ -484,11 +506,14 @@ ZA_AUTO2 pp                 ; SideWalls' column pointer
 \ WallCheck (&86AC): walking, cell-aligned: a wall ahead stops him.
 .wall_check
 {
-    LDA h_dx : BMI left
-    LDY #1 : LDA (hptr),Y : JMP head
-.left
-    LDY #31 : LDA (hptr_up),Y       ; T(-1)
-.head
+    ZA_AUTO2 ahead
+    \ The cell ahead, as the original finds it: dx added to the low byte
+    \ alone (LD A,(IY+B) : ADD A,(IY+2) : LD L,A), so at a page's edge it
+    \ wraps within the page. Left of row 16's column 0 is row 23's column
+    \ 31, not row 15's (fuzz: room 80, where that cell is solid).
+    LDA hptr : CLC : ADC h_dx : STA ahead
+    LDA hptr+1 : STA ahead+1
+    LDY #0 : LDA (ahead),Y
     BMI die
     AND #&2D : BEQ legs
     LDA h_state : CMP #5 : BNE stop
@@ -500,14 +525,13 @@ ZA_AUTO2 pp                 ; SideWalls' column pointer
     LDA #0 : STA h_dx
     RTS
 .legs
-    LDA h_dx : CLC : ADC #&20 : TAY : LDA (hptr),Y
+    LDY #&20 : LDA (ahead),Y        ; a row down, with the carry (&89BD)
     BMI die
     AND #&21 : BEQ ok
     LDA #0 : STA h_dx
 .ok
     RTS
-.die
-    JMP harry_died
+die = column_blocked.die
 }
 
 \ StLift (&876D): state 8, riding the lift: its dy; crushed by a solid cell
@@ -515,9 +539,7 @@ ZA_AUTO2 pp                 ; SideWalls' column pointer
 .st_lift
 {
     LDA l_dy : STA h_dy
-    LDY #0 : LDA (hptr),Y : AND #1 : BEQ head_clear
-    JMP harry_died
-.head_clear
+    LDY #0 : LDA (hptr),Y : AND #1 : BNE column_blocked.die
     LDA h_xf : CMP #2 : BNE walk
     LDA h_dx : BEQ walk
     BMI going_left
@@ -537,7 +559,7 @@ ZA_AUTO2 pp                 ; SideWalls' column pointer
     JSR face_from_dx
 .facing
     LDA h_yf : STA vE
-    LDA h_xf : CLC : ADC h_dx : CLC : ADC #1 : STA vD
+    LDA h_xf : SEC : ADC h_dx : STA vD   ; xf + dx + 1
     LDA hptr : STA pp : LDA hptr+1 : STA pp+1
     LDA #2 : STA vB
     LDA h_face : BEQ right
@@ -591,92 +613,33 @@ ZA_AUTO2 pp                 ; SideWalls' column pointer
 .set_standing
 {
     AND #&21
-    CMP #1 : BNE not_floor
-    LDA #1 : STA h_state : RTS
-.not_floor
-    CMP #&20 : BNE done
-    LDA #2 : STA h_state
+    CMP #1 : BEQ set                ; a floor: walking (1)
+    CMP #&20 : BNE done             ; a pipe: 2
+    LDA #2
+.set
+    STA h_state
 .done
     RTS
 }
 
-\ SetSlopeState (&87E8): tile A is a slope; climb it or slide down it.
+\ SetSlopeState (&87E8): slope tile A (&38, &54 '\', or &39, &55 '/', all
+\ that the snaps pass); climb it or slide down it.
 .set_slope_state
 {
-    CMP #&54 : BEQ back
-    CMP #&38 : BEQ back
-    CMP #&55 : BEQ fwd
-    CMP #&39 : BEQ fwd
-    RTS
-.back                               ; '\'
-    LDA h_mom : BPL slide_right
-    LDA #5 : STA h_state : RTS
-.slide_right
-    LDA #1 : STA h_mom
-    LDA #6 : STA h_state : RTS
+    LSR A : BCS fwd
+    \ '\'
+    LDA h_mom : BMI climb
+    LDA #1 : BNE slide              ; slide right
 .fwd                                ; '/'
     LDA h_mom : BMI slide_left
-    BEQ slide_left
-    LDA #5 : STA h_state : RTS
+    BNE climb
 .slide_left
-    LDA #&FF : STA h_mom
+    LDA #&FF
+.slide
+    STA h_mom
     LDA #6 : STA h_state : RTS
-}
-
-\ The slope snaps (&84C0, &84F8, &8535). vC is the column Harry's feet are
-\ over (0 or 1), vTile the slope tile there.
-.snap_surface
-    LDA #0 : STA h_xf
-    JSR snap_col
-    LDA #4 : STA h_yf
-    JMP snap_done
-.snap39
-    LDA #2 : STA h_xf
-    DEC vC                          ; one column left of the feet
-    JSR snap_col
-    JSR snap_up
-    JMP snap_done
-.snap38
-    LDA vTile : STA h_xf            ; (sic: &38, which apply_delta turns
-    JSR snap_col                    ;  into xf 0 and a column right)
-    JSR snap_up
-.snap_done
-    LDA #0 : STA h_dx : STA h_dy
-    LDA h_face : AND #&F7 : STA h_face
-    LDA vTile : JSR set_slope_state
-    JMP move_nosave
-\ h_cell += vC (signed).
-.snap_col
-{
-    LDA vC : BMI minus
-    CLC : ADC h_cell : STA h_cell
-    BCC done
-    INC h_cell+1
-.done
-    RTS
-.minus
-    LDA h_cell : BNE no_borrow
-    DEC h_cell+1
-.no_borrow
-    DEC h_cell
-    RTS
-}
-\ Up a row, to its top line. The original subtracts 32 from (attribute low
-\ byte, screen high byte with yf cleared), so leaving the top row of a
-\ screen third (rows 8, 16) borrows into the third's bits and gives yf 7:
-\ kept, because it moves Harry.
-.snap_up
-{
-    LDX #0
-    LDA h_cell : AND #&E0 : BNE same_third  ; row AND 7 = 0 (cell bits 5-7)
-    LDX #7
-.same_third
-    STX h_yf
-    SEC : LDA h_cell : SBC #32 : STA h_cell
-    BCS done
-    DEC h_cell+1
-.done
-    RTS
+.climb
+    LDA #5 : STA h_state : RTS
 }
 
 \ Move (&887E), MoveNoSave (&8881): the original saves the old position
@@ -698,35 +661,41 @@ ZA_AUTO2 pp                 ; SideWalls' column pointer
     AND #3 : STA h_xf
     TXA : BMI left
     CMP #4 : BCC vertical
-    INC h_cell : BNE vertical
-    INC h_cell+1
-    JMP vertical
+    LDA #1 : BNE across         ; a cell right
 .left
-    LDA h_cell : BNE no_borrow
-    DEC h_cell+1
-.no_borrow
-    DEC h_cell
+    LDA #&FF                    ; ... or left
+.across
+    JSR add_cell
 .vertical
     LDA h_yf : SEC : SBC h_dy : TAX
     AND #7 : STA h_yf
     TXA : BMI up
-    CMP #8 : BCC done
-    CLC : LDA h_cell : ADC #32 : STA h_cell     ; down a row
-    BCC done
-    INC h_cell+1
-.done
+    CMP #8 : BCS down
     RTS
+.down
+    LDA #32 : BNE add_cell      ; down a row
 .up
-    SEC : LDA h_cell : SBC #32 : STA h_cell     ; up a row
-    BCS done
-    DEC h_cell+1
+    LDA #-32 AND &FF            ; up a row
+    \ Fall into add_cell.
+}
+
+\ h_cell += A, signed.
+.add_cell
+{
+    LDX #0
+    CMP #&80 : BCC positive
+    LDX #&FF
+.positive
+    CLC : ADC h_cell : STA h_cell
+    TXA : ADC h_cell+1 : STA h_cell+1
     RTS
 }
 
 \ The room edges (&8890-&89BC), after the move.
 .edges
 {
-    LDA h_cell : AND #31 : CMP #31 : BNE not_right
+    LDA h_cell : AND #31 : BEQ left_col
+    CMP #31 : BNE top
     LDA h_dx : BEQ top
     BMI top
     \ Right: to column 0, xf 2.
@@ -738,8 +707,7 @@ ZA_AUTO2 pp                 ; SideWalls' column pointer
     LDA #0 : STA h_yf                           ; column 1
 .done
     RTS
-.not_right
-    CMP #0 : BNE top
+.left_col
     LDA h_dx : BPL top
     LDA h_xf : BNE top
     \ Left: to column 30, xf 3.
@@ -756,7 +724,9 @@ ZA_AUTO2 pp                 ; SideWalls' column pointer
     LDA #4 : STA h_yf
     LDA #&F6 : STA room_delta
     LDA h_state : CMP #5 : BNE done
-    LDA h_dx : ASL A : JSR add_cell
+    LDA h_dx : ASL A
+.slope
+    JSR add_cell
     LDA h_xf : CLC : ADC h_dx : STA h_xf        ; (left unnormalised)
     RTS
 .bottom
@@ -771,23 +741,9 @@ ZA_AUTO2 pp                 ; SideWalls' column pointer
     LDA #0 : STA h_cell+1 : STA h_yf
     LDA #10 : STA room_delta
     LDA h_state : CMP #6 : BNE done
-    LDA h_dx : ASL A : CLC : ADC h_dx : JSR add_cell
-    LDA h_xf : CLC : ADC h_dx : STA h_xf        ; (left unnormalised)
-    RTS
+    LDA h_dx : ASL A : CLC : ADC h_dx : JMP slope
 .none
     LDA #0 : STA room_delta
-    RTS
-}
-
-\ h_cell += A, signed.
-.add_cell
-{
-    LDX #0
-    CMP #&80 : BCC positive
-    LDX #&FF
-.positive
-    CLC : ADC h_cell : STA h_cell
-    TXA : ADC h_cell+1 : STA h_cell+1
     RTS
 }
 

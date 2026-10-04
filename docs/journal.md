@@ -830,3 +830,22 @@ gathers any number of one ingredient (and makes jumps lower).
   colour, not from the extra writes. Its timing measurements are worth
   keeping: 8 writes fit any blank with about 2us to spare each side; band
   interrupts jitter by up to 4us in play.
+
+### Code size, part A, and the wall check's wrap
+
+- The code-size agent for Harry, collisions, sprites, the screen, the room
+  drawer and the unpacker saved 1,033 bytes of main RAM (1,831 free
+  becoming 2,864): the pipe bends as 20 bytes of steps and an interpreter,
+  the room drawer's handlers called from an RTS table and drawing each cell
+  through `cell_looks`, `set_logical` by table, one `frame_box` for every
+  collision box, the unpacker's records sharing their start, Harry's cell
+  moves through `add_cell`. `ZA_DISCARD mtf` fixed an allocator problem:
+  the indexed clearing kept the MTF lists live everywhere. The Master's
+  font buffer moved to `&7800`, as the loader now sits below `&5300`.
+  Rooms 9, 85 and 97 now keep 3 frames a pass.
+- **Its fuzzing found a port bug older than the bands**: in room 80,
+  walking left from column 0 of row 16, the original stops and the port
+  stepped into the row above. The original's wall check adds dx to the
+  cell's low byte alone, so left of a page's first cell it reads the
+  page's last (row 23's column 31, solid there), not the row above's.
+  Transcribed, with a scenario (wall-wrap). 18 scenarios.

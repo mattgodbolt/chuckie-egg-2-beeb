@@ -13,7 +13,8 @@ Writes, all committed (the build never runs this):
 
 The palette (decision 2): MODE 1 shows four colours, so each room gets the
 four that cover most of its pixels, with the room's background paper as
-logical colour 0, and every Spectrum colour mapped to one of the four. The
+logical colour 0, yellow as logical 3 (decision 6: Harry is yellow), and
+every Spectrum colour mapped to one of the four. The
 mapping is chosen by brute force to show the most pixels in their own
 colour, under two hard rules: in every cell the room draws, ink and paper
 must stay different; and every colour but the background must differ from
@@ -38,9 +39,9 @@ NAMES = "black blue red magenta green cyan yellow white".split()
 # (0 black, 1 red, 2 green, 3 yellow, 4 blue, 5 magenta, 6 cyan, 7 white).
 ZX_TO_BBC = [0, 4, 1, 5, 2, 6, 3, 7]
 # Colours the room data doesn't use still get drawn (sprites, items), so
-# every colour carries a little weight, and yellow (Harry) more, to send an
-# unused colour to its nearest neighbour rather than to any free slot.
-PRIOR = [20, 20, 20, 20, 20, 20, 300, 20]
+# every colour carries a little weight, to send an unused colour to its
+# nearest neighbour rather than to any free slot.
+PRIOR = [20] * 8
 RGB = [(0, 0, 0), (0, 0, 215), (215, 0, 0), (215, 0, 215),
        (0, 215, 0), (0, 215, 215), (215, 215, 0), (215, 215, 215)]
 
@@ -73,13 +74,17 @@ def room_usage(r, rooms_dir):
     return weight, pairs
 
 
+YELLOW = 6
+
+
 def choose_palette(bg, weight, pairs):
     """Returns (colours: four Spectrum colours, logical 0 first; cmap: the
-    logical colour for each Spectrum colour 0-7)."""
+    logical colour for each Spectrum colour 0-7). Yellow is always one of
+    the four (decision 6): Harry is yellow."""
     best = None
-    others = [c for c in range(8) if c != bg]
-    for trio in itertools.combinations(others, 3):
-        colours = [bg, *trio]
+    others = [c for c in range(8) if c not in (bg, YELLOW)]
+    for pair in itertools.combinations(others, 2):
+        colours = [bg, *pair, YELLOW] if bg != YELLOW else [bg, *pair, 7]
         rest = [c for c in range(8) if c not in colours]
         for choice in itertools.product(range(4), repeat=len(rest)):
             cmap = [0] * 8

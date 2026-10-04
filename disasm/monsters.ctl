@@ -4,7 +4,9 @@
 ; other subsystems' .ctl files. Generated in part by
 ; build/research/monsters/genctl.py (the graphics blocks).
 ; 'i' entries only mark where this scope's blocks end (the next address
-; belongs to another subsystem): drop them when merging.
+; belongs to another subsystem): drop them when merging. The shared helpers
+; &7FA3, &7FB6, &8841, &884D, &89BD, &89C6, &8BDE, &8E94, Harry's frame
+; table &89FF and his sprites &DFA2-&E0C7 are in harry.ctl.
 
 ; ---------------------------------------------------------------------------
 ; Monster definitions
@@ -39,11 +41,7 @@ D $7F01 Called twice a pass. Scans at most 128 entries of the object table (room
 @ $7F4F label=DRAW_STRIP
 c $7F4F Draw a 1-byte-wide sprite by overwriting (truck and train strips)
 D $7F4F IY = record. Paints the ink (IY+9) into IY+6 attribute rows from (IY+2), then copies 8 x IY+6 bytes from (IY+0) down the screen from (IY+4), replacing what was there. Width is assumed to be 1.
-i $7F84
-@ $7FA3 label=PIX_UP
-c $7FA3 HL = the screen address one pixel row up
-@ $7FB6 label=PIX_DOWN
-c $7FB6 HL = the screen address one pixel row down
+b $7F84 Room drawer workspace and command table (not this scope: see docs/research.md); here only to end #R$7F4F
 @ $7FC9 label=ERASE_SPRITE
 c $7FC9 Erase a sprite at its old position, restoring the room from the maps
 D $7FC9 IY = record. Uses the 'old' fields (+&0E attribute address, +&10 height, +&11 width, +&16 image, +&18 screen address) that #R$884D copies. Attributes: height (+1 if the old screen address is not on a character row boundary) rows of width cells are copied from the attribute map (&5D00, H + 5), stopping below row 23. Pixels, column by column: screen = (screen AND NOT image) OR tile pixel, the tile taken from the tile map (&6000): codes with bit 7 set from the ROM font &3C00, others from the tile font &73B8. Pixels of other sprites under the erased image are lost.
@@ -52,22 +50,6 @@ D $7FC9 IY = record. Uses the 'old' fields (+&0E attribute address, +&10 height,
 c $8063 Draw a sprite at its new position: OR, ink only
 D $8063 IY = record. Attributes: height (+1 if the screen address is not on a character row boundary) rows of width cells get (attr AND &F8) OR ink: paper, bright and flash stay the room's. Pixels: 8 x height rows of width bytes from the image (row-major), ORed onto the screen from (IY+4). No clipping.
 i $80B6
-@ $8841 label=CELL_TYPE
-c $8841 HL = cell-type map address of (IY+2/3) + A; A = the type there
-D $8841 The cell-type map is the attribute address + &0B00 (&5800 + &0B00 = &6300).
-@ $884D label=SAVE_OLD
-c $884D Copy a record's current position and image to its 'old' fields
-D $884D +0/1 -> +&16/&17 image, +2/3 -> +&0E/&0F attribute address, +4/5 -> +&18/&19 screen address, +6 -> +&10 height, +7 -> +&11 width. Done before every move, so the interrupt erases what it last drew.
-i $887E
-@ $89BD label=HL_PLUS_32
-c $89BD HL = HL + 32 (next attribute / map row)
-@ $89C6 label=HL_MINUS_32
-c $89C6 HL = HL - 32 (previous attribute / map row)
-i $89CF
-@ $89FF label=HARRY_FRAMES
-b $89FF Harry's sprite pointers: 12 frames (#R$DFA2)
-W $89FF,24,2
-i $8A17
 @ $8A98 label=OBJECT_SPRITES
 b $8A98 Object sprite pointers: 73 entries (#R$6FD0)
 D $8A98 Indexed by byte 1 of an object type record (&6A00 + 3 x type). Entries &25-&48 are the four toys' parts, 9 per toy (motorbike, car, boat, jet); #R$9B08 picks one set per egg.
@@ -82,9 +64,6 @@ D $8B2A Empties the draw list, then for every enabled entry of the monster table
 @ $8B5D label=SETUP_MONSTER
 c $8B5D Fill monster record IY from table entry L (C = records so far)
 D $8B5D +&14/&15 = start row/column, +2..+5 from them (#R$7E34). From the type (#R$6F00): +9 ink, +&0D base frame, +&12 flags, +&13 speed. +8 = C + 1 (staggers the first moves), +&0A = 0. Step: 1 (2 if fast), negated if flag bit 3; vertical (flag 6): dy = 2 x step, dx = 0; else dx = step, dy = 0. Then the frame (#R$8E70) and IY += 26. Nothing is drawn until the first move.
-@ $8BDE label=SET_FRAME
-c $8BDE Set IY's image from sprite table HL, entry A
-D $8BDE Entry: (HL + 2A) -> sprite; +6 = height (byte 0), +7 = width (byte 1), +0/1 = the data after them.
 @ $8BFD label=NEXT_RECORD
 c $8BFD IY += 26
 @ $8C0A label=MONSTERS_TICK
@@ -103,9 +82,6 @@ D $8C2C Calls the RNG (#R$918A) first, every tick, whether or not the monster mo
 @ $8E5C label=MON_MOVE_NOSAVE
 @ $8E70 label=MON_FRAME
 c $8E70 Choose a monster's frame: base + sub-position (+4 facing left, halved if fast)
-@ $8E94 label=MON_STEP
-c $8E94 Move a record by dx (quarter characters) and dy (pixel rows, up positive)
-D $8E94 +&0A += dx; carry out of 0-3 moves the column (+2) by one. Then dy pixel rows up (#R$7FA3) or -dy down (#R$7FB6). Writes +2 = +4 = screen low byte, +5, and +3 = attribute high byte of the character row holding the top pixel row.
 
 ; ---------------------------------------------------------------------------
 ; Machines: the truck, the train, the lifts
@@ -354,31 +330,9 @@ D $74B8 Tiles &31, &3B, &3C, &3D and &56 appear in no room; &56 is the lives ico
 B $74B8,480,8
 i $7698
 
-@ $DFA2 label=SPRITE_GFX
-b $DFA2 Sprites: Harry (#R$89FF), then the monsters, truck, train and lifts (#R$91B7)
-D $DFA2 Each: height in characters, width in bytes, then 8 x height rows of width bytes (row-major). A monster's frames are poses already shifted right by 0, 2, 4, 6 pixels (0 and 4 for fast monsters), widening by a byte when they need to.
-B $DFA2,2,2 Harry frame 0: 2 x 1
-B $DFA4,16,1
-B $DFB4,2,2 Harry frame 1: 2 x 2
-B $DFB6,32,2
-B $DFD6,2,2 Harry frame 2: 2 x 2
-B $DFD8,32,2
-B $DFF8,2,2 Harry frame 3: 2 x 2
-B $DFFA,32,2
-B $E01A,2,2 Harry frame 4: 2 x 1
-B $E01C,16,1
-B $E02C,2,2 Harry frame 5: 2 x 2
-B $E02E,32,2
-B $E04E,2,2 Harry frame 6: 2 x 2
-B $E050,32,2
-B $E070,2,2 Harry frame 7: 2 x 2
-B $E072,32,2
-B $E092,2,2 Harry frame 8,10: 2 x 1
-B $E094,16,1
-B $E0A4,2,2 Harry frame 9: 2 x 1
-B $E0A6,16,1
-B $E0B6,2,2 Harry frame 11: 2 x 1
-B $E0B8,16,1
+@ $E0C8 label=SPRITE_GFX
+b $E0C8 Sprites: the monsters, truck, train and lifts (#R$91B7); Harry's are just before, at #R$DFA2
+D $E0C8 Each: height in characters, width in bytes, then 8 x height rows of width bytes (row-major). A monster's frames are poses already shifted right by 0, 2, 4, 6 pixels (0 and 4 for fast monsters), widening by a byte when they need to.
 B $E0C8,2,2 Sprite &08 (dog running): 4 x 5
 B $E0CA,160,5
 B $E16A,2,2 Sprite &09 (dog running): 4 x 5

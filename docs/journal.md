@@ -307,3 +307,36 @@ discs apart: the Makefile passes `-D BUILD="2026-10-04 14:26 UTC 777ab7a"`
 `*| CHUCKIE EGG 2 <stamp>`, so `*TYPE !BOOT` shows it. `make wip` refuses a
 dirty tree and the disc goes in its own commit, so its stamp names the
 commit holding its code.
+
+### Research: monsters, sprites, graphics — and the memory verdict
+
+`docs/research/monsters.md` (with sheets of every sprite in
+`docs/research/img/`) settles how the original draws: sprites are ORed
+on, setting only the ink of the cells they cover; erasing clears the old
+image's bits and ORs back the tile pixels from the tile map, attributes
+from the attribute map. Positions are 2-pixel steps with pre-shifted
+frames, so nothing shifts at draw time. The main loop is exactly three
+frames, always: Harry moves once and is drawn in frame 1; monsters tick
+twice and are drawn in frames 2 and 3. At most four monsters a room; 52
+types; later eggs enable more table entries (more monsters, none faster).
+
+And its numbers decide the machine. The graphics alone are 9.5K
+(monsters, truck, train and lifts 7.5K; objects 1.3K; Harry 0.3K; tiles
+0.5K). With everything else the game needs ~20K more than is placed so
+far, against 4.5K free under the screen. A stock Model B could only do it
+by loading each room's data from disc on the way in, with a pause and the
+drive's noise on every screen; so, decision 8, as Matt allowed: a Model B
+with 16K of sideways RAM.
+
+Measured in jsbeeb with a probe (page each bank, flip `&8000`, see if it
+sticks): the Model B models have RAM in banks 0-7, the Master in 4-7. So
+the README's browser link keeps working.
+
+Keys (decision 7): Matt wants the Spectrum's for now — "the spectrum ones
+work and are authentic" — with BBC-appropriate ones for later discussion
+(`docs/for-review.md`, which lists every call made autonomously that he
+may want to revisit). SPACE stands in for SYMBOL SHIFT. Measured in jsbeeb's
+`keyboard_state`: 1 is internal key 48, 0 is 39.
+
+Yellow is now one of every room's four colours (decision 6), so Harry is
+always yellow; about a point of scenery colour lost on average.

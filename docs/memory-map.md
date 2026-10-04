@@ -31,6 +31,27 @@ build output (`code &0E00-&xxxx (N bytes free)`), never from this file.
 | `&3A90` | room buffer (the largest room unpacked) | 385 |
 | `&3C11` | end: **5,103 bytes free** | |
 
-The original's code is about 14K and its graphics about 8K (to be pinned
-down by the research in `docs/research/`); against 5K free, the budget is
-the problem to solve next.
+## The budget against a stock Model B (2026-10-04)
+
+What the rest of the game needs, at the Spectrum's sizes (6502 code is
+usually no smaller than Z80), from `docs/research/*.md`:
+
+| Item | Bytes |
+|---|---|
+| Harry: code and helpers | 2,820 |
+| Harry's frames | 294 |
+| Monsters, machines, sprite engine: code | 2,667 |
+| Monster table and types | 1,232 |
+| Monster, truck, train and lift graphics | 7,472 |
+| Object sprites | 1,256 |
+| Sprite pointer tables | 474 |
+| Objects, machines and egg logic (to be measured) | ~2,500 |
+| Sound | ~230 |
+| In-play front end (keys, score, lives, eggs delivered) | ~810 |
+| **Total** | **~19,750** |
+
+Free: 4,563 bytes under the screen, perhaps 1-1.5K more from OS pages
+(`&0D00`, the bottom of the stack, `&0200-&03FF` once the OS is finished
+with). Short by about 14K. Hence decision 8: a 16K sideways RAM bank for
+the data (packed rooms 7,770 + monster graphics 7,472 = 15,242), and the
+code and the hottest tables in main RAM.

@@ -100,11 +100,11 @@
     LDX #LO(tiles) : LDY #HI(tiles)
     JMP status_glyph
 }
-\ Character A (ASCII), white on black, from the MOS font (decision 4), at
+\ Character A (ASCII), white on black, from the OS's font (decision 4), at
 \ `cell`; step right.
 .status_char
     SEC : SBC #32
-    LDX #LO(mos_font) : LDY #HI(mos_font)
+    LDX #LO(text_font) : LDY #HI(text_font)
 \ glyph = font (Y:X) + 8 * A; draw in logical 1 on 0.
 .status_glyph
 {

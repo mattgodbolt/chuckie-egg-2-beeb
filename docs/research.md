@@ -3,8 +3,21 @@
 Everything here was found by reading the disassembly and checking it by
 running the original (`tools/zx.py`, `tools/zxrooms.py`). Addresses are the
 running game's (the tape loads one block at 16384 and the game starts at
-`&60C2`). Subsystem detail lives in `docs/research/*.md`; this file is the
-overview and the map of where things are.
+`&60C2`). This file is the overview, the memory map and the room format;
+the detail is in four write-ups, each made by a research agent working on
+the disassembly and checked by experiment:
+
+- [Harry](research/harry.md): movement, physics, cell types, room edges,
+  death and respawn.
+- [Objects and game logic](research/objects.md): the 256 things, taking
+  and dropping, baskets, the machines and the egg sequence, scoring.
+- [Monsters, sprites, graphics](research/monsters.md): the sprite engine,
+  the monster table and movement, collision, truck, train, lifts, frame
+  timing, a graphics inventory.
+- [Front end, controls, sound, text](research/frontend.md): instructions,
+  menu, keys, save/load, high scores, the three sounds, every string.
+
+SkoolKit control files for each are in `disasm/`.
 
 ## The tape
 
@@ -21,16 +34,20 @@ overview and the map of where things are.
 | Range | What |
 |---|---|
 | `&4000-&5AFF` | screen and attributes |
-| `&5B00-&6AFF` | at load: the instructions text. In play, `&5D00-&65FF` is three 768-byte maps (32 x 24, one byte a cell) the room drawer fills: `&5D00` attributes, `&6000` tile codes (bit 7 set for text), `&6300` cell types |
-| `&6600` | workspace pointer set by the room drawer (`&A400` holds it) |
-| `&6B00-&A2FF` | code and tables |
+| `&5B00-&5CFF` | object start positions (copied at boot, `&5B00`), system variables |
+| `&5D00-&65FF` | three 768-byte maps (32 x 24, one byte a cell) the room drawer fills: `&5D00` attributes, `&6000` tile codes (bit 7 set for text), `&6300` cell types. The instructions (`&60C2-&65FD`) are here at load and run once |
+| `&6600-&6AFF` | the 256 "things" (objects, machine parts, bonus items): room, row, column, type, four 256-byte arrays; 67 types at `&6A00` ([objects](research/objects.md)) |
+| `&6B00-&6FCF` | the monster table and 52 monster types ([monsters](research/monsters.md)) |
+| `&6FD0-&74B7` | object sprites |
+| `&7698-&A2FF` | code and tables |
 | `&73B8` | CHARS while drawing rooms: tile *c*'s 8 bytes are at `&73B8 + 8c`. Tiles used are `&20` up, so the tile font starts at `&74B8` |
 | `&7F84-&7F89` | room drawer state: attribute pointer, cell-type pointer, room data pointer |
 | `&7F8A` | room command jump table (`&00-&0A`) |
 | `&A300-&AAFF` | variables and workspace (see below) |
 | `&A96A` | room pointer table: room *r* (1-120) at `&A96A + 2r` |
 | `&AA5C-&DFA1` | room data, 13,633 bytes for 120 rooms (avg 114), in no particular room order; one unused 4-byte gap at `&B902` |
-| `&DFA2-&FEFF` | graphics and other data (to be mapped) |
+| `&DFA2-&FDF7` | Harry, monster, truck, train and lift sprites (7,766 bytes) |
+| `&FE00-&FF00` | the IM 2 table, built at start-up |
 
 ### Variables found so far
 
@@ -54,25 +71,28 @@ overview and the map of where things are.
 `&78C1` reads eight keys from the table at `&A42C` into one byte at `&A48A`,
 first key in bit 7. Defaults (port high byte, mask, ASCII):
 
-| Bit | Key | Use (so far) |
+| Bit | Key | Use |
 |---|---|---|
-| 7 | `0` | handled at `&9BDC` (abort? pause?) |
-| 6 | `1` | |
-| 5 | `S` | calls `&A16E` |
+| 7 | `0` | abort, back to the menu (`&9BDC`) |
+| 6 | `1` | take / drop |
+| 5 | `S` | save the game to tape (`&A16E`) |
 | 4 | `Q` | up |
 | 3 | `A` | down |
 | 2 | `O` | left |
 | 1 | `P` | right |
-| 0 | SYMBOL SHIFT | jump? |
+| 0 | SYMBOL SHIFT | jump |
 
 `&9CC3` reads the Kempston port (31).
 
 ## The main loop
 
 `&7743` starts a game: room 1, Harry's record from `&89E5`. Then per room
-`&7913` draws it (`&7920`) and sets up its contents (`&8B2A`, `&99F6`,
-`&9088`), and the loop at `&77B9` runs: read keys `&78C1`, `&9CE7`,
-`&80B6`, ... `HALT` waits for the frame interrupt (IM 2 in play).
+`&7913` draws it (`&7920`) and sets up its contents (`&8B2A` monsters,
+`&99F6` object cells, `&9088` the lift), and the loop at `&77B9` runs,
+**exactly three frames a pass**: keys `&78C1`, Kempston `&9CE7`, Harry
+`&80B6`, room change, the footstep click; HALT, in which the IM 2 handler
+`&7ED9` erases and redraws the sprites on the draw list; the lift and the
+monsters; HALT; collisions `&936B`; HALT; collisions again.
 
 ## The room format
 

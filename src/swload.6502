@@ -1,0 +1,51 @@
+\ ***************************************************************************
+\ SWLOAD: put CE2DATA into a sideways RAM bank, then run the game
+\ (decision 8). Runs once, at &1900; CE2 loads over it.
+\
+\ A bank is free if the OS found no ROM in it at start-up (its ROM type
+\ byte at &02A1 + bank is 0) and a byte at &8000 can be flipped. The
+\ highest free bank is used.
+\ ***************************************************************************
+
+.swload
+{
+    LDX #LO(load_data) : LDY #HI(load_data) : JSR oscli
+    LDA romshad : STA old_bank
+    SEI
+    LDX #15
+.try
+    LDA romtypes,X : BNE next
+    STX romshad : STX romsel
+    LDA &8000 : EOR #&FF : STA &8000
+    CMP &8000 : BEQ found
+.next
+    DEX : BPL try
+    LDA old_bank : STA romshad : STA romsel
+    CLI
+    \ No RAM: say so and stop.
+    LDX #0
+.message
+    LDA no_ram,X : BEQ stop
+    JSR osasci
+    INX : BNE message
+.stop
+    JMP stop
+.found
+    EOR #&FF : STA &8000        ; put the byte back
+    \ Copy the 16K loaded at &3000 into the bank.
+    LDY #0
+.copy
+    LDA &3000,Y : STA &8000,Y
+    INY : BNE copy
+    INC copy+2 : INC copy+5
+    LDA copy+5 : CMP #&C0 : BNE copy
+    LDA old_bank : STA romshad : STA romsel
+    CLI
+    LDX #LO(run_game) : LDY #HI(run_game) : JMP oscli
+}
+.old_bank   EQUB 0
+.load_data  EQUS "LOAD CE2DATA 3000", 13
+.run_game   EQUS "RUN CE2", 13
+.no_ram
+    EQUS 22, 7, "CHUCKIE EGG 2 needs 16K of", 13
+    EQUS "sideways RAM, and none was found.", 13, 0

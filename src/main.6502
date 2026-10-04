@@ -9,6 +9,8 @@
 INCLUDE "defs.6502"
 INCLUDE "memory.6502"
 
+DATA_MAGIC = "CE2DATA"
+
 \ The palette split (irq.6502): T1 is started in the VSync interrupt and
 \ fires in the last scanline of row 1, so that its last four writes (logical
 \ colour 0) land in the horizontal blank before row 2. Measured on jsbeeb,
@@ -39,7 +41,27 @@ SECTION Boot, filename = "!BOOT", exec = &FFFFFFFF
     EQUS "*| CHUCKIE EGG 2 ", build_stamp, 13
     EQUS "MODE 1", 13
     EQUS "FOR I%=0 TO 3:VDU 19,I%,0;0;:NEXT", 13
-    EQUS "*RUN CE2", 13
+    EQUS "*RUN SWLOAD", 13
+ENDSECTION
+
+\ The data's sideways RAM bank (decision 8): SWLOAD puts CE2DATA in a free
+\ one, then runs CE2, which finds it again by its magic (swram.6502).
+SECTION SwLoad, org = &1900, load = &FFFF1900, exec = &FFFF0000 + swload, filename = "SWLOAD"
+    INCLUDE "swload.6502"
+ENDSECTION
+
+SECTION Data, org = &8000, load = &FFFF3000, filename = "CE2DATA", guard = &C000
+.data_magic
+    EQUS DATA_MAGIC
+    \ The rooms, packed by tools/packrooms.py (decision 5).
+.packed_rooms
+    INCBIN "data/packed.bin"
+    \ The OS's font, characters 32-127, copied in at start-up (decision 4):
+    \ read through OSWORD 10, so it is the machine's own on a B or a Master.
+.text_font
+    SKIP 96 * 8
+.data_end
+    PRINT "sideways data &8000-&", ~data_end, " (", &C000 - data_end, " bytes free)"
 ENDSECTION
 
 SECTION Loader, org = &1900, load = &FFFF1900, exec = &FFFF0000 + loader, filename = "CE2"
@@ -51,11 +73,14 @@ SECTION Loader, org = &1900, load = &FFFF1900, exec = &FFFF0000 + loader, filena
 {
     ZA_ENTRY
     LDX #&FF : TXS
+    JSR find_data_bank
+    JSR copy_font
     JSR init_system
     JMP viewer
 }
 
     INCLUDE "system.6502"
+    INCLUDE "swram.6502"
     INCLUDE "irq.6502"
     INCLUDE "screen.6502"
     INCLUDE "rooms.6502"
@@ -67,8 +92,6 @@ SECTION Loader, org = &1900, load = &FFFF1900, exec = &FFFF0000 + loader, filena
     \ packed by tools/packrooms.py (decision 5).
     INCLUDE "data/rooms.6502"
     INCLUDE "data/packed.6502"
-.packed_rooms
-    INCBIN "data/packed.bin"
 .tiles
     INCBIN "data/tiles.bin"
 .room_buffer

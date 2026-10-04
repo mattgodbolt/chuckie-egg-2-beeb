@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Run a scripted session against the game and capture what happened.
 //
-//   node tools/play.mjs '<script>' [prefix] [--disc build/ce2.ssd] [--boot 3]
+//   node tools/play.mjs '<script>' [prefix] [--disc build/ce2.ssd] [--boot 3] [--model B-DFS1.2]
 //
 // The script is a comma-separated list of steps:
 //   1.5            run 1.5 seconds of emulated time
@@ -27,10 +27,11 @@ const opt = (name, dflt) => {
 };
 const disc = opt("disc", "build/ce2.ssd");
 const bootSecs = parseFloat(opt("boot", "3"));
+const model = opt("model", "B-DFS1.2");
 const script = args[0] ?? "";
 const prefix = args[1] ?? "shots/p_";
 
-const beeb = await startBeeb({ disc, bootSecs });
+const beeb = await startBeeb({ disc, bootSecs, model });
 try {
     for (const raw of script.split(",")) {
         const step = raw.trim();

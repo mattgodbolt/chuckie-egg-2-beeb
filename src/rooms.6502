@@ -120,10 +120,10 @@ ZA_AUTO1 textmode           ; set while drawing text (&A3FF)
     LDA mp+1 : ADC #HI(tile_map) - HI(attr_map) : STA mp+1
     LDA tcode
     LDX textmode : BEQ tile
-    \ Text: in the tile map with bit 7 set, drawn from the MOS font (decision 4).
+    \ Text: in the tile map with bit 7 set, drawn from the OS's font (decision 4).
     ORA #&80 : STA (mp),Y
     LDA tcode : SEC : SBC #32
-    LDX #LO(mos_font) : LDY #HI(mos_font)
+    LDX #LO(text_font) : LDY #HI(text_font)
     JMP glyph_addr
 .tile
     STA (mp),Y

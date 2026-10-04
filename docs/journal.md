@@ -340,3 +340,33 @@ may want to revisit). SPACE stands in for SYMBOL SHIFT. Measured in jsbeeb's
 
 Yellow is now one of every room's four colours (decision 6), so Harry is
 always yellow; about a point of scenery colour lost on average.
+
+### Sideways RAM, in practice
+
+- The disc now holds three programs: `SWLOAD` loads `CE2DATA` (a 16K image
+  assembled at `&8000`) to `&3000`, finds the highest bank that is RAM and
+  had no ROM at start-up (ROM type byte 0), copies the image in and
+  `*RUN`s `CE2` over itself. `CE2` finds the bank again by the magic at its
+  start and leaves it paged in for good (`romsel` and the OS's copy `&F4`
+  both): the data reads as ordinary memory at `&8000`.
+- The packed rooms moved there: 12,228 bytes free in main RAM, 7,839 in
+  the bank.
+- **The Master drew garbage for text**: decision 4 read OS 1.20's font
+  straight from `&C000`, which isn't where MOS 3.20 keeps it. Now
+  `copy_font` reads characters 32-127 through OSWORD 10 into the bank at
+  start-up, before the interrupts are taken: the machine's own font, on a
+  B or a Master. Checked on both in jsbeeb; 120 of 120 rooms still match.
+
+### Research: objects and game logic
+
+`docs/research/objects.md` completes the set. Everything that isn't
+scenery or a monster is one of 256 "things" (room, row, column, type, in
+four parallel 256-byte arrays): 41 portable (8 toy parts, 8 each of milk,
+cocoa and sugar, 4 baskets, bone, girder, ladder, the toy, the egg), 17
+machine parts, 198 bonus items. The game: fill three vats with 8 of each
+ingredient, make the toy from 8 parts with the power on, set the toy on
+the egg maker with the vats full, deliver the egg to the truck in room
+111. Each step scores (10,000-30,000 x the egg number) and gives a life;
+the next egg resets the factory, enables more monsters and changes the
+toy. The "unless..." of "you only have two hands" is the basket, which
+gathers any number of one ingredient (and makes jumps lower).

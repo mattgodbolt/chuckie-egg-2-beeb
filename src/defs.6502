@@ -24,7 +24,9 @@ usrvia_ifr = &FE6D
 usrvia_ier = &FE6E
 SL         = 64             ; a scanline: 64 us, 64 ticks of a VIA timer
 irq1v      = &0204
-mos_font   = &C000          ; OS 1.20's font, characters 32-127
+romsel     = &FE30          ; the sideways bank at &8000
+romshad    = &F4            ; the OS's copy of romsel: always write both
+romtypes   = &02A1          ; the OS's ROM type per bank; 0 = no ROM found
 
 \ --- The screen -----------------------------------------------------------
 \ MODE 1's pixels (2 bits each, four to a byte), with the CRTC narrowed to

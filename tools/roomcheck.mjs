@@ -14,8 +14,10 @@ const last = parseInt(process.argv[3] ?? "120");
 mkdirSync("build/bbcrooms", { recursive: true });
 const b = await startBeeb({ disc: "build/ce2.ssd", bootSecs: 4 });
 try {
-    // Text is drawn from the MOS font (decision 4): the comparison needs it.
-    writeFileSync("build/mosfont.bin", Buffer.from(await b.read(0xc000, 0x300)));
+    // Text is drawn from the OS's font, copied into text_font at start-up
+    // (decision 4): the comparison needs it. (The data bank stays paged in,
+    // so reading &8000-&BFFF reads it.)
+    writeFileSync("build/mosfont.bin", Buffer.from(await b.read("text_font", 0x300)));
     for (let r = first; r <= last; r++) {
         await b.write("room", [r]);
         let ok = false;

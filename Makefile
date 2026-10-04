@@ -26,7 +26,7 @@ all: $(TARGET)
 # The symbol dump is how the test tools find the game's variables.
 $(TARGET): $(SOURCES) | build
 	$(BARON) -D 'BUILD="$(BUILD)"' -o $(TARGET) --title CHUCKIE2 --opt 3 --warn 2 --symbols $(SYMBOLS) -v -log0 build/listing.txt src/main.6502
-	@grep -E '^code &' build/listing.txt || true
+	@grep -E '^(code|sideways) ' build/listing.txt || true
 
 build:
 	mkdir -p build

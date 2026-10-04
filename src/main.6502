@@ -82,7 +82,7 @@ SECTION Loader, org = &1900, load = &FFFF1900, exec = &FFFF0000 + loader, filena
 IF DEFINED(VIEWER)
     JMP viewer                  ; the room viewer, for tools/roomcheck.mjs
 ELSE
-    JMP new_game
+    JMP init_game
 ENDIF
 }
 
@@ -95,6 +95,8 @@ ENDIF
     INCLUDE "unpack.6502"
     INCLUDE "sprite.6502"
     INCLUDE "harry.6502"
+    INCLUDE "monsters.6502"
+    INCLUDE "collide.6502"
     INCLUDE "game.6502"
 IF DEFINED(VIEWER)
     INCLUDE "viewer.6502"
@@ -105,6 +107,8 @@ ENDIF
     INCLUDE "data/rooms.6502"
     INCLUDE "data/packed.6502"
     INCLUDE "data/gfx.6502"
+.monster_table
+    INCBIN "data/monsters.bin"
 .tiles
     INCBIN "data/tiles.bin"
 .room_buffer

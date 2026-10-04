@@ -1,0 +1,218 @@
+\ ***************************************************************************
+\ Collisions with Harry (&936B/&937D, &940A; docs/research/monsters.md 5).
+\
+\ The original asks whether its screen holds, in Harry's 8-pixel window,
+\ any pixel that is neither Harry's nor the room's, then decides who by
+\ character-cell boxes in record order. The BBC's screen can't answer the
+\ first question by colour (a black spider on black paper still collides),
+\ so it is asked of the sprites' 1-bit images instead: a visible monster's
+\ pixels, inside the window, not under Harry's own pixels or the tiles'.
+\ What that misses is only the holes one sprite's erase leaves in another
+\ (decision 9). Objects and the train will join the test.
+\
+\ Harry's window is two columns as a 16-bit strip, left column high: 8
+\ pixels from 2*xf (a 1-byte frame is the left column alone).
+\ ***************************************************************************
+
+ZA_AUTO1 cw_lo              ; the window mask
+ZA_AUTO1 cw_hi
+ZA_AUTO1 cs_lo              ; window AND NOT (Harry OR tiles), one line
+ZA_AUTO1 cs_hi
+ZA_AUTO2 cimg               ; Harry's frame rows
+ZA_AUTO1 cline              ; the screen line being tested, 0-191
+ZA_AUTO1 crow               ; Harry's row 0-15
+
+.collide
+{
+    ZA_AUTO1 hw
+    \ Harry's frame: width, and the window it gives.
+    LDY #1 : LDA (h_frame),Y : STA hw
+    CLC : LDA h_frame : ADC #2 : STA cimg
+    LDA h_frame+1 : ADC #0 : STA cimg+1
+    LDA #&FF : STA cw_hi : LDA #0 : STA cw_lo
+    LDA hw : CMP #1 : BEQ window
+    LDX h_xf : BEQ window
+.shift
+    LSR cw_hi : ROR cw_lo : LSR cw_hi : ROR cw_lo
+    DEX : BNE shift
+.window
+    \ Harry's top line.
+    LDA h_cell : LSR A : LSR A : LSR A : LSR A : LSR A : STA cline
+    LDA h_cell+1 : ASL A : ASL A : ASL A : ORA cline
+    ASL A : ASL A : ASL A : ORA h_yf : STA cline
+    LDA #0 : STA crow
+.line
+    \ What on this line counts: the window, less Harry, less the tiles.
+    LDA crow : LDX hw : CPX #1 : BEQ one_byte
+    ASL A : TAY
+    LDA (cimg),Y : STA cs_hi
+    INY : LDA (cimg),Y : STA cs_lo
+    JMP tiles
+.one_byte
+    TAY : LDA (cimg),Y : STA cs_hi
+    LDA #0 : STA cs_lo
+.tiles
+    JSR tile_strip                  ; A = left column's tile line, X = right's
+    ORA cs_hi : EOR #&FF : AND cw_hi : STA cs_hi
+    TXA : ORA cs_lo : EOR #&FF : AND cw_lo : STA cs_lo
+    ORA cs_hi : BEQ next_line
+    \ Any visible monster's pixels there?
+    LDX #0
+.monster
+    CPX m_count : BEQ next_line
+    LDA m_vis,X : BEQ next_monster
+    STX c_m
+    JSR monster_strip               ; A = its left-column bits, Y = right's
+    AND cs_hi : BNE hit
+    TYA : AND cs_lo : BNE hit
+    LDX c_m
+.next_monster
+    INX : JMP monster
+.next_line
+    INC cline
+    INC crow : LDA crow : CMP #16 : BNE line
+    RTS
+.hit
+    JMP who_was_hit
+}
+.c_m EQUB 0
+
+\ The tile lines on screen line cline in Harry's two columns: A left, X
+\ right (1 bit a pixel, as the tile font has them).
+.tile_strip
+{
+    \ cell = (line / 8) * 32 + Harry's column
+    LDA cline : LSR A : LSR A : LSR A : STA cell
+    LDA #0 : STA cell+1
+    ASL cell : ROL cell+1 : ASL cell : ROL cell+1 : ASL cell : ROL cell+1
+    ASL cell : ROL cell+1 : ASL cell : ROL cell+1
+    LDA h_cell : AND #31 : ORA cell : STA cell
+    JSR cell_looks : LDA cline : AND #7 : TAY : LDA (glyph),Y : PHA
+    INC cell : BNE right
+    INC cell+1
+.right
+    JSR cell_looks : LDA cline : AND #7 : TAY : LDA (glyph),Y : TAX
+    PLA
+    RTS
+}
+
+\ Monster c_m's bits on line cline in Harry's two columns: A left, Y right.
+.monster_strip
+{
+    ZA_AUTO2 mimg
+    ZA_AUTO1 mtop
+    ZA_AUTO1 mw
+    ZA_AUTO1 mh
+    ZA_AUTO1 rr
+    ZA_AUTO1 dcol
+    LDX c_m
+    LDA m_frame_lo,X : STA mimg
+    LDA m_frame_hi,X : STA mimg+1
+    LDY #0 : LDA (mimg),Y : ASL A : ASL A : ASL A : STA mh   ; in lines
+    INY : LDA (mimg),Y : STA mw
+    \ Its line on screen line cline: rr = cline - its top line.
+    LDA m_cell_lo,X : LSR A : LSR A : LSR A : LSR A : LSR A : STA mtop
+    LDA m_cell_hi,X : ASL A : ASL A : ASL A : ORA mtop
+    ASL A : ASL A : ASL A : ORA m_yf,X : STA mtop
+    LDA cline : SEC : SBC mtop : BCC none
+    CMP mh : BCS none
+    STA rr
+    \ Harry's left column less its left column.
+    LDA h_cell : AND #31 : STA dcol
+    LDA m_cell_lo,X : AND #31 : STA mtop
+    LDA dcol : SEC : SBC mtop : STA dcol
+    \ Row rr starts at mimg + 2 + rr * mw.
+    CLC : LDA mimg : ADC #2 : STA mimg
+    BCC no_carry
+    INC mimg+1
+.no_carry
+    LDY rr
+.row
+    BEQ at_row
+    CLC : LDA mimg : ADC mw : STA mimg
+    BCC no_carry2
+    INC mimg+1
+.no_carry2
+    DEY : JMP row
+.at_row
+    \ Left: its byte dcol, if that is one of its columns; right: dcol + 1.
+    LDA #0 : STA rr
+    LDY dcol : CPY mw : BCS left_none   ; (unsigned: negative is huge)
+    LDA (mimg),Y : STA rr
+.left_none
+    INY : CPY mw : BCS right_none
+    LDA (mimg),Y : TAY
+    LDA rr
+    RTS
+.right_none
+    LDY #0 : LDA rr
+    RTS
+.none
+    LDA #0 : TAY
+    RTS
+}
+
+\ Who was hit (&940A): character-cell boxes, the first monster in record
+\ order that overlaps Harry decides. Then the train's rule.
+.who_was_hit
+{
+    ZA_AUTO1 hl                     ; Harry's box
+    ZA_AUTO1 hr
+    ZA_AUTO1 ht
+    ZA_AUTO1 hb
+    LDA h_cell : AND #31 : STA hl
+    LDY #1 : LDA (h_frame),Y : CLC : ADC hl : SEC : SBC #1 : STA hr
+    LDA h_cell : LSR A : LSR A : LSR A : LSR A : LSR A : STA ht
+    LDA h_cell+1 : ASL A : ASL A : ASL A : ORA ht : STA ht
+    LDY #0 : LDA (h_frame),Y : CLC : ADC ht : SEC : SBC #1 : STA hb
+    LDX #0
+.monster
+    CPX m_count : BEQ no_monster
+    STX c_m
+    \ Its box against Harry's: overlap unless clear on some side.
+    LDA m_cell_lo,X : AND #31 : STA box_l
+    LDA m_frame_lo,X : STA cimg
+    LDA m_frame_hi,X : STA cimg+1
+    LDY #1 : LDA (cimg),Y : CLC : ADC box_l : SEC : SBC #1 : STA box_r
+    LDA m_cell_lo,X : LSR A : LSR A : LSR A : LSR A : LSR A : STA box_t
+    LDA m_cell_hi,X : ASL A : ASL A : ASL A : ORA box_t : STA box_t
+    LDY #0 : LDA (cimg),Y : CLC : ADC box_t : SEC : SBC #1 : STA box_b
+    LDA box_r : CMP hl : BCC next   ; its right < Harry's left
+    LDA hr : CMP box_l : BCC next   ; Harry's right < its left
+    LDA box_b : CMP ht : BCC next
+    LDA hb : CMP box_t : BCC next
+    JMP contact
+.next
+    LDX c_m : INX : JMP monster
+.no_monster
+    \ Rooms 71-80: the train kills in rows 0-7.
+    LDA room : CMP #71 : BCC done
+    CMP #81 : BCS done
+    LDA h_cell+1 : BNE done         ; rows 0-7 are cells 0-255
+    JMP harry_died
+.done
+    RTS
+}
+.box_l EQUB 0
+.box_r EQUB 0
+.box_t EQUB 0
+.box_b EQUB 0
+
+\ Contact with monster c_m (&94E5).
+.contact
+{
+    LDX c_m
+    LDA m_flags,X : AND #MF_KILL : BEQ not_kill
+    JMP harry_died
+.not_kill
+    LDA m_flags,X : AND #MF_BOUNCE : BEQ harmless
+    \ Knocked back: a jump at count 2, momentum and facing at random.
+    LDA #7 : STA h_state
+    LDA #2 : STA h_cnt
+.again
+    JSR rng : AND #3 : CMP #3 : BEQ again
+    SEC : SBC #1 : STA h_mom
+    JSR rng : AND #4 : STA h_face
+.harmless
+    RTS
+}

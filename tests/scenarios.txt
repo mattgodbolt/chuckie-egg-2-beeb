@@ -7,3 +7,4 @@ jump-turn   | right:20-60,jump:40,left:70-90,jump:80   | 160
 ladder-down | right:20-62,down:63-120                  | 160
 walk-left   | left:20-120                              | 160
 jump-hold   | right:20-140,jump:100-140                | 160
+dog-deaths  | right:20-300,jump:75                     | 260

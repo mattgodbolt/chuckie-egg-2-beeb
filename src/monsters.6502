@@ -1,0 +1,441 @@
+\ ***************************************************************************
+\ Monsters: a transcription of the original's (docs/research/monsters.md,
+\ sections 3 and 4). At most four in a room; each ticks twice a pass, moves
+\ when its counter runs out, and is redrawn at the next frame if it moved.
+\
+\ The original's 26-byte records become parallel arrays indexed by the
+\ monster's number (memory.6502); positions are a cell, yf and sub (the
+\ original's IY+A: 2-pixel steps across, or the animation phase).
+\ ***************************************************************************
+
+\ Type flags (byte 2 of a type).
+MF_FAST    = &80            ; step 2 (4 pixels), half as many frames
+MF_VERT    = &40            ; moves vertically
+MF_FREE    = &20            ; needs no floor ahead (flyers) or rope (vertical)
+MF_RESPAWN = &10            ; when blocked: back to the start
+MF_NEG     = &08            ; starts left / down
+MF_BOUNCE  = &04            ; knocks Harry back
+MF_KILL    = &02            ; kills Harry
+MF_STATIC  = &01            ; never moves
+
+mon_room  = monster_table           ; bit 7 set: disabled
+mon_row   = monster_table + &100
+mon_col   = monster_table + &200
+mon_type  = monster_table + &300
+mon_types = monster_table + &400    ; 4 bytes a type: ink, base, flags, speed
+
+\ The RNG (&918A): 32 bits, big-endian, shifted left with bit 30 EOR bit
+\ 27 coming in at the bottom; returns the new top byte. Called once for
+\ every monster every tick, so the calls must stay in the original's
+\ order.
+.rng
+{
+    LDA rng_state : AND #&48 : CLC : ADC #&38   ; bit 6 = bit 6 EOR bit 3
+    ASL A : ASL A                               ; ... into the carry
+    ROL rng_state+3 : ROL rng_state+2 : ROL rng_state+1 : ROL rng_state
+    LDA rng_state
+    RTS
+}
+
+\ Set up the room's monsters (&8B2A): scan every table entry, 1-255 then 0.
+.setup_monsters
+{
+    LDA #0 : STA m_count : STA dl_count
+    LDY #0
+.scan
+    INY
+    LDA mon_room,Y : CMP room : BNE next
+    LDX m_count : CPX #NM : BCS next
+    STY m_entry
+    JSR setup_monster
+    LDY m_entry
+    INC m_count
+.next
+    CPY #0 : BNE scan
+    RTS
+}
+.m_entry EQUB 0
+
+\ Monster X from table entry Y (&8B5D).
+.setup_monster
+{
+    LDA mon_row,Y : STA m_srow,X
+    LDA mon_col,Y : STA m_scol,X
+    JSR m_to_start
+    LDA mon_type,Y : ASL A : ASL A : TAY
+    LDA mon_types,Y : STA m_ink,X
+    LDA mon_types+1,Y : STA m_base,X
+    LDA mon_types+2,Y : STA m_flags,X
+    LDA mon_types+3,Y : STA m_speed,X
+    TXA : CLC : ADC #1 : STA m_tick,X       ; staggers the first moves
+    LDA #0 : STA m_sub,X : STA m_vis,X      ; not drawn until it first moves
+    \ The step: 1, or 2 when fast; negative if NEG.
+    LDA #1
+    LDY m_flags,X : BPL slow
+    LDA #2
+.slow
+    STA m_step
+    LDA m_flags,X : AND #MF_NEG : BEQ positive
+    LDA #0 : SEC : SBC m_step : STA m_step
+.positive
+    LDA m_flags,X : AND #MF_VERT : BNE vertical
+    LDA m_step : STA m_dx,X
+    LDA #0 : STA m_dy,X
+    JMP choose_frame
+.vertical
+    LDA #0 : STA m_dx,X
+    LDA m_step : ASL A : STA m_dy,X
+    JMP choose_frame
+}
+.m_step EQUB 0
+
+\ Monster X to its start cell, top line.
+.m_to_start
+    LDA m_srow,X : LSR A : LSR A : LSR A : STA m_cell_hi,X
+    LDA m_srow,X : ASL A : ASL A : ASL A : ASL A : ASL A
+    ORA m_scol,X : STA m_cell_lo,X
+    LDA #0 : STA m_yf,X
+    RTS
+
+\ ChooseFrame (&8E70): base + (dx < 0 ? 4 : 0) + sub, halved when fast.
+.choose_frame
+{
+    LDA m_sub,X
+    LDY m_dx,X : BPL right
+    CLC : ADC #4
+.right
+    LDY m_flags,X : BPL slow
+    LSR A
+.slow
+    CLC : ADC m_base,X : ASL A : TAY
+    LDA sprite_frames,Y : STA m_frame_lo,X
+    LDA sprite_frames+1,Y : STA m_frame_hi,X
+    RTS
+}
+
+\ Both ticks of a pass (&8C0A): every monster, in order; the ones that move
+\ go on the draw list.
+.monsters_tick
+{
+    LDA #0 : STA dl_count
+    LDX #0
+.loop
+    CPX m_count : BEQ done
+    STX m_cur
+    JSR tick
+    LDX m_cur : INX
+    JMP loop
+.done
+    RTS
+}
+.m_cur EQUB 0
+
+\ Tick (&8C2C)
+.tick
+{
+    JSR rng                                 ; every monster, every tick
+    LDX m_cur
+    DEC m_tick,X : BPL not_yet
+    LDA m_speed,X : AND #&1F : STA m_tick,X
+    LDA m_speed,X : BPL normal
+    JMP special
+.not_yet
+    RTS
+.normal
+    LDA m_flags,X : AND #MF_STATIC : BEQ moves
+    LDA #0 : STA m_dx,X : STA m_dy,X
+    JMP m_move
+.moves
+    LDA m_flags,X : AND #MF_VERT : BEQ horizontal
+    JMP vertical
+\ Horizontal movers (4.3): tested only on a character boundary.
+.horizontal
+    LDA m_sub,X : BEQ boundary
+    JMP m_move
+.boundary
+    JSR m_size                              ; m_w, m_h; mp = type map at the cell
+    LDA m_cell_lo,X : AND #31 : STA m_c
+    LDA m_dx,X : BMI left
+    \ Right: the column just past the monster.
+    LDA m_c : CLC : ADC m_w : CMP #32 : BCS blocked
+    LDY m_w
+    JMP column
+.left
+    LDA m_c : BEQ blocked
+    \ The column just before: mp - 1.
+    LDA mp : BNE no_borrow
+    DEC mp+1
+.no_borrow
+    DEC mp
+    LDY #0
+.column
+    \ m_h cells down from (mp),Y must all be clear (anything but bit 1)...
+    LDA m_h : STA m_n
+.cells
+    LDA (mp),Y : AND #&FD : BNE blocked
+    TYA : CLC : ADC #32 : TAY
+    BCC no_page
+    INC mp+1
+.no_page
+    DEC m_n : BNE cells
+    \ ... and unless it flies, the cell below them must be floor.
+    LDA m_flags,X : AND #MF_FREE : BNE clear
+    LDA (mp),Y : AND #&21 : BEQ blocked
+.clear
+    JMP m_move
+.blocked
+    LDA m_flags,X : AND #MF_RESPAWN : BEQ turn
+    JMP respawn
+.turn
+    LDA #0 : SEC : SBC m_dx,X : STA m_dx,X  ; turns and steps the same tick
+    JMP m_move
+
+\ Vertical movers (4.4): the animation from the pixel line; tested every
+\ fourth step, on a character boundary.
+.vertical
+    LDA m_yf,X : LSR A : STA m_sub,X
+    BEQ vcheck_entry
+    JMP m_move
+.vcheck_entry
+    JMP vcheck
+}
+\ (the scratch the tick uses)
+.m_c EQUB 0
+.m_n EQUB 0
+.m_ropes EQUB 0
+
+\ m_w, m_h from monster X's frame; mp = type_map + its cell.
+ZA_AUTO2 mp
+ZA_AUTO2 mframe
+.m_size
+    LDA m_frame_lo,X : STA mframe
+    LDA m_frame_hi,X : STA mframe+1
+    LDY #0 : LDA (mframe),Y : STA m_h
+    INY : LDA (mframe),Y : STA m_w
+    LDA m_cell_lo,X : STA mp
+    CLC : LDA m_cell_hi,X : ADC #HI(type_map) : STA mp+1
+    RTS
+.m_w EQUB 0
+.m_h EQUB 0
+
+\ VCheck (&8CD3): up needs the row above clear, down the row below; each
+\ cell clear but for ropes, and unless free, at least one rope.
+.vcheck
+{
+    LDX m_cur
+    JSR m_size
+    LDA m_cell_lo,X : AND #31 : STA m_c
+    LDA m_dy,X : BMI down
+    \ Up: blocked at rows 0-2 (the top row of the room is 2).
+    LDA m_cell_hi,X : BNE up_ok
+    LDA m_cell_lo,X : CMP #3 * 32 : BCC vblocked
+.up_ok
+    SEC : LDA mp : SBC #32 : STA mp
+    BCS test
+    DEC mp+1
+    JMP test
+.down
+    \ Down: blocked if row + h reaches 24.
+    LDA m_cell_lo,X : LSR A : LSR A : LSR A : LSR A : LSR A : STA m_n
+    LDA m_cell_hi,X : ASL A : ASL A : ASL A : ORA m_n   ; the row
+    CLC : ADC m_h : CMP #24 : BCS vblocked
+    \ mp += 32 * h
+    LDY m_h
+.rows
+    CLC : LDA mp : ADC #32 : STA mp
+    BCC row_ok
+    INC mp+1
+.row_ok
+    DEY : BNE rows
+.test
+    LDA #0 : STA m_ropes
+    LDY #0
+.cell
+    LDA (mp),Y : AND #2 : BEQ no_rope
+    INC m_ropes
+.no_rope
+    LDA (mp),Y : AND #&FD : BNE vblocked
+    INY : CPY m_w : BNE cell
+    LDA m_flags,X : AND #MF_FREE : BNE ok
+    LDA m_ropes : BEQ vblocked
+.ok
+    JMP m_move
+.vblocked
+    LDA m_flags,X : AND #MF_RESPAWN : BEQ turn
+    JMP respawn
+.turn
+    LDA #0 : SEC : SBC m_dy,X : STA m_dy,X
+    JMP m_move
+}
+
+\ Specials (4.5): icicles, drips, bubbles, clouds. State in speed bits 6, 5.
+.special
+{
+    LDA m_speed,X : AND #&60
+    BEQ idle
+    CMP #&20 : BEQ forming
+    CMP #&40 : BEQ formed
+    \ 11: moving; tested on a character boundary.
+    LDA m_yf,X : BNE go
+    JMP vcheck
+.go
+    JMP m_move
+.idle
+    LDA m_flags,X : AND #MF_NEG : BNE appear
+    JSR rng : LDX m_cur : CMP #10 : BCS wait    ; 10 in 256 a tick
+.appear
+    LDA #0 : STA m_sub,X : STA m_dy,X
+    LDA #&20 : JSR set_special
+    LDA #10 : STA m_tick,X
+    JMP m_move
+.forming
+    LDA m_sub,X : CMP #3 : BNE next_frame
+    LDA #&40 : JSR set_special
+    JMP m_move
+.next_frame
+    LDA #10 : STA m_tick,X
+    INC m_sub,X
+    JMP m_move
+.formed
+    LDA m_flags,X : AND #MF_NEG : BEQ drop
+    JSR rng : LDX m_cur : CMP #10 : BCS wait
+.drop
+    LDA m_flags,X : AND #MF_NEG : BEQ rise
+    LDA #&FE : JMP set_dy
+.rise
+    LDA #2
+.set_dy
+    STA m_dy,X
+    LDA #&60 : JSR set_special
+    JMP m_move
+.wait
+    RTS
+}
+\ The special state (speed bits 6, 5) of monster X to A.
+.set_special
+    STA m_n
+    LDA m_speed,X : AND #&9F : ORA m_n : STA m_speed,X
+    RTS
+
+\ Respawn (&8D4D), with the two room events.
+.respawn
+{
+    JSR m_save_old
+    LDA room : CMP #120 : BNE not120
+    \ The dinosaur on its scooter stops.
+    LDA #MF_STATIC : STA m_flags,X
+    INC m_base,X : INC m_base,X
+    JMP stop
+.not120
+    CMP #2 : BNE general
+    \ The dog sits, for good: entry 0 (sitting) replaces entry 1.
+    LDA #&0C : STA m_base,X
+    LDA #MF_STATIC : STA m_flags,X
+    LDA mon_room : AND #&7F : STA mon_room
+    LDA mon_room+1 : ORA #&80 : STA mon_room+1
+    \ (The original also removes the bone here, wherever it is: objects.)
+.stop
+    LDA #0 : STA m_dx,X : STA m_sub,X
+    JMP m_move_nosave
+.general
+    LDA m_speed,X : BPL back
+    \ Specials vanish now, and wait invisible.
+    JSR m_erase
+    LDX m_cur
+    LDA #0 : STA m_vis,X
+    LDA m_speed,X : AND #&9F : STA m_speed,X
+    JSR m_to_start
+    RTS
+.back
+    JSR m_to_start
+    JMP m_move_nosave                   ; and step from the start at once
+}
+
+\ Move (&8E59): save where it is, step, pick the frame, put it on the
+\ draw list.
+.m_move
+    LDX m_cur
+    JSR m_save_old
+.m_move_nosave
+{
+    LDX m_cur
+    \ Step (&8E94): across by dx quarter cells, up by dy lines.
+    LDA m_sub,X : CLC : ADC m_dx,X : TAY
+    AND #3 : STA m_sub,X
+    TYA : BMI left
+    CMP #4 : BCC vertical
+    INC m_cell_lo,X : BNE vertical
+    INC m_cell_hi,X
+    JMP vertical
+.left
+    LDA m_cell_lo,X : BNE no_borrow
+    DEC m_cell_hi,X
+.no_borrow
+    DEC m_cell_lo,X
+.vertical
+    LDA m_yf,X : SEC : SBC m_dy,X : TAY
+    AND #7 : STA m_yf,X
+    TYA : BMI up
+    CMP #8 : BCC framed
+    CLC : LDA m_cell_lo,X : ADC #32 : STA m_cell_lo,X
+    BCC framed
+    INC m_cell_hi,X
+    JMP framed
+.up
+    SEC : LDA m_cell_lo,X : SBC #32 : STA m_cell_lo,X
+    BCS framed
+    DEC m_cell_hi,X
+.framed
+    JSR choose_frame
+    LDY dl_count : TXA : STA draw_list,Y
+    INC dl_count
+    RTS
+}
+
+\ The old position := the current one (&884D).
+.m_save_old
+    LDA m_cell_lo,X : STA m_ocell_lo,X
+    LDA m_cell_hi,X : STA m_ocell_hi,X
+    LDA m_yf,X : STA m_oyf,X
+    LDA m_frame_lo,X : STA m_oframe_lo,X
+    LDA m_frame_hi,X : STA m_oframe_hi,X
+    RTS
+
+\ Erase monster X at its old position.
+.m_erase
+    LDA m_ocell_lo,X : STA sp_cell
+    LDA m_ocell_hi,X : STA sp_cell+1
+    LDA m_oyf,X : STA sp_yf
+    LDA m_oframe_lo,X : STA sp_frame
+    LDA m_oframe_hi,X : STA sp_frame+1
+    JMP erase_image
+
+\ The draw list, at the frame after a tick (the original's interrupt):
+\ each monster erased then drawn before the next is touched.
+.draw_monsters
+{
+    LDY #0
+.loop
+    CPY dl_count : BEQ done
+    STY dl_i
+    LDX draw_list,Y
+    JSR m_erase
+    LDY dl_i : LDX draw_list,Y
+    LDA m_cell_lo,X : STA sp_cell
+    LDA m_cell_hi,X : STA sp_cell+1
+    LDA m_yf,X : STA sp_yf
+    LDA m_frame_lo,X : STA sp_frame
+    LDA m_frame_hi,X : STA sp_frame+1
+    LDA m_ink,X : TAX
+    LDA cmap,X
+    ZA_INDEXEDBY 0..7
+    TAX : LDA colour_bytes,X : STA sp_colour
+    JSR draw_sprite
+    LDY dl_i : LDX draw_list,Y
+    LDA #1 : STA m_vis,X
+    INY
+    JMP loop
+.done
+    RTS
+}
+.dl_i EQUB 0

@@ -35,9 +35,40 @@ SECTION ZeroPage, org = ZP_FIXED, guard = &90
 .d_frame    SKIP 2
 ENDSECTION
 
-\ The checkpoint (&A46B): Harry as he entered the room, for a death.
+\ The game's other state, in the DFS's NMI page (free once the disc is done).
 SECTION LowState, org = &0D00, guard = &0E00
+\ The checkpoint (&A46B): Harry as he entered the room, for a death.
 .checkpoint SKIP 16
+\ The RNG (&91B1), big-endian: "9090" when the game is loaded.
+.rng_state  SKIP 4
+\ The monsters (&A490, docs/research/monsters.md 2.2): parallel arrays,
+\ one entry a monster, at most NM in a room.
+NM = 5
+.m_count    SKIP 1          ; monsters in this room (&A48F)
+.m_cell_lo  SKIP NM         ; top-left cell
+.m_cell_hi  SKIP NM
+.m_yf       SKIP NM         ; pixel line in the cell
+.m_sub      SKIP NM         ; 2-pixel step across, or the animation phase (+A)
+.m_dx       SKIP NM         ; quarter cells a step (+B)
+.m_dy       SKIP NM         ; lines a step, up positive (+C)
+.m_frame_lo SKIP NM         ; the frame's header
+.m_frame_hi SKIP NM
+.m_tick     SKIP NM         ; ticks to the next move (+8)
+.m_ink      SKIP NM         ; Spectrum colour (+9)
+.m_base     SKIP NM         ; base frame (+D)
+.m_flags    SKIP NM         ; type flags (+12)
+.m_speed    SKIP NM         ; delay, special bit and state (+13)
+.m_srow     SKIP NM         ; start row (+14)
+.m_scol     SKIP NM         ; start column (+15)
+.m_ocell_lo SKIP NM         ; where it was last drawn
+.m_ocell_hi SKIP NM
+.m_oyf      SKIP NM
+.m_oframe_lo SKIP NM
+.m_oframe_hi SKIP NM
+.m_vis      SKIP NM         ; drawn and not since erased (collide.6502)
+\ The draw list (&A41C): monsters that moved this tick, in order.
+.dl_count   SKIP 1
+.draw_list  SKIP NM
 ENDSECTION
 
 \ The three 32 x 24 maps the room drawer fills, one byte a cell, indexed by

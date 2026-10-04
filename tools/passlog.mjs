@@ -36,9 +36,17 @@ try {
             if (!want && held.has(key)) { await b.keyUp(key); held.delete(key); }
         }
         const v = await b.read("h_cell", 11);
+        const count = await b.peek("m_count");
+        const arr = async (sym) => b.read(sym, 5);
+        const [clo, chi, yf, sub, dx, dy, tick, speed] = await Promise.all(
+            ["m_cell_lo", "m_cell_hi", "m_yf", "m_sub", "m_dx", "m_dy", "m_tick", "m_speed"].map(arr));
+        const monsters = [];
+        for (let i = 0; i < count; i++)
+            monsters.push([clo[i] | (chi[i] << 8), yf[i], sub[i], dx[i], dy[i], tick[i], speed[i]]);
+        const rng = (await b.read("rng_state", 4)).map((x) => x.toString(16).padStart(2, "0")).join("");
         log.push({
             pass: n, room: await b.peek("room"), cell: v[0] | (v[1] << 8), yf: v[2], xf: v[3],
-            state: v[8], face: v[6], cnt: v[9], fall: v[10],
+            state: v[8], face: v[6], cnt: v[9], fall: v[10], rng, monsters,
         });
     }
 } finally {

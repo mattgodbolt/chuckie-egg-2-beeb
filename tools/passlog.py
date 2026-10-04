@@ -11,7 +11,8 @@ starts a game; keys are set at the top of a pass, before the original reads
 them, so both machines see the same keys on the same pass.
 
 Each line of the output: pass, room, cell (row * 32 + col), yf, xf,
-state, face, cnt (jump count), fall (fall counter).
+state, face, cnt (jump count), fall (fall counter), the RNG's state, and
+each monster as [cell, yf, sub, dx, dy, tick, speed].
 """
 import argparse
 import json
@@ -35,12 +36,23 @@ def parse_inputs(spec):
     return out
 
 
+MONSTERS = 0xA490           # 26-byte records; the count is at &A48F
+RNG = 0x91B1               # big-endian, 4 bytes
+
+
 def harry_state(m, n):
     attr = m[HARRY + 2] | m[HARRY + 3] << 8
+    monsters = []
+    for i in range(m[0xA48F]):
+        r = MONSTERS + 26 * i
+        a = m[r + 2] | m[r + 3] << 8
+        monsters.append([a - 0x5800, m[r + 5] & 7, m[r + 0x0A], m[r + 0x0B], m[r + 0x0C],
+                         m[r + 8], m[r + 0x13]])
     return {
         "pass": n, "room": m[0xA3FE], "cell": attr - 0x5800, "yf": m[HARRY + 5] & 7,
         "xf": m[HARRY + 0x0A], "state": m[0xA487], "face": m[HARRY + 0x0D],
         "cnt": m[0xA485], "fall": m[0xA486],
+        "rng": "".join(f"{m[RNG + i]:02x}" for i in range(4)), "monsters": monsters,
     }
 
 

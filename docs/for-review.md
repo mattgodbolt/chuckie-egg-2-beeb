@@ -17,8 +17,15 @@ things parked for discussion. The reasoning for each is in
    costs some scenery colour (room 5's white pipes are yellow).
 4. **Colour substitutions** (decision 2): rooms with more than four colours
    lose some. The worst: room 5 83%, room 48 88%, rooms 70, 51 and 24 about
-   92% of pixels in their own colour. A per-row palette change could fix
-   those rooms if they look wrong in play.
+   92% of pixels in their own colour. **Planned**: Rich Talbot-Watkins
+   suggested more palette splits down the screen where they help (and
+   pointed out the first room viewer had no yellow for Harry, since fixed by
+   decision 6). Measured on the map earlier: a palette per character row,
+   with paper and yellow held fixed, shows 99.6% of pixels in their own
+   colour, against 97.8% now. The status bar's split shows the timing can
+   be held; a split between two playfield rows has content on both sides,
+   so it must change logical 1 and 2 in a horizontal blank. To be costed
+   as a colour layer once the game plays.
 5. **Text in the MOS font** (decision 4), not the Spectrum ROM's.
 6. **A MODE 7 instructions loader** (Matt's idea). The original loaded
    from tape, so its instructions were part of the game: shown once at

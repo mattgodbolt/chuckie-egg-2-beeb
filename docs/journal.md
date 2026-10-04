@@ -413,3 +413,26 @@ gathers any number of one ingredient (and makes jumps lower).
   a fixed 4 s, while the DFS still had its own ROM paged in. The tools now
   run to a named symbol after booting (`bootUntil` in `tools/beeb.mjs`,
   `--until` in `play.mjs`) instead of waiting a guessed time. 120 of 120.
+
+### Monsters and collisions
+
+- `src/monsters.6502` transcribes the monster code (`docs/research/monsters.md`
+  sections 3-4): set-up from the 256-entry table, the two ticks a pass,
+  horizontal and vertical movers, the specials (icicles, drips, bubbles,
+  clouds), respawn with the dog's and the dinosaur's room events, and the
+  RNG, called once per monster per tick as in the original. The records are
+  parallel arrays in the DFS's NMI page.
+- **The erase is now the original's**: under the old image's set pixels
+  only, the room's pixels go back (`erase_image`); everything else on
+  screen is left alone. Harry uses it too.
+- `src/collide.6502` (decision 9): the original's pixel test asks its
+  1-bit screen; here the same question goes to the visible monsters'
+  images, masked by Harry's and the tiles' pixels, in his 8-pixel window.
+  Then the boxes in record order decide, kill or bounce, and the train's
+  rule for rooms 71-80.
+- `tools/passlog` now logs the RNG and every monster's record too. Walking
+  right through rooms 1 and 11 matches pass for pass, the bird and both
+  hedgehogs included, and so does a new scenario: jump room 1's gap, meet
+  room 2's dog, die four times (each death back to the checkpoint, the dog
+  reset, the RNG in step).
+- Main RAM: 6,210 bytes free.

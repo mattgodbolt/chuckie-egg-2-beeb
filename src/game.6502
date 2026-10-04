@@ -3,6 +3,16 @@
 \ &7743-&78BE and &8A29). So far: Harry, the rooms, the status bar.
 \ ***************************************************************************
 
+\ Once, when the game is loaded.
+.init_game
+{
+    LDX #3
+.rng
+    LDA rng_seed,X : STA rng_state,X
+    DEX : BPL rng
+    \ Fall into new_game.
+}
+
 \ Start a game (&7743, &7763): room 1, Harry jumping out of the truck.
 .new_game
 {
@@ -31,6 +41,7 @@
 \ The main loop (&77B9): three frames a pass, always.
 .game_loop
 {
+    \ Part 0: keys, Harry, a room change.
     JSR read_keys
     JSR harry_update
     LDA room_delta : BEQ same_room
@@ -38,8 +49,17 @@
 .same_room
     JSR wait_vsync
     JSR draw_harry
+    \ Part 1: monster tick A.
+    JSR monsters_tick
     JSR wait_vsync
+    JSR draw_monsters
+    \ Part 2: collisions, monster tick B.
+    JSR collide
+    JSR monsters_tick
     JSR wait_vsync
+    JSR draw_monsters
+    \ Part 3: collisions.
+    JSR collide
     JMP game_loop
 }
 
@@ -47,7 +67,7 @@
 .enter_room
     LDA room : JSR draw_room
     LDA #0 : STA drawn
-    RTS
+    JMP setup_monsters
 
 \ Leaving a room (&77CF-&7856).
 .change_room
@@ -128,7 +148,7 @@ CHECKPOINT_VARS = h_frame + 2 - h_cell    ; h_cell .. h_frame
     LDA d_yf : STA sp_yf
     LDA d_frame : STA sp_frame
     LDA d_frame+1 : STA sp_frame+1
-    JSR erase_sprite
+    JSR erase_image
 .fresh
     LDA h_cell : STA sp_cell : STA d_cell
     LDA h_cell+1 : STA sp_cell+1 : STA d_cell+1
@@ -163,3 +183,6 @@ CHECKPOINT_VARS = h_frame + 2 - h_cell    ; h_cell .. h_frame
 .key_codes
     EQUB 98 EOR &FF, 55 EOR &FF, 54 EOR &FF, 65 EOR &FF
     EQUB 16 EOR &FF, 81 EOR &FF, 48 EOR &FF, 39 EOR &FF
+
+\ The RNG's state on the tape (&91B1).
+.rng_seed EQUS "9090"

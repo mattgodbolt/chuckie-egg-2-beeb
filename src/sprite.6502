@@ -74,41 +74,87 @@ ZA_AUTO1 sp_colour          ; a byte of four pixels in the sprite's colour
     RTS
 }
 
-\ Put back the cells a frame covered: sp_frame's size at sp_cell, sp_yf
-\ (one row more if yf isn't 0).
-.erase_sprite
+\ Erase the frame at sp_frame, sp_cell, sp_yf the original's way (&7FC9):
+\ under each set pixel of the image, put back the room's pixel (the tile
+\ from the tile map, in its cell's colours); every other pixel is left
+\ alone. So a sprite passing over an object or another sprite takes its
+\ shape out of them, as in the original, until they are redrawn.
+.erase_image
 {
+    ZA_AUTO2 src
+    ZA_AUTO2 scr
     ZA_AUTO2 row_cell
-    ZA_AUTO1 rows
-    ZA_AUTO1 cols
+    ZA_AUTO1 lines
     ZA_AUTO1 width
-    LDY #0 : LDA (sp_frame),Y : STA rows
-    LDA sp_yf : BEQ aligned
-    INC rows
-.aligned
+    ZA_AUTO1 yf
+    ZA_AUTO1 bcol
+    ZA_AUTO1 soff
+    ZA_AUTO1 img
+    ZA_AUTO1 mask
+    ZA_AUTO1 under
+    ZA_AUTO1 tb
+    LDY #0 : LDA (sp_frame),Y
+    ASL A : ASL A : ASL A : STA lines
     INY : LDA (sp_frame),Y : STA width
+    CLC : LDA sp_frame : ADC #2 : STA src
+    LDA sp_frame+1 : ADC #0 : STA src+1
     LDA sp_cell : STA row_cell
     LDA sp_cell+1 : STA row_cell+1
+    LDA sp_cell : ASL A : ASL A : ASL A : ASL A : ORA sp_yf : STA scr
+    LDA sp_cell+1 : STA scr+1
+    LDA sp_cell
+    LSR scr+1 : ROR A : LSR scr+1 : ROR A : LSR scr+1 : ROR A : LSR scr+1 : ROR A
+    CLC : ADC #HI(screen) : STA scr+1
+    LDA sp_yf : STA yf
 .row
-    LDA row_cell : STA cell
-    LDA row_cell+1 : STA cell+1
-    LDA width : STA cols
-.col
-    JSR redraw_cell
-    INC cell : BNE col_ok
-    INC cell+1
-.col_ok
-    DEC cols : BNE col
+    LDA #0 : STA bcol : STA soff
+.byte
+    LDY bcol : LDA (src),Y : BEQ next_byte
+    STA img
+    \ The room's pixels here: the tile's line, in the cell's colours.
+    CLC : LDA row_cell : ADC bcol : STA cell
+    LDA row_cell+1 : ADC #0 : STA cell+1
+    JSR cell_looks
+    LDA yf : AND #7 : TAY
+    LDA (glyph),Y : STA tb
+    LDX img
+    LDA spread_hi,X : STA mask
+    LDX tb : LDA spread_hi,X : AND diff : EOR paper
+    LDY soff
+    EOR (scr),Y : AND mask : EOR (scr),Y : STA (scr),Y
+    LDA img : AND #15 : TAX
+    LDA spread_lo,X : STA mask
+    LDA tb : AND #15 : TAX
+    LDA spread_lo,X : AND diff : EOR paper
+    STA under
+    TYA : ORA #8 : TAY
+    LDA under
+    EOR (scr),Y : AND mask : EOR (scr),Y : STA (scr),Y
+.next_byte
+    LDA soff : CLC : ADC #16 : STA soff
+    INC bcol : LDA bcol : CMP width : BNE byte
+    CLC : LDA src : ADC width : STA src
+    BCC src_ok
+    INC src+1
+.src_ok
+    INC yf : LDA yf : AND #7 : BEQ next_cell
+    INC scr
+    JMP more
+.next_cell
+    CLC : LDA scr : ADC #LO(ROW_BYTES - 7) : STA scr
+    LDA scr+1 : ADC #HI(ROW_BYTES - 7) : STA scr+1
     CLC : LDA row_cell : ADC #32 : STA row_cell
-    BCC row_ok
+    BCC more
     INC row_cell+1
-.row_ok
-    DEC rows : BNE row
+.more
+    DEC lines : BEQ done
+    JMP row
+.done
     RTS
 }
 
-\ Redraw `cell` from the tile and attribute maps.
-.redraw_cell
+\ How `cell` looks: glyph = its tile's 8 bytes, paper and diff its colours.
+.cell_looks
 {
     ZA_AUTO2 mp
     LDA cell : STA mp
@@ -128,5 +174,15 @@ ZA_AUTO1 sp_colour          ; a byte of four pixels in the sprite's colour
     TYA : ADC glyph+1 : STA glyph+1
     LDA mp+1 : SEC : SBC #HI(tile_map) - HI(attr_map) : STA mp+1
     LDY #0 : LDA (mp),Y
-    JMP draw_glyph
+    \ paper and diff, as draw_glyph works them out.
+    PHA
+    LSR A : LSR A : LSR A : AND #7 : TAX
+    LDA cmap,X
+    ZA_INDEXEDBY 0..7
+    TAX : LDA colour_bytes,X : STA paper
+    PLA : AND #7 : TAX
+    LDA cmap,X
+    ZA_INDEXEDBY 0..7
+    TAX : LDA colour_bytes,X : EOR paper : STA diff
+    RTS
 }

@@ -14,7 +14,7 @@ const last = parseInt(process.argv[3] ?? "120");
 mkdirSync("build/bbcrooms", { recursive: true });
 // The viewer build (make rooms makes it): the same program, stepping
 // through the rooms instead of playing.
-const b = await startBeeb({ disc: "build/viewer.ssd", bootSecs: 4, symbols: "build/viewer.json" });
+const b = await startBeeb({ disc: "build/viewer.ssd", bootUntil: "viewer", symbols: "build/viewer.json" });
 try {
     // Text is drawn from the OS's font, copied into text_font at start-up
     // (decision 4): the comparison needs it. (The data bank stays paged in,

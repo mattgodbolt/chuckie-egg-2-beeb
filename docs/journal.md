@@ -404,3 +404,12 @@ gathers any number of one ingredient (and makes jumps lower).
   truck's invisible wall, jumping repeatedly. The one difference is pass
   0's fall counter: the original starts a game with 250 there, left over,
   and zeroes it on the first update; the comparison ignores it.
+- **A slip, and what it hid.** The Harry commit said `make rooms` gave 120
+  of 120; it hadn't run: the viewer build failed (`room` was now defined
+  twice) and I committed without reading the output. Fixing that showed 16
+  rooms with wrong pixels — all with text — and those came from the test,
+  not the game: with the sprites the data image is nearly 16K, loading now
+  takes 4.6 s (measured), and the check read the font from the bank after
+  a fixed 4 s, while the DFS still had its own ROM paged in. The tools now
+  run to a named symbol after booting (`bootUntil` in `tools/beeb.mjs`,
+  `--until` in `play.mjs`) instead of waiting a guessed time. 120 of 120.

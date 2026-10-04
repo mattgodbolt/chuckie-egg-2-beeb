@@ -4,7 +4,7 @@
 \ and waits for `shown` to match it.
 \ ***************************************************************************
 
-ZA_AUTO1 room               ; the room to show, 1-120
+\ `room` (memory.6502) is the room to show, 1-120.
 ZA_AUTO1 shown              ; the room on screen
 
 .viewer

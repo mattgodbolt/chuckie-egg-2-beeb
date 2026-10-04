@@ -1,0 +1,18 @@
+\ ***************************************************************************
+\ Memory outside the code: every table is laid out here, in guarded
+\ sections, so baron places them and refuses an overlap. Never hand-place
+\ an address.
+\ ***************************************************************************
+
+\ The three 32 x 24 maps the room drawer fills, one byte a cell, indexed by
+\ cell = row * 32 + column, as the original's at &5D00, &6000 and &6300.
+\ They sit in OS workspace the game doesn't use once it is running: the
+\ language's pages (&0400-&07FF), the sound and printer buffers (&0800), the
+\ cassette and serial buffers (&0900-&0AFF), soft keys (&0B00) and
+\ user-defined characters (&0C00). Page-aligned: a map's address is its
+\ page plus the cell number.
+SECTION Maps, org = &0400, guard = &0D00
+.attr_map   SKIP 768        ; the attribute of each cell (Spectrum format)
+.tile_map   SKIP 768        ; the tile drawn there; bit 7 set for text
+.type_map   SKIP 768        ; the cell type: what Harry can stand on, climb...
+ENDSECTION

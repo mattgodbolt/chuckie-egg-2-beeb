@@ -57,6 +57,29 @@ is in the top nibble and its low bit in the bottom one: colour 1 = `&0F`,
 `!BOOT` selects MODE 1 before the code loads; a MODE change later would
 clear `&3000-&7FFF`.
 
+## Checks
+
+- `.venv/bin/python tools/zxrooms.py` draws every room with the original's
+  code (the oracle, `build/rooms`); `node tools/roomcheck.mjs` dumps the
+  BBC's; `python3 tools/roomcmp.py` compares maps and pixels. Run all three
+  after touching the room drawer, the palettes or the tile drawing.
+- `tools/mkrooms.py` regenerates `src/data/` from the original. The build
+  never runs it; its output is committed.
+
+## OS workspace
+
+- The maps live in `&0400-&0CFF`. The OS's 100Hz interrupt rewrites
+  `&080C-&083F` (sound workspace) even when silent; `init_system` stops the
+  System VIA timer interrupt that drives it.
+
 ## Baron gotchas met so far
 
 - `ASSERT` is built in (0.4.2): don't define the port kit's macro.
+- `FOR n = 0..15` (inclusive), not BeebASM's `FOR n, 0, 15`.
+- A zero-page array is `ZA_AUTO 8, name`, indexed with `ZA_INDEXEDBY` after
+  the access; eight `ZA_AUTO1`s aren't contiguous.
+
+## Reading the original
+
+- Z80 handlers that `PUSH AF`/`PUSH DE` and pop in the other order swap
+  registers: read the pops, not the names. (A run's tile is its command byte.)

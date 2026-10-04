@@ -123,3 +123,47 @@ now a "Reserved macro name" error.
   one room at a time, so the packing has to allow that.
 - Matt, mid-session: *"At a push, we could go 'Beeb with sideways RAM' or
   BBC Master. but try to fit this in a beeb first."* Decision 3.
+
+### The rooms on the BBC: 120 of 120
+
+- **Colour, measured.** `tools/colourstats.py` scores colour schemes on the
+  oracle's pixels: four colours per room shows 99.5% of pixels in their own
+  colour (pixel counts are dominated by paper); changing palette per
+  character row would show 99.95%. Per-room palettes win on cost: no
+  timing-critical interrupt every 8 lines, and sprites keep their colour.
+  Decision 2. `tools/mkrooms.py` picks each room's four by brute force
+  under two rules: ink and paper stay distinct in every cell, and every
+  colour stays distinct from the background (so sprites in any colour show).
+  A first version mapped colours the room data doesn't use to any free slot
+  (room 1 sent yellow, Harry's colour, to blue); a small prior weight on
+  every colour sends them to their nearest neighbour instead.
+- **The drawer is a transcription**, handler by handler, of the original's,
+  keeping its two pointers (attribute/screen and cell type) as cell numbers
+  so its quirks come out the same. One gift from the narrowed screen: with
+  16-byte cells and 512-byte rows, cell *n* is at `screen + 16n`.
+- **Text uses the MOS font** at `&C000` (decision 4): the Spectrum's ROM font
+  isn't ours to copy, and reading the BBC's costs nothing.
+- `tools/roomcheck.mjs` pokes each room number into the viewer, dumps the
+  three maps and the screen; `tools/roomcmp.py` compares them with the
+  oracle: maps byte for byte, and every playfield pixel in the colour its
+  room's palette gives the Spectrum's.
+- **Bug 1: the OS was writing into my tile map.** The maps live in OS
+  workspace pages (`&0400-&0CFF`), and the tile map's middle page is
+  `&0800`, the OS's sound workspace. Measured: 27 bytes in `&080C-&083F`
+  change every second with no sound playing — the 100Hz interrupt's sound
+  processing. Stopping the System VIA's timer interrupt stopped it (negative
+  INKEY scans the keyboard itself, so it still works). The game will own
+  the interrupts outright anyway, as the port kit does.
+- **Bug 2: a run's tile and type were the wrong way round.** The run
+  handler pushes the command byte, then two data bytes, and pops them
+  crosswise: the *command* is the tile (`&2C-&5F`, which is the font's
+  range) and the last byte is the type. The tile and type maps disagreed
+  in exactly mirrored cells, which made it obvious.
+- After those, **all 120 rooms match**. The viewer (Z/X or the cursor keys
+  step through rooms) is 16,768 bytes with the room data raw: 128 bytes
+  under the screen.
+
+![Spectrum (left) and BBC (right): rooms 11, 27, 70 and 96](img/rooms-zx-vs-bbc.png)
+
+Room 70 is the worst for colour (91.4% of pixels in their own colour):
+its red and yellow brickwork comes out magenta and yellow.

@@ -1,0 +1,131 @@
+\ ***************************************************************************
+\ The screen: palettes, clearing, and drawing an 8 x 8 tile into a cell in
+\ the colours of a Spectrum attribute.
+\
+\ A cell is 16 bytes (two 4-pixel columns of 8 lines) and a row of 32
+\ cells is 512 bytes, so cell n is at screen + 16n: one 16-bit shift.
+\ ***************************************************************************
+
+\ The room's colour map: the logical colour of each Spectrum colour 0-7
+\ (decision 2).
+ZA_AUTO 8, cmap
+
+\ Set the palette and colour map for room A (1-120).
+.set_room_palette
+{
+    ZA_AUTO2 pal
+    ZA_AUTO1 bits
+    \ room_palettes + 4 * (A - 1)
+    SEC : SBC #1
+    STA pal : LDA #0 : STA pal+1
+    ASL pal : ROL pal+1 : ASL pal : ROL pal+1
+    CLC : LDA pal : ADC #LO(room_palettes) : STA pal
+    LDA pal+1 : ADC #HI(room_palettes) : STA pal+1
+    \ Logical colours 0-3, a nibble each.
+    LDY #0 : LDA (pal),Y : AND #15 : LDX #0 : JSR set_logical
+    LDY #0 : LDA (pal),Y : LSR A : LSR A : LSR A : LSR A : LDX #1 : JSR set_logical
+    LDY #1 : LDA (pal),Y : AND #15 : LDX #2 : JSR set_logical
+    LDY #1 : LDA (pal),Y : LSR A : LSR A : LSR A : LSR A : LDX #3 : JSR set_logical
+    \ The colour map, two bits a colour.
+    LDX #0
+.byte
+    TXA : LSR A : LSR A : ORA #2 : TAY   ; byte 2 for colours 0-3, 3 for 4-7
+    LDA (pal),Y : STA bits
+    TXA : AND #3 : TAY                   ; shift it down to this colour
+    LDA bits
+.shift
+    DEY : BMI got
+    LSR A : LSR A
+    JMP shift
+.got
+    AND #3 : STA cmap,X
+    ZA_INDEXEDBY 0..7
+    INX : CPX #8 : BNE byte
+    RTS
+}
+
+\ Logical colour X (0-3) shows physical colour A. In a four-colour mode
+\ each logical colour owns four of the ULA's sixteen palette entries: its
+\ bits go to bits 3 and 1 of the entry number, and bits 2 and 0 come from
+\ the next pixel along, so all four must be written.
+.set_logical
+{
+    ZA_AUTO1 phys
+    EOR #7 : STA phys           ; the ULA wants the physical colour EOR 7
+    TXA : AND #2 : ASL A : ASL A : STA set_logical_t
+    TXA : AND #1 : ASL A : ORA set_logical_t   ; entry number of the first
+    ASL A : ASL A : ASL A : ASL A : ORA phys   ; ... in the top nibble
+    STA ula_pal                 ; entries n, n+1, n+4, n+5
+    CLC : ADC #&10 : STA ula_pal
+    ADC #&30 : STA ula_pal
+    ADC #&10 : STA ula_pal
+    RTS
+}
+.set_logical_t EQUB 0
+
+\ Fill the whole screen with zero (logical colour 0).
+.cls
+{
+    ZA_AUTO2 p
+    LDA #LO(screen) : STA p
+    LDA #HI(screen) : STA p+1
+    LDY #0 : TYA
+.loop
+    STA (p),Y
+    INY : BNE loop
+    INC p+1 : BPL loop
+    RTS
+}
+
+\ Draw the 8 bytes at glyph into cell `cell` in the colours of Spectrum
+\ attribute A: set bits in its ink, clear ones in its paper.
+ZA_AUTO2 glyph              ; the tile's 8 bytes
+.draw_glyph
+{
+    ZA_AUTO2 scr
+    ZA_AUTO2 scr8
+    ZA_AUTO1 paper              ; a byte of four paper pixels
+    ZA_AUTO1 diff               ; ink pixels EOR paper pixels
+    PHA
+    LSR A : LSR A : LSR A : AND #7 : TAX
+    LDA cmap,X
+    ZA_INDEXEDBY 0..7
+    TAX : LDA colour_bytes,X : STA paper
+    PLA : AND #7 : TAX
+    LDA cmap,X
+    ZA_INDEXEDBY 0..7
+    TAX : LDA colour_bytes,X : EOR paper : STA diff
+    \ scr = screen + 16 * cell
+    LDA cell : ASL A : ASL A : ASL A : ASL A : STA scr
+    ORA #8 : STA scr8
+    LDA cell+1 : STA scr+1
+    LDA cell
+    LSR scr+1 : ROR A : LSR scr+1 : ROR A : LSR scr+1 : ROR A : LSR scr+1 : ROR A
+    CLC : ADC #HI(screen) : STA scr+1 : STA scr8+1
+    LDY #7
+.line
+    LDA (glyph),Y : TAX
+    LDA spread_hi,X             ; the left four pixels, in both nibbles
+    AND diff : EOR paper : STA (scr),Y
+    TXA : AND #15 : TAX
+    LDA spread_lo,X             ; the right four
+    AND diff : EOR paper : STA (scr8),Y
+    DEY : BPL line
+    RTS
+}
+
+\ A byte of four pixels in logical colour 0-3.
+.colour_bytes
+    EQUB cbyte(0), cbyte(1), cbyte(2), cbyte(3)
+
+\ A Spectrum nibble (its leftmost pixel in bit 3) spread into both halves
+\ of a MODE 1 byte, where a pixel's colour bits are 4 apart.
+.spread_lo
+FOR n = 0..15
+    EQUB n * &11
+NEXT
+\ The same for the top nibble of a whole byte.
+.spread_hi
+FOR n = 0..255
+    EQUB (n AND &F0) + (n DIV 16)
+NEXT

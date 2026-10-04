@@ -14,7 +14,11 @@ oscli   = &FFF7
 
 crtc_reg   = &FE00
 crtc_data  = &FE01
-ula_pal    = &FE21
+ula_pal    = &FE21          ; write (index << 4) | (physical EOR 7)
+sysvia_ifr = &FE4D
+sysvia_ier = &FE4E          ; write bit 7 clear to disable the bits set
+irq1v      = &0204
+mos_font   = &C000          ; OS 1.20's font, characters 32-127
 
 \ --- The screen -----------------------------------------------------------
 \ MODE 1's pixels (2 bits each, four to a byte), with the CRTC narrowed to
@@ -30,3 +34,11 @@ screen      = &8000 - SCREEN_ROWS * ROW_BYTES
 \ A byte with all four pixels in logical colour c: MODE 1 keeps a pixel's
 \ high bit in the top nibble and its low bit in the bottom one.
 FUNCTION cbyte(c) = (c AND 2) * &78 + (c AND 1) * &0F
+
+\ Long branches, for when a routine outgrows the 6502's reach.
+MACRO JNE target
+    BEQ @+ : JMP target : .@
+ENDMACRO
+MACRO JEQ target
+    BNE @+ : JMP target : .@
+ENDMACRO

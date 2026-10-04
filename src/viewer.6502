@@ -1,0 +1,31 @@
+\ ***************************************************************************
+\ The room viewer: a test harness, not the game. Z and X (or the cursor
+\ keys) step through the rooms; tools/roomcheck.mjs pokes `room` instead
+\ and waits for `shown` to match it.
+\ ***************************************************************************
+
+ZA_AUTO1 room               ; the room to show, 1-120
+ZA_AUTO1 shown              ; the room on screen
+
+.viewer
+{
+    LDA #1 : STA room
+.draw
+    LDA room : STA shown
+    JSR draw_room
+.wait
+    JSR wait_vsync
+    LDA room : CMP shown : BNE draw
+    LDX #K_X : JSR key_down : BNE next
+    LDX #K_RIGHT : JSR key_down : BNE next
+    LDX #K_Z : JSR key_down : BNE prev
+    LDX #K_LEFT : JSR key_down : BNE prev
+    JMP wait
+.next
+    INC room
+    LDA room : CMP #121 : BNE draw
+    LDA #1 : STA room : JMP draw
+.prev
+    DEC room : BNE draw
+    LDA #120 : STA room : JMP draw
+}

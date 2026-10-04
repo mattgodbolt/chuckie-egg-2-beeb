@@ -1,0 +1,478 @@
+\ ***************************************************************************
+\ The room drawer: a transcription of the original's at &7920, which reads
+\ a room's commands and both draws the room and fills the three maps.
+\
+\ The original keeps two pointers into its maps, and they don't always move
+\ together: the attribute pointer (&7F84, which the screen address follows)
+\ and the cell-type pointer (&7F86). Here they are `cell` and `tcell`, cell
+\ numbers 0-767. The handlers move them exactly as the original's do,
+\ quirks included, so the maps come out byte for byte the same (checked
+\ against the original's own output by tools/roomcheck.mjs).
+\ ***************************************************************************
+
+ZA_AUTO2 rp                 ; the room data pointer (&7F88)
+ZA_AUTO2 cell               ; the attribute/screen pointer (&7F84), a cell
+ZA_AUTO2 tcell              ; the cell-type pointer (&7F86), a cell
+ZA_AUTO1 attr               ; the current attribute (ATTR_P, &5C8D)
+ZA_AUTO1 ctype              ; the type ORed into the type map (E)
+ZA_AUTO1 textmode           ; set while drawing text (&A3FF)
+
+\ Draw room A (1-120).
+.draw_room
+{
+    ZA_AUTO1 bg
+    PHA
+    JSR set_room_palette
+    JSR cls
+    \ rp = roomdata + room_offsets[room]
+    PLA : ASL A : TAX
+    CLC : LDA room_offsets,X : ADC #LO(roomdata) : STA rp
+    LDA room_offsets+1,X : ADC #HI(roomdata) : STA rp+1
+    \ The background: its paper as both paper and ink.
+    JSR fetch : AND #&38 : STA bg
+    LSR A : LSR A : LSR A : ORA bg : STA attr
+    \ The maps: background attribute, tile &37, type 0.
+    LDX #0
+.fill
+    LDA attr
+    STA attr_map,X : STA attr_map+256,X : STA attr_map+512,X
+    LDA #&37
+    STA tile_map,X : STA tile_map+256,X : STA tile_map+512,X
+    LDA #0
+    STA type_map,X : STA type_map+256,X : STA type_map+512,X
+    INX : BNE fill
+    \ Fall into draw_next.
+}
+
+\ Read and run the next command. Every handler ends by jumping here.
+.draw_next
+{
+    LDA #0 : STA textmode
+    JSR fetch
+    CMP #&20 : BCC special
+    CMP #&2C : BCS run
+    JMP cmd_capped
+.run
+    CMP #&60 : BCS bad
+    JMP cmd_run
+.bad
+    BRK                         ; the original restarts the game here
+.special
+    CMP #0 : BNE not_end
+    RTS
+.not_end
+    CMP #1 : BNE not1 : JMP cmd_block
+.not1
+    CMP #2 : BNE not2 : JMP cmd_text
+.not2
+    CMP #7 : BNE not7 : JMP cmd_hopper
+.not7
+    CMP #8 : BNE not8 : JMP cmd_diag_up
+.not8
+    CMP #9 : BNE not9 : JMP cmd_diag_down
+.not9
+    CMP #10 : BNE not10 : JMP cmd_single
+.not10
+    JMP cmd_bend                ; 3-6
+}
+
+\ The next byte of room data.
+.fetch
+{
+    LDY #0 : LDA (rp),Y
+    INC rp : BNE done
+    INC rp+1
+.done
+    RTS
+}
+
+\ Read attribute, row and column, and put both pointers on that cell.
+.fetch_place
+{
+    ZA_AUTO1 row
+    JSR fetch : STA attr
+    JSR fetch : STA row
+    JSR fetch : PHA
+    \ cell = row * 32 + column
+    LDA row : LSR A : LSR A : LSR A : STA cell+1
+    LDA row : ASL A : ASL A : ASL A : ASL A : ASL A
+    STA cell
+    PLA : ORA cell : STA cell
+    \ Fall into sync_type.
+}
+\ The type pointer to the attribute pointer (&7DEF).
+.sync_type
+    LDA cell : STA tcell
+    LDA cell+1 : STA tcell+1
+    RTS
+
+\ Put tile A in the current cell in the current attribute, record it in the
+\ attribute and tile maps, and step right (&7E71).
+.put
+{
+    ZA_AUTO2 mp
+    ZA_AUTO1 tcode
+    STA tcode
+    LDA cell : STA mp
+    CLC : LDA cell+1 : ADC #HI(attr_map) : STA mp+1
+    LDY #0
+    LDA attr : STA (mp),Y
+    LDA mp+1 : ADC #HI(tile_map) - HI(attr_map) : STA mp+1
+    LDA tcode
+    LDX textmode : BEQ tile
+    \ Text: in the tile map with bit 7 set, drawn from the MOS font (decision 4).
+    ORA #&80 : STA (mp),Y
+    LDA tcode : SEC : SBC #32
+    LDX #LO(mos_font) : LDY #HI(mos_font)
+    JMP glyph_addr
+.tile
+    STA (mp),Y
+    SEC : SBC #&20
+    LDX #LO(tiles) : LDY #HI(tiles)
+.glyph_addr
+    \ glyph = font + 8 * A
+    STA glyph : LDA #0 : STA glyph+1
+    ASL glyph : ROL glyph+1 : ASL glyph : ROL glyph+1 : ASL glyph : ROL glyph+1
+    TXA : CLC : ADC glyph : STA glyph
+    TYA : ADC glyph+1 : STA glyph+1
+    LDA attr : JSR draw_glyph
+    INC cell : BNE done
+    INC cell+1
+.done
+    RTS
+}
+
+\ OR the current type into the type map at tcell.
+.type_or
+{
+    ZA_AUTO2 tp
+    LDA tcell : STA tp
+    CLC : LDA tcell+1 : ADC #HI(type_map) : STA tp+1
+    LDY #0
+    LDA (tp),Y : ORA ctype : STA (tp),Y
+    RTS
+}
+
+\ ... and step the type pointer right (&7DFA), left (&7E05), down (&7E10)
+\ or up (&7E22).
+.type_right
+    JSR type_or
+    INC tcell : BNE type_rts
+    INC tcell+1
+.type_rts
+    RTS
+.type_left
+    JSR type_or
+    LDA tcell : BNE type_left_nb
+    DEC tcell+1
+.type_left_nb
+    DEC tcell
+    RTS
+.type_down
+    JSR type_or
+    CLC : LDA tcell : ADC #32 : STA tcell
+    BCC type_rts
+    INC tcell+1
+    RTS
+.type_up
+    JSR type_or
+    SEC : LDA tcell : SBC #32 : STA tcell
+    BCS type_rts
+    DEC tcell+1
+    RTS
+
+\ The attribute pointer down a row, from just right of the cell last put
+\ (&7D97: +31), or up a row and right one (&7DB1: -33).
+.next_row
+    CLC : LDA cell : ADC #31 : STA cell
+    BCC next_row_rts
+    INC cell+1
+.next_row_rts
+    RTS
+.up_row
+    SEC : LDA cell : SBC #33 : STA cell
+    BCS next_row_rts
+    DEC cell+1
+    RTS
+
+\ The attribute pointer back A cells (the bends' DF_CC adjustment).
+.back_cells
+{
+    STA back_cells_n
+    SEC : LDA cell : SBC back_cells_n : STA cell
+    BCS done
+    DEC cell+1
+.done
+    RTS
+}
+.back_cells_n EQUB 0
+
+\ ---------------------------------------------------------------------------
+\ The command handlers. Each is entered with the command byte in A and the
+\ data pointer just past it, and ends by jumping to draw_next.
+\ ---------------------------------------------------------------------------
+
+\ &2C-&5F, 6 bytes: cmd attr row col len type. A run of one tile, across,
+\ or down if len has bit 7 set. The command byte is the tile: the original
+\ pushes the command and the last two bytes and pops them crosswise
+\ (&79E5).
+.cmd_run
+{
+    ZA_AUTO1 len
+    ZA_AUTO1 tile
+    STA tile
+    JSR fetch_place
+    JSR fetch : STA len
+    JSR fetch : STA ctype
+    LDA len : BMI down
+.across
+    LDA tile : JSR put
+    JSR type_right
+    DEC len : BNE across
+    JMP draw_next
+.down
+    AND #&7F : STA len
+.down_loop
+    LDA tile : JSR put
+    JSR type_down
+    JSR next_row
+    DEC len : BNE down_loop
+    JMP draw_next
+}
+
+\ &20-&2B, 7 bytes: cmd attr row col len ends type. A capped run (pipes):
+\ the end tiles are &20 + each nibble of `ends`, and between them the
+\ command byte's own tile, with a joint (&22 across, &23 down) every fourth
+\ (&7A27).
+.cmd_capped
+{
+    ZA_AUTO1 dtile
+    ZA_AUTO1 len
+    ZA_AUTO1 ends
+    ZA_AUTO1 joint
+    ZA_AUTO1 four
+    STA dtile
+    JSR fetch_place
+    JSR fetch : STA len
+    JSR fetch : STA ends
+    JSR fetch : STA ctype
+    LDX #&22
+    LDA len : BPL across
+    LDX #&23
+.across
+    STX joint
+    AND #&7F : SEC : SBC #2 : STA len
+    LDA #1 : STA four
+    LDA ends : LSR A : LSR A : LSR A : LSR A : ORA #&20
+.loop
+    JSR put : JSR step
+    DEC len : BEQ last
+    LDA dtile
+    DEC four : BNE loop
+    LDA #4 : STA four
+    LDA joint
+    JMP loop
+.last
+    LDA joint : JSR put : JSR step
+    LDA ends : AND #15 : ORA #&20
+    JSR put : JSR step
+    JMP draw_next
+\ Across: the type pointer right. Down: type pointer and cell down a row.
+.step
+    LDA joint : CMP #&23 : BEQ step_down
+    JMP type_right
+.step_down
+    JSR type_down
+    JMP next_row
+}
+
+\ &01, 7 bytes: 01 attr row col h w type. A w x h block of tile &37 (&7AC7).
+.cmd_block
+{
+    ZA_AUTO1 h
+    ZA_AUTO1 w
+    ZA_AUTO1 n
+    ZA_AUTO2 start
+    JSR fetch_place
+    JSR fetch : STA h
+    JSR fetch : STA w
+    JSR fetch : STA ctype
+.row
+    LDA cell : STA start
+    LDA cell+1 : STA start+1
+    LDA w : STA n
+.across
+    LDA #&37 : JSR put
+    JSR type_right
+    DEC n : BNE across
+    \ The next row: start + 1 + 31.
+    CLC : LDA start : ADC #1 : STA cell
+    LDA start+1 : ADC #0 : STA cell+1
+    JSR next_row
+    JSR sync_type
+    DEC h : BNE row
+    JMP draw_next
+}
+
+\ &02: 02 attr row col text... &80. Text, from the text font, its tile codes
+\ with bit 7 set; no cell types (&7B0A).
+.cmd_text
+{
+    LDA #1 : STA textmode
+    JSR fetch_place
+.loop
+    JSR fetch
+    CMP #&80 : BEQ done
+    JSR put
+    JMP loop
+.done
+    JMP draw_next
+}
+
+\ &03-&06, 5 bytes: cmd attr row col type. Pipe bends, each a fixed shape
+\ of five tiles (&7B35, &7BA3, &7BEB, &7C33).
+.cmd_bend
+{
+    ZA_AUTO1 which
+    STA which
+    JSR fetch_place
+    JSR fetch : STA ctype
+    LDA which
+    CMP #3 : JEQ bend3
+    CMP #4 : JEQ bend4
+    CMP #5 : JEQ bend5
+    \ &06: down two, then a corner with two tiles to its left.
+    JSR down_two
+    LDA #&25 : JSR put : JSR type_left
+    LDA #3 : JSR back_cells
+    LDA #&21 : JSR put : JSR type_left
+    LDA #&22 : JSR put : JSR type_left
+    JMP draw_next
+.bend3
+    \ Two tiles leftwards from a corner, then down two from it.
+    LDA #&21 : JSR put : JSR type_left
+    LDA #2 : JSR back_cells
+    LDA #&22 : JSR put : JSR type_left
+    LDA #2 : JSR back_cells
+    LDA #&26 : JSR put : JSR type_down : JSR next_row
+    LDA #&23 : JSR put : JSR type_down : JSR next_row
+    LDA #&20 : JSR put : JSR type_down
+    JMP draw_next
+.bend4
+    \ Two tiles rightwards to a corner, then down two from it.
+    LDA #&21 : JSR put : JSR type_right
+    LDA #&22 : JSR put : JSR type_right
+    LDA #&27 : JSR put : JSR type_down : JSR next_row
+    LDA #&23 : JSR put : JSR type_down : JSR next_row
+    LDA #&20 : JSR put : JSR type_down
+    JMP draw_next
+.bend5
+    \ Down two to a corner, then two tiles rightwards.
+    JSR down_two
+    LDA #&24 : JSR put : JSR type_right
+    LDA #&22 : JSR put : JSR type_right
+    LDA #&21 : JSR put : JSR type_right
+    JMP draw_next
+.down_two
+    LDA #&20 : JSR put : JSR type_down : JSR next_row
+    LDA #&23 : JSR put : JSR type_down : JMP next_row
+}
+
+\ &07, 6 bytes: 07 attr row col rows width. A hopper: each row an edge
+\ tile, an inside in the attribute's paper and ink swapped, and an edge
+\ tile, two narrower and one further right than the row above (&7C8F).
+\ The left edge's cell type is the low byte of the original's attribute
+\ address for the row: an accident of the code, kept because the type map
+\ has to match.
+.cmd_hopper
+{
+    ZA_AUTO1 rows
+    ZA_AUTO1 width
+    ZA_AUTO1 n
+    ZA_AUTO1 saved
+    ZA_AUTO2 start
+    JSR fetch_place
+    JSR fetch : STA rows
+    JSR fetch : STA width
+.row
+    LDA cell : STA start : STA ctype
+    LDA cell+1 : STA start+1
+    DEC width
+    LDA #&38 : JSR put : JSR type_right
+    LDA width : SEC : SBC #1 : STA n
+    BEQ edge
+    LDA attr : STA saved
+    AND #7 : ASL A : ASL A : ASL A : STA attr
+    LDA saved : AND #&38 : LSR A : LSR A : LSR A : ORA attr : STA attr
+    LDA #&80 : STA ctype
+.inside
+    LDA #&37 : JSR put : JSR type_right
+    DEC n : BNE inside
+    LDA saved : STA attr
+.edge
+    LDA #&39 : JSR put
+    DEC width
+    \ The next row starts at start + 2 + 31.
+    CLC : LDA start : ADC #2 : STA cell
+    LDA start+1 : ADC #0 : STA cell+1
+    JSR next_row
+    JSR sync_type
+    DEC rows : BNE row
+    JMP draw_next
+}
+
+\ &08, 6 bytes: 08 attr row col len type. A diagonal up to the right, in
+\ steps of a slope tile and the tile beside it (&7CFB).
+.cmd_diag_up
+{
+    ZA_AUTO1 n
+    JSR fetch_place
+    JSR fetch : STA n
+    JSR fetch : STA ctype
+    DEC n
+.loop
+    LDA #&55 : JSR put : JSR type_right
+    LDA #&39 : JSR put : JSR type_up
+    JSR up_row
+    DEC n : BNE loop
+    LDA #&55 : JSR put : JSR type_right
+    JMP draw_next
+}
+
+\ &09, 6 bytes: 09 attr row col len type. A diagonal down to the right, in
+\ steps of a slope tile and the tile below it (&7D37).
+.cmd_diag_down
+{
+    ZA_AUTO1 n
+    JSR fetch_place
+    JSR fetch : STA n
+    JSR fetch : STA ctype
+    DEC n
+.loop
+    LDA #&54 : JSR put : JSR type_down
+    JSR next_row
+    LDA #&38 : JSR put : JSR type_right
+    DEC n : BNE loop
+    LDA #&54 : JSR put : JSR type_right
+    JMP draw_next
+}
+
+\ &0A, 6 bytes: 0A attr tile row col type. One tile (&7D73).
+.cmd_single
+{
+    ZA_AUTO1 tile
+    ZA_AUTO1 row
+    JSR fetch : STA attr
+    JSR fetch : STA tile
+    \ (fetch_place would read the attribute first: this one comes first
+    \ here too, but the tile sits between it and the row.)
+    JSR fetch : STA row
+    JSR fetch : PHA
+    LDA row : LSR A : LSR A : LSR A : STA cell+1
+    LDA row : ASL A : ASL A : ASL A : ASL A : ASL A : STA cell
+    PLA : ORA cell : STA cell
+    JSR sync_type
+    JSR fetch : STA ctype
+    LDA tile : JSR put : JSR type_right
+    JMP draw_next
+}

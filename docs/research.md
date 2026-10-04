@@ -87,7 +87,7 @@ The room drawer at `&7920`:
 3. Then commands until `&00`. Every tile placed writes the current
    attribute to the screen and to the attribute map, its code to the tile
    map, its 8 bytes from the tile font to the screen, and ORs the command's
-   *type* byte into the type map.
+   command's *type* byte into the type map.
 
 | Command | Bytes | Meaning |
 |---|---|---|
@@ -100,7 +100,7 @@ The room drawer at `&7920`:
 | `&09` | 6 | `09 attr row col len type`: a diagonal going down to the right (tiles `&54`, `&38`) |
 | `&0A` | 6 | `0A attr tile row col type`: one tile |
 | `&20-&2B` | 7 | `cmd attr row col len ends type`: a capped run (pipes): end tiles `&20 + (ends >> 4)` and `&20 + (ends & 15)`, middle `&22` across or `&23` down; `len` bit 7 = vertical |
-| `&2C-&5F` | 6 | `cmd attr row col len tile`: a run of one tile; `len` bit 7 = vertical. The command byte itself is the cell type |
+| `&2C-&5F` | 6 | `cmd attr row col len type`: a run of one tile; `len` bit 7 = vertical. The command byte itself is the tile (the handler pushes the command, then the last two bytes, and pops them crosswise) |
 | `&60`+ | | not a command: the drawer restarts the game |
 
 Commands used across all 120 rooms: 1,587 runs, 232 capped runs, 193

@@ -43,7 +43,7 @@ def draw_room(snap, room, exec_map=None):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--snap", default="shots/zx_start.z80")
+    ap.add_argument("--snap", default="build/zx_start.z80")
     ap.add_argument("--out", default="build/rooms")
     ap.add_argument("--map", help="add the addresses executed to FILE (trace.py's format)")
     ap.add_argument("rooms", nargs="*", type=int)

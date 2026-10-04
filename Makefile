@@ -2,30 +2,43 @@
 #
 #   make          assemble build/ce2.ssd
 #   make run      boot it in jsbeeb and grab a screenshot
+#   make rooms    check every room the BBC draws against the original's
 #   make fetch    download the Spectrum original into original/
 #   make zx       load the original's tape into build/ce2.z80 (SkoolKit)
-#   make venv     the Python tools' environment (.venv: SkoolKit, Pillow)
+#   make venv     the Python tools' environment (.venv with SkoolKit, Pillow)
 
 BARON   ?= $(firstword $(wildcard ../baron/build/src/baron) baron)
 PYTHON  ?= .venv/bin/python
 TARGET   = build/ce2.ssd
 SYMBOLS  = build/symbols.json
-SOURCES  = $(wildcard src/*.6502)
+SOURCES  = $(wildcard src/*.6502 src/data/*)
 
-.PHONY: all run fetch zx venv clean
+.PHONY: all run rooms fetch zx venv clean
 
 all: $(TARGET)
 
 # The symbol dump is how the test tools find the game's variables.
 $(TARGET): $(SOURCES) | build
 	$(BARON) -o $(TARGET) --title CHUCKIE2 --opt 3 --warn 2 --symbols $(SYMBOLS) -v -log0 build/listing.txt src/main.6502
-	@grep -E '^code' build/listing.txt || true
+	@grep -E '^code &' build/listing.txt || true
 
 build:
 	mkdir -p build
 
 run: $(TARGET)
 	node tools/play.mjs '3,!run' shots/ --disc $(TARGET)
+
+rooms: $(TARGET) build/rooms/room_120.bin
+	node tools/roomcheck.mjs
+	python3 tools/roomcmp.py
+
+# The oracle: every room drawn by the original's own code, from a snapshot
+# of a game just started.
+build/rooms/room_120.bin: build/zx_start.z80
+	$(PYTHON) tools/zxrooms.py --snap build/zx_start.z80
+
+build/zx_start.z80: build/ce2.z80
+	$(PYTHON) tools/zx.py '3,SPACE:tap,1,SPACE:tap,1,SPACE:tap,1,P:tap,3,>start' build/zx_ --snap build/ce2.z80
 
 fetch:
 	tools/fetch_original.sh

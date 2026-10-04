@@ -736,3 +736,14 @@ gathers any number of one ingredient (and makes jumps lower).
   slower (the first wait for the main loop is now 30s), and its key repeat
   starts at 30cs against OS 1.20's 32cs, so frontcheck's 0.3s presses
   skipped an instructions page; it now waits half a second and holds 0.2s.
+
+### Where it stands, and the next push
+
+- Matt, on the state of things: jsbeeb is accurate enough that real
+  hardware isn't a worry; no joystick (decision 17); the key choice waits
+  until he's played it; he'll try his Master but it isn't blocking.
+- Next: six agents in parallel, each in its own worktree, each to bring
+  back a measured report and a patch against 7f9de9b: four hunting memory
+  (data representations; code size in two halves; memory layout), one on
+  speed (no pass over 3 frames anywhere), and one exploring the yellow tax
+  with screenshots of rooms where white for Harry might be better.

@@ -4,7 +4,8 @@ Calls made while working autonomously that Matt may want to change, and
 things parked for discussion. The reasoning for each is in
 `docs/decisions.md`.
 
-1. **BBC-appropriate keys** (decision 7). The Spectrum's keys are in for
+1. **BBC-appropriate keys** (decision 7). Matt: postponed until he has
+   played it a bit; the keys are redefinable from the menu meanwhile. The Spectrum's keys are in for
    now (Q/A/O/P, SPACE for SYMBOL SHIFT's jump, 1 take/drop, 0 abort, S
    save), at Matt's request. To discuss: BBC-style defaults (Z/X and :/?,
    RETURN or SPACE to jump?), and whether the original's redefine-keys
@@ -13,7 +14,9 @@ things parked for discussion. The reasoning for each is in
    more is needed against 4.5K free. The game wants a B with 16K of
    sideways RAM, a B+128 or a Master. jsbeeb's default B has RAM in banks
    0-7, so the browser link still works.
-3. **Yellow in every room** (decision 6), so Harry is always yellow; it
+3. **Yellow in every room** (decision 6). Matt: "we may wish to accept
+   white in some rooms if that would be better"; being explored, with
+   screenshots, before any change., so Harry is always yellow; it
    costs some scenery colour (room 5's white pipes are yellow).
 4. **Colour substitutions** (decision 2): rooms with more than four colours
    lose some. The worst: room 5 83%, room 48 88%, rooms 70, 51 and 24 about

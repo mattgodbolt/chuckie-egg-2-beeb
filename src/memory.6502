@@ -33,6 +33,9 @@ SECTION ZeroPage, org = ZP_FIXED, guard = &90
 .d_cell     SKIP 2
 .d_yf       SKIP 1
 .d_frame    SKIP 2
+\ The room's colour map (screen.6502): long-lived, so out of the
+\ allocator's pool with the rest.
+.cmap       SKIP 8
 ENDSECTION
 
 \ The game's other state, in the DFS's NMI page (free once the disc is done).
@@ -71,6 +74,35 @@ NM = 5
 \ The draw list (&A41C): monsters that moved this tick, in order.
 .dl_count   SKIP 1
 .draw_list  SKIP NM
+\ The objects (docs/research/objects.md).
+.egg        SKIP 1          ; the egg being made, 1 up (&A3F9)
+.factory    SKIP 1          ; power, toy made, girder, toy placed, egg made, 3 vats (&A48C)
+.carried_h  SKIP 1          ; the carried thing's height (&A561)
+.take_latch SKIP 1          ; one take or drop per press (&A562)
+.delivered  SKIP 4          ; toy parts, milk, cocoa, sugar delivered (&A563)
+.in_basket  SKIP 4          ; ... in their baskets (&A567)
+.cell_hit   SKIP 1          ; the last non-zero cell a footprint met (&9B24)
+\ The current thing (&A402): the round robin's pick, drawn every frame.
+.o_index    SKIP 1          ; the round robin's pointer ((&A400) low byte)
+.o_thing    SKIP 1          ; the thing loaded into the record
+.o_sel      SKIP 1          ; non-zero: one is selected (&A405)
+.o_cell     SKIP 2
+.o_frame    SKIP 2          ; its graphic's header
+.o_ink      SKIP 1
+.o_kind     SKIP 1          ; (&A414)
+.o_gfx      SKIP 1          ; (&A40F)
+\ A dropped thing falling into a hopper (&A546).
+.f_thing    SKIP 1          ; which; bit 7 set: none (&A54E)
+.f_cell     SKIP 2
+.f_yf       SKIP 1
+.f_frame    SKIP 2
+.f_ink      SKIP 1
+.f_ocell    SKIP 2          ; where it was drawn
+.f_oyf      SKIP 1
+.train_room SKIP 1          ; the train: its room (&A48D)
+.train_pos  SKIP 1          ; ... and position (&A48E)
+\ Things drawn in this room since it was entered (for collide.6502).
+.on_screen  SKIP 32         ; a bit per thing
 ENDSECTION
 
 \ The three 32 x 24 maps the room drawer fills, one byte a cell, indexed by

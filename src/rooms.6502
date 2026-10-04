@@ -21,6 +21,8 @@ ZA_AUTO1 textmode           ; set while drawing text (&A3FF)
 .draw_room
 {
     ZA_AUTO1 bg
+    \ The round robin starts again from thing 0 (&7920: LD (&A400),&6600).
+    LDX #0 : STX o_index
     PHA
     JSR set_room_palette
     JSR cls
@@ -292,22 +294,22 @@ ZA_AUTO1 textmode           ; set while drawing text (&A3FF)
     ZA_AUTO1 h
     ZA_AUTO1 w
     ZA_AUTO1 n
-    ZA_AUTO2 start
+    ZA_AUTO2 row_start
     JSR fetch_place
     JSR fetch : STA h
     JSR fetch : STA w
     JSR fetch : STA ctype
 .row
-    LDA cell : STA start
-    LDA cell+1 : STA start+1
+    LDA cell : STA row_start
+    LDA cell+1 : STA row_start+1
     LDA w : STA n
 .across
     LDA #&37 : JSR put
     JSR type_right
     DEC n : BNE across
-    \ The next row: start + 1 + 31.
-    CLC : LDA start : ADC #1 : STA cell
-    LDA start+1 : ADC #0 : STA cell+1
+    \ The next row: row_start + 1 + 31.
+    CLC : LDA row_start : ADC #1 : STA cell
+    LDA row_start+1 : ADC #0 : STA cell+1
     JSR next_row
     JSR sync_type
     DEC h : BNE row
@@ -390,13 +392,13 @@ ZA_AUTO1 textmode           ; set while drawing text (&A3FF)
     ZA_AUTO1 width
     ZA_AUTO1 n
     ZA_AUTO1 saved
-    ZA_AUTO2 start
+    ZA_AUTO2 row_start
     JSR fetch_place
     JSR fetch : STA rows
     JSR fetch : STA width
 .row
-    LDA cell : STA start : STA ctype
-    LDA cell+1 : STA start+1
+    LDA cell : STA row_start : STA ctype
+    LDA cell+1 : STA row_start+1
     DEC width
     LDA #&38 : JSR put : JSR type_right
     LDA width : SEC : SBC #1 : STA n
@@ -412,9 +414,9 @@ ZA_AUTO1 textmode           ; set while drawing text (&A3FF)
 .edge
     LDA #&39 : JSR put
     DEC width
-    \ The next row starts at start + 2 + 31.
-    CLC : LDA start : ADC #2 : STA cell
-    LDA start+1 : ADC #0 : STA cell+1
+    \ The next row starts at row_start + 2 + 31.
+    CLC : LDA row_start : ADC #2 : STA cell
+    LDA row_start+1 : ADC #0 : STA cell+1
     JSR next_row
     JSR sync_type
     DEC rows : BNE row

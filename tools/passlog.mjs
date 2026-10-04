@@ -55,9 +55,13 @@ try {
         for (let i = 0; i < count; i++)
             monsters.push([clo[i] | (chi[i] << 8), yf[i], sub[i], dx[i], dy[i], tick[i], speed[i]]);
         const rng = (await b.read("rng_state", 4)).map((x) => x.toString(16).padStart(2, "0")).join("");
+        const score = (await b.read("score", 10)).join("");
         log.push({
             pass: n, room: await b.peek("room"), cell: v[0] | (v[1] << 8), yf: v[2], xf: v[3],
             state: v[8], face: v[6], cnt: v[9], fall: v[10], rng, monsters,
+            score, lives: await b.peek("lives"), carried: await b.peek("carried"),
+            factory: await b.peek("factory"), rr: await b.peek("o_index"),
+            sel: (await b.peek("o_sel")) ? 1 : 0, falling: await b.peek("f_thing"),
         });
     }
 } finally {

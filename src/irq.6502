@@ -56,9 +56,9 @@ FUNCTION ula_entry(l, n, phys) = ((l AND 2) * 4 + (n AND 2) * 2 + (l AND 1) * 2 
     LDA #LO(SPLIT_T1) : STA usrvia_t1cl
     LDA #HI(SPLIT_T1) : STA usrvia_t1ch     ; starts the count
     LDX #9
-.room
+.room_entries
     LDA room_ula,X : STA ula_pal
-    DEX : BPL room
+    DEX : BPL room_entries
     LDX #5
 .status
     LDA status_ula,X : STA ula_pal

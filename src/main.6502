@@ -97,6 +97,7 @@ ENDIF
     INCLUDE "harry.6502"
     INCLUDE "monsters.6502"
     INCLUDE "collide.6502"
+    INCLUDE "objects.6502"
     INCLUDE "game.6502"
 IF DEFINED(VIEWER)
     INCLUDE "viewer.6502"
@@ -109,6 +110,17 @@ ENDIF
     INCLUDE "data/gfx.6502"
 .monster_table
     INCBIN "data/monsters.bin"
+    INCLUDE "data/objects.6502"
+.things
+    INCBIN "data/things.bin"
+.thing_types
+    INCBIN "data/thingtypes.bin"
+.thing_init
+    INCBIN "data/thinginit.bin"
+.visits
+    INCBIN "data/visits.bin"
+.objgfx
+    INCBIN "data/objgfx.bin"
 .tiles
     INCBIN "data/tiles.bin"
 .room_buffer
@@ -124,11 +136,11 @@ ENDIF
     LDX #LO(tape) : LDY #HI(tape) : JSR oscli
     LDX #HI(code_end - start + &FF)
     LDY #0
-.copy
+.copy_down
     LDA payload,Y : STA start,Y
-    INY : BNE copy
-    INC copy+2 : INC copy+5
-    DEX : BNE copy
+    INY : BNE copy_down
+    INC copy_down+2 : INC copy_down+5
+    DEX : BNE copy_down
     JMP start
 .tape
     EQUS "TAPE", 13

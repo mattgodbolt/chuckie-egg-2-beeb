@@ -6,37 +6,51 @@
 \ Once, when the game is loaded.
 .init_game
 {
-    LDA #0 : STA dbg_room
+    LDA #0 : STA dbg_room : STA o_index
     LDX #3
-.rng
+.seed
     LDA rng_seed,X : STA rng_state,X
-    DEX : BPL rng
+    DEX : BPL seed
     \ Fall into new_game.
 }
 
-\ Start a game (&7743, &7763): room 1, Harry jumping out of the truck.
+\ Start a game (&7743).
 .new_game
 {
+    LDA #0 : STA egg
     LDA #5 : STA lives
-    LDA #&FF : STA carried
     LDX #9
     LDA #0
 .zero
     STA score,X
     DEX : BPL zero
+    STA carrying_name
+    \ Fall into next_egg.
+}
+
+\ The next egg (&7763): room 1, Harry jumping out of the truck, the
+\ factory reset.
+.next_egg
+{
+    LDX #&FF : TXS
     LDA #1 : STA room
+    INC egg
+    LDA room : JSR draw_room
+    LDA #0 : STA drawn
     \ Harry's template (&89E5): row 18, column 6, jumping right, count 0.
     LDA #LO(18 * 32 + 6) : STA h_cell
     LDA #HI(18 * 32 + 6) : STA h_cell+1
     LDA #0 : STA h_yf : STA h_xf : STA h_face : STA h_cnt : STA h_fall
-    STA ctrl : STA room_delta
+    STA ctrl : STA room_delta : STA h_dx : STA h_dy : STA o_sel : STA dl_count
     LDA #1 : STA h_mom
     LDA #7 : STA h_state
     LDA harry_frames : STA h_frame
     LDA harry_frames+1 : STA h_frame+1
     JSR save_checkpoint
-    JSR enter_room
-    \ Fall into game_loop.
+    JSR egg_init
+    JSR setup_monsters
+    JSR room_things
+    JMP game_loop
 }
 
 \ The main loop (&77B9): three frames a pass, always.
@@ -50,17 +64,26 @@
 .same_room
     JSR wait_vsync
     JSR draw_harry
-    \ Part 1: monster tick A.
+    JSR draw_object
+    \ Part 1: the next thing, monster tick A.
+    JSR next_object
     JSR monsters_tick
     JSR wait_vsync
     JSR draw_monsters
-    \ Part 2: collisions, monster tick B.
+    JSR draw_object
+    \ Part 2: contact, drop, falling; monster tick B; the next thing.
     JSR collide
+    JSR drop
+    JSR falling
     JSR monsters_tick
+    JSR next_object
     JSR wait_vsync
     JSR draw_monsters
-    \ Part 3: collisions.
+    JSR draw_object
+    \ Part 3: contact, drop, falling.
     JSR collide
+    JSR drop
+    JSR falling
     LDA dbg_room : BEQ next_pass
     JSR teleport
 .next_pass
@@ -93,7 +116,8 @@
 .enter_room
     LDA room : JSR draw_room
     LDA #0 : STA drawn
-    JMP setup_monsters
+    JSR setup_monsters
+    JMP room_things
 
 \ Leaving a room (&77CF-&7856).
 .change_room
@@ -118,14 +142,14 @@
     LDA #1 : STA h_mom
 .not_lift
     \ Unless he went up, a floor under the feet sets walking or pipe.
-    LDA room_delta : CMP #&F6 : BEQ checkpoint
+    LDA room_delta : CMP #&F6 : BEQ take_checkpoint
     JSR harry_ptrs
     LDA h_xf : LSR A : CLC : ADC #&40 : TAY
-    LDA (hptr),Y : AND #&12 : BNE checkpoint
+    LDA (hptr),Y : AND #&12 : BNE take_checkpoint
     LDA (hptr),Y : JSR set_standing
-.checkpoint
+.take_checkpoint
     LDA #0 : STA room_delta
-    \ The checkpoint only if he came in walking or on a ladder.
+    \ The take_checkpoint only if he came in walking or on a ladder.
     LDA h_state : CMP #1 : BEQ save
     CMP #3 : BNE done
 .save
@@ -157,11 +181,82 @@ CHECKPOINT_VARS = h_frame + 2 - h_cell    ; h_cell .. h_frame
     DEX : BPL copy
     LDA checkpoint + CHECKPOINT_VARS : STA room
     LDA #0 : STA h_cnt : STA h_fall : STA ctrl : STA room_delta
+    \ What he carried goes back where it came from (the toy and the egg
+    \ he keeps).
+    LDX carried : CPX #&27 : BCS kept
+    LDA t_room,X : AND #&7F : STA t_room,X
+    LDA #0 : JSR set_carrying
+    LDA #&FF : STA carried
+.kept
+    \ The girder back to its start.
+    LDA #13 : STA t_row+&25
+    LDA #10 : STA t_col+&25
+    LDA factory : AND #&FB : STA factory
     DEC lives : BNE alive
     JMP new_game                    ; (game over: the menu, later)
 .alive
     JSR enter_room
     JMP game_loop
+}
+
+\ The egg delivered (&946E): 30,000 x egg, a life, the EGGS DELIVERED
+\ screen until a key, then the next egg. (The truck driving off: later.)
+.egg_delivered
+{
+    LDA d_cell : STA sp_cell
+    LDA d_cell+1 : STA sp_cell+1
+    LDA d_yf : STA sp_yf
+    LDA d_frame : STA sp_frame
+    LDA d_frame+1 : STA sp_frame+1
+    JSR erase_image
+    LDA egg : STA ed_n
+.score_loop
+    LDA #3 : LDX #5 : JSR add_score
+    DEC ed_n : BNE score_loop
+    JSR extra_life
+    \ Black, and the message in yellow (attribute 6) at row 11.
+    JSR cls
+    LDX #0 : LDA #0 : JSR set_logical       ; black
+    LDX #3 : LDA #3 : JSR set_logical       ; yellow
+    LDA #LO(11 * 32 + 7) : STA cell : LDA #HI(11 * 32 + 7) : STA cell+1
+    LDX #0
+.text
+    LDA delivered_text,X : BEQ number
+    STX ed_n
+    JSR yellow_char
+    LDX ed_n : INX : JMP text
+.number
+    \ The egg number, at column 24 (two digits if it needs them).
+    LDA #LO(11 * 32 + 24) : STA cell
+    LDA egg : LDX #0
+.tens
+    CMP #10 : BCC units
+    SBC #10 : INX : JMP tens
+.units
+    PHA
+    TXA : BEQ one_digit
+    CLC : ADC #48 : JSR yellow_char
+.one_digit
+    PLA : CLC : ADC #48 : JSR yellow_char
+.wait
+    JSR wait_vsync
+    LDA #122 : JSR osbyte : CPX #&FF : BEQ wait     ; until any key
+    JMP next_egg
+}
+.ed_n EQUB 0
+.delivered_text EQUS "EGGS DELIVERED:-", 0
+\ Character A, yellow on black, at `cell`; step right.
+.yellow_char
+{
+    SEC : SBC #32 : STA glyph : LDA #0 : STA glyph+1
+    ASL glyph : ROL glyph+1 : ASL glyph : ROL glyph+1 : ASL glyph : ROL glyph+1
+    CLC : LDA glyph : ADC #LO(text_font) : STA glyph
+    LDA glyph+1 : ADC #HI(text_font) : STA glyph+1
+    LDA #cbyte(0) : STA paper
+    LDA #cbyte(3) : STA diff
+    JSR draw_glyph_pd
+    INC cell
+    RTS
 }
 
 \ Erase Harry where he was drawn, draw him where he is, in yellow

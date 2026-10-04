@@ -10,7 +10,8 @@ they match. --all lists every differing pass.
 import json
 import sys
 
-FIELDS = ["room", "cell", "yf", "xf", "state", "face", "cnt", "fall", "rng", "monsters"]
+FIELDS = ["room", "cell", "yf", "xf", "state", "face", "cnt", "fall", "rng", "monsters",
+          "score", "lives", "carried", "factory", "rr", "sel", "falling"]
 
 
 def load(path):
@@ -23,7 +24,9 @@ def show(e):
                     for c, yf, sub, dx, dy, t, sp in e.get("monsters", []))
     return (f"room {e['room']:3d} row {row:2d} col {col:2d} yf {e['yf']} xf {e['xf']:3d} "
             f"state {e['state']} face {e['face']} cnt {e['cnt']:2d} fall {e['fall']:2d} "
-            f"rng {e.get('rng', '')} {mons}")
+            f"rng {e.get('rng', '')} {mons} score {e.get('score')} lives {e.get('lives')} "
+            f"carry {e.get('carried')} fac {e.get('factory')} rr {e.get('rr')} sel {e.get('sel')} "
+            f"fall {e.get('falling')}")
 
 
 def main():

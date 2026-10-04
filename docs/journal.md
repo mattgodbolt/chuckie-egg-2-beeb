@@ -445,3 +445,43 @@ gathers any number of one ingredient (and makes jumps lower).
   from the RNG), lands on a slippery pipe and walks to a wall: 110 passes,
   identical. Rooms with objects will differ until objects are in: they
   mark their cells in the type map, and monsters treat those as walls.
+
+### Objects, and three bugs that taught something
+
+- `src/objects.6502` transcribes the objects (`docs/research/objects.md`):
+  the 256-thing table, footprints in the type map, the round robin and the
+  current thing drawn every frame, bonuses (with the RNG's tens and units),
+  take, the basket, drop, the hopper fall, the vats, toy maker, egg maker,
+  power lever, LIFT sign, girder, dispatch, scoring with its single
+  rippled carry, the room-visit bonus, extra lives, the new-egg reset with
+  more monsters and the egg's toy. Main RAM: 839 bytes free.
+- The pass logs now carry score, lives, carried thing, factory flags, the
+  round robin's pointer and selection, the falling thing.
+- **A label shadowed a table.** `.visits` as a loop label inside
+  `egg_init` made `LDA visits,X` read and rewrite egg_init's own code: the
+  game started with Harry a row too high and "carrying" thing 0. Baron
+  doesn't warn; `tools/lint_labels.py` now finds every local label that
+  shares a global's name, and the build fails on one. It found 22 more,
+  harmless only by luck, all renamed. (And a slip of mine: the scoped
+  rename also renamed the reference to the table, the one thing it
+  mustn't; caught at the next run.)
+- **The round robin's pointer belongs to the round robin.** The original's
+  footprint routine loads the current-thing record without touching
+  `&A400`, and touching and taking act on `&A400`'s thing whatever the
+  record holds; my loader set both. And the room drawer resets `&A400` to
+  thing 0 on every room draw, deaths included.
+- **Collisions now read the screen** (decision 10, revising 9). The dog
+  deaths diverged by a part of a pass; my first theory, erase holes, was
+  wrong (the original died in the same part), but reading the screen is
+  the faithful method regardless: the sprites are drawn and erased exactly
+  as the original's are, so the screen holds the same sprite pixels.
+- **The real bug was mine**: adding the round-robin reset to `draw_room` put
+  `LDA #0` between saving the room number and using it, so every room got
+  room 0's palette, and the screen test then saw every pixel as "not
+  paper". Before finding that I moved the colour map out of baron's pool,
+  suspecting the allocator; it was innocent, but long-lived state belongs
+  in the fixed zero page anyway.
+- `make check`: 120 of 120 rooms, ten scenarios. New: a bonus pickup
+  (+337: 3 hundreds, then 3 tens and 7 units from the RNG) and room 33's
+  first-visit bonus. A basket scenario wandered into room 34's lift, which
+  isn't in yet: the next layer.

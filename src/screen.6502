@@ -6,9 +6,8 @@
 \ cells is 512 bytes, so cell n is at screen + 16n: one 16-bit shift.
 \ ***************************************************************************
 
-\ The room's colour map: the logical colour of each Spectrum colour 0-7
-\ (decision 2).
-ZA_AUTO 8, cmap
+\ The room's colour map, cmap (memory.6502): the logical colour of each
+\ Spectrum colour 0-7 (decision 2).
 
 \ Set the palette and colour map for room A (1-120).
 .set_room_palette
@@ -39,7 +38,6 @@ ZA_AUTO 8, cmap
     JMP shift
 .got
     AND #3 : STA cmap,X
-    ZA_INDEXEDBY 0..7
     INX : CPX #8 : BNE byte
     RTS
 }
@@ -104,11 +102,9 @@ ZA_AUTO1 diff               ; ink pixels EOR paper pixels
     PHA
     LSR A : LSR A : LSR A : AND #7 : TAX
     LDA cmap,X
-    ZA_INDEXEDBY 0..7
     TAX : LDA colour_bytes,X : STA paper
     PLA : AND #7 : TAX
     LDA cmap,X
-    ZA_INDEXEDBY 0..7
     TAX : LDA colour_bytes,X : EOR paper : STA diff
     \ Fall into draw_glyph_pd.
 }

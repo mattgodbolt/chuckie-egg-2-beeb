@@ -58,6 +58,9 @@ def harry_state(m, n):
         "xf": m[HARRY + 0x0A], "state": m[0xA487], "face": m[HARRY + 0x0D],
         "cnt": m[0xA485], "fall": m[0xA486],
         "rng": "".join(f"{m[RNG + i]:02x}" for i in range(4)), "monsters": monsters,
+        "score": "".join(str(m[0xA445 + i]) for i in range(10)), "lives": m[0xA3FA],
+        "carried": m[0xA560], "factory": m[0xA48C], "rr": m[0xA400],
+        "sel": 1 if m[0xA405] else 0, "falling": m[0xA54E],
     }
 
 

@@ -11,3 +11,5 @@ walk-left   | left:20-120                              | 160
 jump-hold   | right:20-140,jump:100-140                | 160
 dog-deaths  | right:20-300,jump:75                     | 260
 croc-bounce | right:5-100                              | 110 | 27,10,4,0,0,1,0
+bonus-pickup | right:5-40                             | 80  | 11,21,24,0,0,1,0
+visit-bonus | left:5-60,take:30-34                     | 80  | 33,10,12,0,0,1,0

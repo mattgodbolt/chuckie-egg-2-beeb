@@ -178,11 +178,9 @@ ZA_AUTO1 sp_colour          ; a byte of four pixels in the sprite's colour
     PHA
     LSR A : LSR A : LSR A : AND #7 : TAX
     LDA cmap,X
-    ZA_INDEXEDBY 0..7
     TAX : LDA colour_bytes,X : STA paper
     PLA : AND #7 : TAX
     LDA cmap,X
-    ZA_INDEXEDBY 0..7
     TAX : LDA colour_bytes,X : EOR paper : STA diff
     RTS
 }

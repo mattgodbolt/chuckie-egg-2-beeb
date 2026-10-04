@@ -138,7 +138,7 @@ mon_types = monster_table + &400    ; 4 bytes a type: ink, base, flags, speed
     DEC m_tick,X : BPL not_yet
     LDA m_speed,X : AND #&1F : STA m_tick,X
     LDA m_speed,X : BPL normal
-    JMP special
+    JMP m_special
 .not_yet
     RTS
 .normal
@@ -153,7 +153,7 @@ mon_types = monster_table + &400    ; 4 bytes a type: ink, base, flags, speed
     LDA m_sub,X : BEQ boundary
     JMP m_move
 .boundary
-    JSR m_size                              ; m_w, m_h; mp = type map at the cell
+    JSR m_size                              ; m_w, m_h; mon_p = type map at the cell
     LDA m_cell_lo,X : AND #31 : STA m_c
     LDA m_dx,X : BMI left
     \ Right: the column just past the monster.
@@ -162,25 +162,25 @@ mon_types = monster_table + &400    ; 4 bytes a type: ink, base, flags, speed
     JMP column
 .left
     LDA m_c : BEQ blocked
-    \ The column just before: mp - 1.
-    LDA mp : BNE no_borrow
-    DEC mp+1
+    \ The column just before: mon_p - 1.
+    LDA mon_p : BNE no_borrow
+    DEC mon_p+1
 .no_borrow
-    DEC mp
+    DEC mon_p
     LDY #0
 .column
-    \ m_h cells down from (mp),Y must all be clear (anything but bit 1)...
+    \ m_h cells down from (mon_p),Y must all be clear (anything but bit 1)...
     LDA m_h : STA m_n
 .cells
-    LDA (mp),Y : AND #&FD : BNE blocked
+    LDA (mon_p),Y : AND #&FD : BNE blocked
     TYA : CLC : ADC #32 : TAY
     BCC no_page
-    INC mp+1
+    INC mon_p+1
 .no_page
     DEC m_n : BNE cells
     \ ... and unless it flies, the cell below them must be floor.
     LDA m_flags,X : AND #MF_FREE : BNE clear
-    LDA (mp),Y : AND #&21 : BEQ blocked
+    LDA (mon_p),Y : AND #&21 : BEQ blocked
 .clear
     JMP m_move
 .blocked
@@ -204,16 +204,16 @@ mon_types = monster_table + &400    ; 4 bytes a type: ink, base, flags, speed
 .m_n EQUB 0
 .m_ropes EQUB 0
 
-\ m_w, m_h from monster X's frame; mp = type_map + its cell.
-ZA_AUTO2 mp
+\ m_w, m_h from monster X's frame; mon_p = type_map + its cell.
+ZA_AUTO2 mon_p
 ZA_AUTO2 mframe
 .m_size
     LDA m_frame_lo,X : STA mframe
     LDA m_frame_hi,X : STA mframe+1
     LDY #0 : LDA (mframe),Y : STA m_h
     INY : LDA (mframe),Y : STA m_w
-    LDA m_cell_lo,X : STA mp
-    CLC : LDA m_cell_hi,X : ADC #HI(type_map) : STA mp+1
+    LDA m_cell_lo,X : STA mon_p
+    CLC : LDA m_cell_hi,X : ADC #HI(type_map) : STA mon_p+1
     RTS
 .m_w EQUB 0
 .m_h EQUB 0
@@ -230,32 +230,32 @@ ZA_AUTO2 mframe
     LDA m_cell_hi,X : BNE up_ok
     LDA m_cell_lo,X : CMP #3 * 32 : BCC vblocked
 .up_ok
-    SEC : LDA mp : SBC #32 : STA mp
+    SEC : LDA mon_p : SBC #32 : STA mon_p
     BCS test
-    DEC mp+1
+    DEC mon_p+1
     JMP test
 .down
     \ Down: blocked if row + h reaches 24.
     LDA m_cell_lo,X : LSR A : LSR A : LSR A : LSR A : LSR A : STA m_n
     LDA m_cell_hi,X : ASL A : ASL A : ASL A : ORA m_n   ; the row
     CLC : ADC m_h : CMP #24 : BCS vblocked
-    \ mp += 32 * h
+    \ mon_p += 32 * h
     LDY m_h
 .rows
-    CLC : LDA mp : ADC #32 : STA mp
+    CLC : LDA mon_p : ADC #32 : STA mon_p
     BCC row_ok
-    INC mp+1
+    INC mon_p+1
 .row_ok
     DEY : BNE rows
 .test
     LDA #0 : STA m_ropes
     LDY #0
-.cell
-    LDA (mp),Y : AND #2 : BEQ no_rope
+.vcell
+    LDA (mon_p),Y : AND #2 : BEQ no_rope
     INC m_ropes
 .no_rope
-    LDA (mp),Y : AND #&FD : BNE vblocked
-    INY : CPY m_w : BNE cell
+    LDA (mon_p),Y : AND #&FD : BNE vblocked
+    INY : CPY m_w : BNE vcell
     LDA m_flags,X : AND #MF_FREE : BNE ok
     LDA m_ropes : BEQ vblocked
 .ok
@@ -269,7 +269,7 @@ ZA_AUTO2 mframe
 }
 
 \ Specials (4.5): icicles, drips, bubbles, clouds. State in speed bits 6, 5.
-.special
+.m_special
 {
     LDA m_speed,X : AND #&60
     BEQ idle
@@ -297,9 +297,9 @@ ZA_AUTO2 mframe
     INC m_sub,X
     JMP m_move
 .formed
-    LDA m_flags,X : AND #MF_NEG : BEQ drop
+    LDA m_flags,X : AND #MF_NEG : BEQ fall_now
     JSR rng : LDX m_cur : CMP #10 : BCS wait
-.drop
+.fall_now
     LDA m_flags,X : AND #MF_NEG : BEQ rise
     LDA #&FE : JMP set_dy
 .rise
@@ -428,7 +428,6 @@ ZA_AUTO2 mframe
     LDA m_frame_hi,X : STA sp_frame+1
     LDA m_ink,X : TAX
     LDA cmap,X
-    ZA_INDEXEDBY 0..7
     TAX : LDA colour_bytes,X : STA sp_colour
     JSR draw_sprite
     LDY dl_i : LDX draw_list,Y

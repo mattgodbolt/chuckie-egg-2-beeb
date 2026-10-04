@@ -10,11 +10,12 @@
 \   row 1, col 22:  min(lives, 9) lives icons (tile &56), then a blank
 \ ***************************************************************************
 
-\ The score, ten digits 0-9, most significant first; lives; and what Harry
-\ carries, an object number 0-10 (0 = nothing).
+\ The score, ten digits 0-9, most significant first (&A445); lives (&A3FA);
+\ the name of what Harry carries, 0-10 (0 = NOTHING; objects.6502 keeps
+\ the thing itself in `carried`).
 .score      SKIP 10
 .lives      EQUB 5
-.carrying   EQUB 0
+.carrying_name EQUB 0
 
 .draw_status_bar
 {
@@ -28,9 +29,32 @@
     JMP labels
 .done
     JSR draw_score
+    JSR visit_bonus
     JSR draw_carrying
     JMP draw_lives
 }
+
+\ A room's first visit this egg (&A139): its value x egg hundreds.
+.visit_bonus
+{
+    LDX room
+    LDA visits,X : BMI done
+    STA vb_value
+    ORA #&80 : STA visits,X
+    LDA egg : STA vb_n
+.add
+    LDA vb_value : LDX #7 : JSR add_score
+    DEC vb_n : BNE add
+.done
+    RTS
+}
+.vb_value EQUB 0
+.vb_n EQUB 0
+
+\ Redraw score digit X (add_score does, as the digits change).
+.draw_digit
+    TXA : CLC : ADC #32 : STA cell : LDA #0 : STA cell+1
+    LDA score,X : CLC : ADC #48 : JMP status_char
 .status_i EQUB 0
 
 .status_labels
@@ -64,7 +88,7 @@
 .draw_carrying
 {
     LDA #32 + 12 : STA cell : LDA #0 : STA cell+1
-    LDA carrying : ASL A : ASL A : ASL A : TAX
+    LDA carrying_name : ASL A : ASL A : ASL A : TAX
     LDY #8
 .char
     STY status_x

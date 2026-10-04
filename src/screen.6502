@@ -42,7 +42,6 @@
     INX : CPX #8 : BNE byte
     LDA srp_room : JMP setup_bands
 }
-.srp_room EQUB 0
 
 \ X = 8 * the band of `cell`'s row: the offset of its colour map in
 \ band_cmaps.
@@ -147,9 +146,8 @@ ZA_AUTO1 diff               ; ink pixels EOR paper pixels
     RTS
 }
 
-\ A byte of four pixels in logical colour 0-3.
-.colour_bytes
-    EQUB cbyte(0), cbyte(1), cbyte(2), cbyte(3)
+\ (colour_bytes, a byte of four pixels in logical colour 0-3, is in page 2:
+\ pages.6502.)
 
 \ A Spectrum nibble (its leftmost pixel in bit 3) spread into both halves
 \ of a MODE 1 byte, where a pixel's colour bits are 4 apart. (The top

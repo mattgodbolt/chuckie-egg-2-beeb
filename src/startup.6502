@@ -1,0 +1,168 @@
+\ ***************************************************************************
+\ The game's start-up: run once each time CE2 is loaded (MENU runs it for
+\ every game, and again after a save), from the loader, after the code has
+\ been copied down. Nothing here is needed again, so it stays where the
+\ file loaded, in screen memory, which the first room's cls clears; it must
+\ not return there after drawing (the game carries on in next_egg or
+\ resume_room, in main RAM).
+\ ***************************************************************************
+
+.start
+{
+    ZA_ENTRY
+    LDX #&FF : TXS
+    JSR find_data_bank
+    JSR keep_os                 ; before the tables overwrite page 2
+    JSR init_system
+    JSR copy_os_pages
+    JSR sound_init
+IF DEFINED(VIEWER)
+    JMP viewer                  ; the room viewer, for tools/roomcheck.mjs
+ELSE
+    JMP init_game
+ENDIF
+}
+
+\ The data's sideways RAM bank (decision 8). MENU found or filled it and
+\ left its number at DATA_BANK_ZP for the game, which pages it in for good,
+\ so the data reads as ordinary memory at &8000. romshad is the OS's copy
+\ of romsel: it puts that back after paging ROMs itself, so write both.
+.find_data_bank
+    SEI
+    LDA DATA_BANK_ZP : STA romshad : STA romsel
+    RTS                         ; interrupts stay off until install_irq
+
+\ Note what a soft BREAK keeps, before the game's tables overwrite page 2
+\ (handoff.6502 puts it back).
+.keep_os
+{
+    LDX #OS_KEPT_LEN - 1
+.copy
+    LDA OS_KEPT,X : STA mb_os,X
+    DEX : BPL copy
+    LDA #MB_PLAYING : STA mb_reason
+    LDA #0 : STA mb_game        ; (what's at STATE is stale from now)
+    RTS
+}
+
+\ MODE 1, set in the hardware (MENU leaves the OS in MODE 7, and an OS mode
+\ change would clear the game's state at STATE): the screen narrowed to
+\ 256 x 192 at &5000 (decision 1), blank until the first room is drawn
+\ (draw_room shows it); then the interrupts taken over (irq.6502).
+.init_system
+{
+    LDA #&D8 : STA ula_ctrl         ; MODE 1's pixels: 4 colours, 20 columns of bytes
+    LDX #crtc_end - crtc_regs - 2
+.crtc
+    LDA crtc_regs,X : STA crtc_reg
+    LDA crtc_regs+1,X : STA crtc_data
+    DEX : DEX : BPL crtc
+    LDA #0 : STA vsyncs
+    JMP install_irq
+}
+
+\ Register, value pairs: MODE 1's, but R2 and R7 move with the narrower,
+\ shorter picture to keep its centre where MODE 1's is.
+.crtc_regs
+    EQUB 0, 127
+    EQUB 3, &28
+    EQUB 4, 38
+    EQUB 5, 0
+    EQUB 9, 7
+    EQUB 10, &20                ; the cursor off
+    EQUB 11, 8
+    EQUB 1, SCREEN_COLS * 2
+    EQUB 2, 98 - (80 - SCREEN_COLS * 2) / 2
+    EQUB 6, SCREEN_ROWS
+    EQUB 7, 34 - (32 - SCREEN_ROWS) / 2
+    EQUB 12, HI(screen / 8)
+    EQUB 13, LO(screen / 8)
+    \ Blank for now (display enable off). Then no interlace: with it, VSync
+    \ moves half a line in alternate fields, and the palette split
+    \ (irq.6502) has to land in a 32us blank.
+    EQUB 8, CRTC_BLANK
+.crtc_end
+
+\ Put irq_handler on IRQ1V: VSync and User VIA T1 only.
+.install_irq
+{
+    SEI
+    LDA #&7F : STA sysvia_ier : STA usrvia_ier  ; anything we don't service
+                                                ; would hold IRQ asserted
+    LDA #LO(irq_handler) : STA irq1v
+    LDA #HI(irq_handler) : STA irq1v+1
+    LDA usrvia_acr : AND #&1F : ORA #&40        ; T1 free-running, T2 one-shot
+    STA usrvia_acr
+    LDA #&82 : STA sysvia_ier                   ; CA1: VSync
+    LDA #&C0 : STA usrvia_ier                   ; T1
+    CLI
+    RTS
+}
+
+\ The tables that live in pages 1-3 (main.6502), from where they loaded.
+\ Only once the interrupts are ours: the OS's handler uses pages 2 and 3.
+\ Each is 1-256 bytes.
+.copy_os_pages
+{
+    LDX #page1_end - page1 - 1
+.p1
+    LDA page1_load,X : STA page1,X
+    DEX : CPX #&FF : BNE p1
+    LDX #page2_end - page2 - 1
+.p2
+    LDA page2_load,X : STA page2,X
+    DEX : CPX #&FF : BNE p2
+    LDX #page3_end - page3 - 1
+.p3
+    LDA page3_load,X : STA page3,X
+    DEX : CPX #&FF : BNE p3
+    RTS
+}
+
+\ Each time the game is loaded (MENU runs it for every game): a new game,
+\ or the one at STATE carried on.
+.init_game
+{
+    LDA #0 : STA dbg_room : STA noise_flag : STA save_armed
+    LDA mb_start : BEQ fresh
+    LDA #0 : STA mb_start
+    JMP resume
+.fresh
+    STA o_index
+    \ The original never reseeds its RNG: it carries on from the last game.
+    LDX #3
+.seed
+    LDA mb_rng,X : STA rng_state,X
+    DEX : BPL seed
+    \ Fall into new_game.
+}
+
+\ Start a game (&7743).
+.new_game
+{
+    LDA #0 : STA egg
+    LDA #5 : STA lives
+    LDX #9
+    LDA #0
+.zero
+    STA score,X
+    DEX : BPL zero
+    STA carrying_name
+    JMP next_egg
+}
+
+\ The RNG's state on the tape (&91B1).
+\ Carry on with the game at STATE, as the original's load does (&A21B):
+\ the room drawn again, its things, then the main loop, with no truck. The
+\ original's cipher leaves the RNG in a fixed state after a save or a load.
+.resume
+{
+    SEC : JSR copy_state
+    LDX #3
+.seed_rng
+    LDA resumed_rng,X : STA rng_state,X
+    DEX : BPL seed_rng
+    LDX #&FF : TXS
+    JMP resume_room
+}
+.resumed_rng EQUB &5D, &00, &07, &B1

@@ -30,11 +30,7 @@
     LDX si_x : DEX : BPL loop
     RTS
 }
-.sound_init_bytes                   ; (written last first)
-    EQUB &FF, &E7                   ; noise: silent; white, clocked by channel 2
-    EQUB &34, &C1                   ; channel 2: N = 833, about 150Hz
-    EQUB &DF, &BF, &9F              ; channels 0-2 silent
-.sound_init_end
+\ (sound_init_bytes is in page 1: pages.6502.)
 
 \ Wait Y * 256 + X microseconds on the User VIA's timer 2 (one-shot).
 .wait_us
@@ -59,18 +55,7 @@
     LDX dt_i : INX : INX : INX : CPX #death_notes_end - death_notes : BNE note
     LDA #&9F : JMP sound_write
 }
-\ Each note: the SN76489's N (125000 / f, at its 4MHz clock), and its length
-\ in 4ms steps (measured from the original: frontend.md 7.3).
-MACRO NOTE n, ms
-    EQUB &80 OR (n AND 15), n DIV 16, (ms + 2) DIV 4
-ENDMACRO
-.death_notes
-    NOTE 638, 202 : NOTE 569, 102 : NOTE 638, 202 : NOTE 715, 100
-    NOTE 757, 203 : NOTE 951, 103 : NOTE 848, 200 : NOTE 1007, 101
-    NOTE 951, 598
-    NOTE 641, 33 : NOTE 848, 51 : NOTE 757, 52 : NOTE 715, 54
-    NOTE 638, 54 : NOTE 508, 51 : NOTE 480, 52
-.death_notes_end
+\ (Its notes, death_notes, are in page 3: pages.6502.)
 
 \ MOVE_SOUND (&92F4): while Harry moves, a tick of two square-wave cycles
 \ whose pitch follows his state. The original's tone is

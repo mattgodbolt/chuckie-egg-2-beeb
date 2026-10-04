@@ -4,12 +4,17 @@
 \ an address.
 \ ***************************************************************************
 
-\ Zero page &00-&5F is baron's allocator pool (ZA_POOL in main.6502). The
-\ game's permanent state is here, outside it: death resets the stack and
-\ jumps back into the main loop, as the original does, which the allocator
-\ would read as recursion.
-ZP_FIXED = &60
-SECTION ZeroPage, org = ZP_FIXED, guard = &90
+\ Zero page &00-&27 is baron's allocator pool (ZA_POOL in main.6502): the
+\ game and MENU together use all 40 bytes (measured from the symbols; if a
+\ change needs more, raise ZP_FIXED and move a variable back to LowState).
+\ The game's permanent state is here, outside it: death resets the stack
+\ and jumps back into the main loop, as the original does, which the
+\ allocator would read as recursion. The most used of LowState's variables
+\ are here too, whole blocks in their LowState order (some code walks a
+\ block with an index), as zero page saves a byte on every access.
+ZP_FIXED = &28
+NM = 5                      ; monsters in a room, at most
+SECTION ZeroPage, org = ZP_FIXED, guard = DATA_BANK_ZP
 \ Harry (docs/research/harry.md). The original keeps addresses; the logic
 \ needs only the cell (row * 32 + col), yf and xf.
 .h_cell     SKIP 2          ; top-left cell
@@ -33,43 +38,13 @@ SECTION ZeroPage, org = ZP_FIXED, guard = &90
 .d_cell     SKIP 2
 .d_yf       SKIP 1
 .d_frame    SKIP 2
-\ The room's colour map (screen.6502): long-lived, so out of the
-\ allocator's pool with the rest.
-ENDSECTION
-
-\ The game's other state, in the DFS's NMI page (free once the disc is done).
-SECTION LowState, org = &0D00, guard = &0E00
-\ The checkpoint (&A46B): Harry as he entered the room, for a death.
-.checkpoint SKIP 16
-.dbg_room   SKIP 1          ; tests: a room to put Harry in (game.6502),
-.dbg_start  SKIP 6          ; ... and his cell (2), yf, xf, state, face
 \ The RNG (&91B1), big-endian: "9090" when the game is loaded.
 .rng_state  SKIP 4
-\ The monsters (&A490, docs/research/monsters.md 2.2): parallel arrays,
-\ one entry a monster, at most NM in a room.
-NM = 5
+.dbg_room   SKIP 1          ; tests: a room to put Harry in (game.6502)
+\ The monsters' most used (the rest are in LowState).
 .m_count    SKIP 1          ; monsters in this room (&A48F)
 .m_cell_lo  SKIP NM         ; top-left cell
-.m_cell_hi  SKIP NM
-.m_yf       SKIP NM         ; pixel line in the cell
-.m_sub      SKIP NM         ; 2-pixel step across, or the animation phase (+A)
-.m_dx       SKIP NM         ; quarter cells a step (+B)
-.m_dy       SKIP NM         ; lines a step, up positive (+C)
-.m_frame_lo SKIP NM         ; the frame's header
-.m_frame_hi SKIP NM
-.m_tick     SKIP NM         ; ticks to the next move (+8)
-.m_ink      SKIP NM         ; Spectrum colour (+9)
-.m_base     SKIP NM         ; base frame (+D)
 .m_flags    SKIP NM         ; type flags (+12)
-.m_speed    SKIP NM         ; delay, special bit and state (+13)
-.m_srow     SKIP NM         ; start row (+14)
-.m_scol     SKIP NM         ; start column (+15)
-.m_ocell_lo SKIP NM         ; where it was last drawn
-.m_ocell_hi SKIP NM
-.m_oyf      SKIP NM
-.m_oframe_lo SKIP NM
-.m_oframe_hi SKIP NM
-.m_vis      SKIP NM         ; drawn and not since erased (collide.6502)
 \ The draw list (&A41C): monsters that moved this tick, in order.
 .dl_count   SKIP 1
 .draw_list  SKIP NM
@@ -100,18 +75,7 @@ NM = 5
 .f_oyf      SKIP 1
 .train_room SKIP 1          ; the train: its room (&A48D)
 .train_pos  SKIP 1          ; ... and position (&A48E)
-\ Things drawn in this room since it was entered (for collide.6502).
-.on_screen  SKIP 32         ; a bit per thing
 .noise_flag SKIP 1          ; the train's noise on (&91B5)
-.score      SKIP 10         ; the score's digits, most significant first (&A445)
-.lives      SKIP 1          ; (&A3FA)
-.carrying_name SKIP 1       ; the carried thing's name in the status bar
-\ screen_bits' looked-up cells (collide.6502), one for each of Harry's columns.
-.sbc_lo     SKIP 2
-.sbc_hi     SKIP 2
-.sbc_glo    SKIP 2
-.sbc_ghi    SKIP 2
-.sbc_paper  SKIP 2
 .truck_strip SKIP 1         ; the truck strip repainted last (&91B6)
 \ The lift (&A52C): type (0 none, 1 rising bar, 2 platform), start, place.
 .l_type     SKIP 1
@@ -125,7 +89,62 @@ NM = 5
 .l_ocell    SKIP 2
 .l_oyf      SKIP 1
 .l_oframe   SKIP 2
+\ (Not a game's state: set and read once a room, in the last byte here.)
+.srp_room   SKIP 1          ; set_room_palette's room (screen.6502)
 ENDSECTION
+
+\ The game's other state, in the DFS's NMI page (free once the disc is done).
+SECTION LowState, org = &0D00, guard = &0E00
+\ The checkpoint (&A46B): Harry as he entered the room, for a death.
+.checkpoint SKIP 16
+.dbg_start  SKIP 6          ; tests: Harry's cell (2), yf, xf, state, face (game.6502)
+\ The monsters (&A490, docs/research/monsters.md 2.2): parallel arrays,
+\ one entry a monster, at most NM in a room (m_count, m_cell_lo and
+\ m_flags are in zero page).
+.m_cell_hi  SKIP NM
+.m_yf       SKIP NM         ; pixel line in the cell
+.m_sub      SKIP NM         ; 2-pixel step across, or the animation phase (+A)
+.m_dx       SKIP NM         ; quarter cells a step (+B)
+.m_dy       SKIP NM         ; lines a step, up positive (+C)
+.m_frame_lo SKIP NM         ; the frame's header
+.m_frame_hi SKIP NM
+.m_tick     SKIP NM         ; ticks to the next move (+8)
+.m_ink      SKIP NM         ; Spectrum colour (+9)
+.m_base     SKIP NM         ; base frame (+D)
+.m_speed    SKIP NM         ; delay, special bit and state (+13)
+.m_srow     SKIP NM         ; start row (+14)
+.m_scol     SKIP NM         ; start column (+15)
+.m_ocell_lo SKIP NM         ; where it was last drawn
+.m_ocell_hi SKIP NM
+.m_oyf      SKIP NM
+.m_oframe_lo SKIP NM
+.m_oframe_hi SKIP NM
+.m_vis      SKIP NM         ; drawn and not since erased (collide.6502)
+\ Things drawn in this room since it was entered (for collide.6502).
+.on_screen  SKIP 32         ; a bit per thing
+.score      SKIP 10         ; the score's digits, most significant first (&A445)
+.lives      SKIP 1          ; (&A3FA)
+.carrying_name SKIP 1       ; the carried thing's name in the status bar
+\ screen_bits' looked-up cells (collide.6502), one for each of Harry's columns.
+.sbc_lo     SKIP 2
+.sbc_hi     SKIP 2
+.sbc_glo    SKIP 2
+.sbc_ghi    SKIP 2
+.sbc_paper  SKIP 2
+\ This room's palette bands (bands.6502), set when the room is drawn: not
+\ a game's state, but free here, where they were sideways RAM. (band_count
+\ and band_rows are in the scratch zero page.)
+.band_cmaps SKIP 24         ; band k's colour map at 8k (band 0 = the room's)
+.band_off   SKIP 32         ; for each screen row (and a little beyond), 8 * its band
+.band_ula   SKIP 8          ; bands 1 and 2: logical 2's four &FE21 values
+\ T1's latch values (irq.6502): from the status bar's split to band 1, and
+\ from band 1 to band 2; &FFFF (past the next VSync) where there's no band.
+.band_t1    SKIP 4
+.sb_room    SKIP 1          ; setup_bands' room
+ENDSECTION
+\ The interrupt reads band_ula - 4 + i,X for X = 4 or 8: within one page,
+\ so no read takes the extra cycle that would move the splits.
+ASSERT HI(band_ula - 4) = HI(band_ula + 7)
 
 \ The three 32 x 24 maps the room drawer fills, one byte a cell, indexed by
 \ cell = row * 32 + column, as the original's at &5D00, &6000 and &6300.
@@ -227,6 +246,9 @@ SECTION Scratch, org = &90, guard = &FC
 .ms_l0         SKIP 1
 .ms_n          SKIP 1
 .noise_on      SKIP 1
+\ (bands.6502: set when a room is drawn)
+.band_count    SKIP 1          ; how many splits, 0-2
+.band_rows     SKIP 2          ; bands 1 and 2: the first row of each
 ENDSECTION
 
 \ The game's state on its way to and from the front end (state.6502,

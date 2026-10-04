@@ -791,6 +791,4 @@ ZA_AUTO2 pp                 ; SideWalls' column pointer
     RTS
 }
 
-\ The jump arc (&89CF): dy for each pass of a jump, up positive.
-.jump_arc
-    EQUB 4, 4, 3, 2, 1, 1, 1, 0, 0, 0, 0, -1, -1, -1, -2, -3, -4, -4, -4, -4, -4, -4
+\ (The jump arc, jump_arc, is in page 1: pages.6502.)

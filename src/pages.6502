@@ -1,0 +1,77 @@
+\ ***************************************************************************
+\ Constant tables for the OS's pages 1-3, which the game doesn't use once it
+\ has the interrupts and reads the keyboard itself (decision 11): loaded
+\ after the code, copied into place at start-up (startup.6502's
+\ copy_os_pages), then overwritten by the screen.
+\
+\ Page 1 keeps &01C0-&01FF for the stack: the deepest the game reaches is
+\ &01EA (22 bytes, the interrupt's included), measured in jsbeeb over every
+\ room, deaths and random play. &0200-&0235 are the OS's vectors; the only
+\ one used is IRQ1V (&0204, the game's own handler): the MOS's IRQ entry
+\ reads nothing else (OS 1.20 at &DC1C, MOS 3.20 at &E59E), the game makes
+\ no OS calls, and a reset puts the vectors back (on a Master,
+\ master_reset puts page 2 back first).
+\ ***************************************************************************
+
+.page1_load
+    SECTION Page1, org = &0100, guard = &01C0
+.page1
+.thing_init
+    INCBIN "data/thinginit.bin"
+\ (status.6502)
+.status_labels
+    EQUS "SCORE  CARRYING  LIVES", 0
+\ The jump arc (&89CF): dy for each pass of a jump, up positive (harry.6502).
+.jump_arc
+    EQUB 4, 4, 3, 2, 1, 1, 1, 0, 0, 0, 0, -1, -1, -1, -2, -3, -4, -4, -4, -4, -4, -4
+\ (game.6502)
+.delivered_text EQUS "EGGS DELIVERED:-", 0
+\ (sound.6502's sound_init)
+.sound_init_bytes                   ; (written last first)
+    EQUB &FF, &E7                   ; noise: silent; white, clocked by channel 2
+    EQUB &34, &C1                   ; channel 2: N = 833, about 150Hz
+    EQUB &DF, &BF, &9F              ; channels 0-2 silent
+.sound_init_end
+.page1_end
+    ENDSECTION
+
+.page2_load
+    SECTION Page2, org = &0206, guard = &0300
+.page2
+\ TEXT_CHARS in tools/packrooms.py (unpack.6502).
+.text_chars
+    EQUS " &ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+\ The lifts (&9090, table &90E0): room, row, column, type (machines.6502).
+.lift_table
+    EQUB 26, 23, 7, 1
+    EQUB 55, 23, 23, 1
+    EQUB 34, 4, 15, 2
+    EQUB 104, 4, 17, 2
+\ A byte of four pixels in logical colour 0-3 (screen.6502).
+.colour_bytes
+    EQUB cbyte(0), cbyte(1), cbyte(2), cbyte(3)
+.thing_types
+    INCBIN "data/thingtypes.bin"
+.page2_end
+    ENDSECTION
+
+.page3_load
+    SECTION Page3, org = &0300, guard = &0400
+.page3
+.mon_types
+    INCBIN "data/montypes.bin"
+\ The life-lost tune (sound.6502). Each note: the SN76489's N (125000 / f,
+\ at its 4MHz clock), and its length in 4ms steps (measured from the
+\ original: frontend.md 7.3).
+MACRO NOTE n, ms
+    EQUB &80 OR (n AND 15), n DIV 16, (ms + 2) DIV 4
+ENDMACRO
+.death_notes
+    NOTE 638, 202 : NOTE 569, 102 : NOTE 638, 202 : NOTE 715, 100
+    NOTE 757, 203 : NOTE 951, 103 : NOTE 848, 200 : NOTE 1007, 101
+    NOTE 951, 598
+    NOTE 641, 33 : NOTE 848, 51 : NOTE 757, 52 : NOTE 715, 54
+    NOTE 638, 54 : NOTE 508, 51 : NOTE 480, 52
+.death_notes_end
+.page3_end
+    ENDSECTION

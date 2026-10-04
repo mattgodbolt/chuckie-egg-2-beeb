@@ -42,7 +42,7 @@ romtypes   = &02A1          ; the OS's ROM type per bank; 0 = no ROM found
 \ The text font (decision 4): OS 1.20's own, characters 32-127, in its ROM
 \ at &C000, which is never paged out (decision 14: a Model B).
 text_font  = &C000
-\ MENU leaves the data bank's number here for the game (swram.6502): user
+\ MENU leaves the data bank's number here for the game (startup.6502): user
 \ zero page, which the DFS leaves alone, above the game's own state.
 DATA_BANK_ZP = &8F
 

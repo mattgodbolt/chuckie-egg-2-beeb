@@ -75,26 +75,11 @@ ENDSECTION
 SECTION Loader, org = &1900, load = &FFFF1900, exec = &FFFF0000 + loader, filename = "CE2"
 .payload
     SECTION Code, org = &0E00, guard = screen
-    ZA_POOL &00..ZP_FIXED-1    ; ZP_FIXED-&8F: the game's permanent state (memory.6502)
+    ZA_POOL &00..ZP_FIXED-1    ; ZP_FIXED-&8E: the game's permanent state (memory.6502)
 
-.start
-{
-    ZA_ENTRY
-    LDX #&FF : TXS
-    JSR find_data_bank
-    JSR keep_os                 ; before the tables overwrite page 2
-    JSR init_system
-    JSR copy_os_pages
-    JSR sound_init
-IF DEFINED(VIEWER)
-    JMP viewer                  ; the room viewer, for tools/roomcheck.mjs
-ELSE
-    JMP init_game
-ENDIF
-}
-
+    \ The game starts in the loader (startup.6502), which is discarded.
+.code_start
     INCLUDE "system.6502"
-    INCLUDE "swram.6502"
     INCLUDE "irq.6502"
     INCLUDE "screen.6502"
     INCLUDE "rooms.6502"
@@ -130,35 +115,11 @@ ENDIF
     INCBIN "data/tiles.bin"
 
     .code_end
-    PRINT "code &", ~start, "-&", ~code_end, " (", screen - code_end, " bytes free)"
+    PRINT "code &", ~code_start, "-&", ~code_end, " (", screen - code_end, " bytes free)"
     ENDSECTION
 
-    \ Constant tables for the OS's pages, which the game doesn't use once
-    \ it has the interrupts and reads the keyboard itself: loaded after the
-    \ code, copied into place by copy_os_pages, then overwritten by the
-    \ screen. (&0200-&0235 are the vectors, IRQ1V among them; the stack
-    \ keeps &0180-&01FF.)
-.page1_load
-    SECTION Page1, org = &0100, guard = &0180
-.page1
-.thing_init
-    INCBIN "data/thinginit.bin"
-.page1_end
-    ENDSECTION
-.page2_load
-    SECTION Page2, org = &0236, guard = &0300
-.page2
-.thing_types
-    INCBIN "data/thingtypes.bin"
-.page2_end
-    ENDSECTION
-.page3_load
-    SECTION Page3, org = &0300, guard = &0400
-.page3
-.mon_types
-    INCBIN "data/montypes.bin"
-.page3_end
-    ENDSECTION
+    \ Constant tables for the OS's pages 1-3.
+    INCLUDE "pages.6502"
 .payload_end
 
 \ Runs from where the file loaded, after the payload; nothing in here is
@@ -170,10 +131,10 @@ ENDIF
     LDA #229 : LDX #1 : LDY #0 : JSR osbyte    ; ESCAPE is an ordinary key
     LDA #0 : LDX #1 : JSR osbyte                ; X = the MOS's version
     STX loader_os
-    LDX #HI(code_end - start + &FF)
+    LDX #HI(code_end - code_start + &FF)
     LDY #0
 .copy_down
-    LDA payload,Y : STA start,Y
+    LDA payload,Y : STA code_start,Y
     INY : BNE copy_down
     INC copy_down+2 : INC copy_down+5
     DEX : BNE copy_down
@@ -181,7 +142,8 @@ ENDIF
     JSR master_setup
 .model_b
     SEI                         ; the interrupts stay off until install_irq
-    JMP start
+    \ Fall into start.
+    INCLUDE "startup.6502"
 .loader_os EQUB 0
 
 \ A Master (MOS 3.20 or later): its font isn't at &C000, so put one there,
@@ -193,6 +155,8 @@ ENDIF
 MS_C    = &70
 MS_P    = &71
 FONT_BUF = &5000                ; screen memory, unseen in MODE 7
+\ ... below where the page tables loaded, which copy_os_pages wants after.
+ASSERT page1_load >= FONT_BUF + &300
 M_PAGE2 = &D000
 M_PAGE3 = &D100
 M_D0    = &D200

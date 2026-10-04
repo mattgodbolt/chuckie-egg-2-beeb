@@ -51,8 +51,7 @@
     TXA : CLC : ADC #32 : STA cell : LDA #0 : STA cell+1
     LDA score,X : CLC : ADC #48 : JMP status_char
 
-.status_labels
-    EQUS "SCORE  CARRYING  LIVES", 0
+\ (status_labels is in page 1: pages.6502.)
 
 \ The score at row 1, columns 0-9.
 .draw_score

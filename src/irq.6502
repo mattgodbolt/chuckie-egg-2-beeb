@@ -88,21 +88,7 @@ FUNCTION ula_entry(l, n, phys) = ((l AND 2) * 4 + (n AND 2) * 2 + (l AND 1) * 2 
     RTI
 }
 
-\ Put irq_handler on IRQ1V: VSync and User VIA T1 only.
-.install_irq
-{
-    SEI
-    LDA #&7F : STA sysvia_ier : STA usrvia_ier  ; anything we don't service
-                                                ; would hold IRQ asserted
-    LDA #LO(irq_handler) : STA irq1v
-    LDA #HI(irq_handler) : STA irq1v+1
-    LDA usrvia_acr : AND #&1F : ORA #&40        ; T1 free-running, T2 one-shot
-    STA usrvia_acr
-    LDA #&82 : STA sysvia_ier                   ; CA1: VSync
-    LDA #&C0 : STA usrvia_ier                   ; T1
-    CLI
-    RTS
-}
+\ (install_irq puts irq_handler on IRQ1V at start-up: startup.6502.)
 
 \ Wait for the next vsync.
 .wait_vsync

@@ -6,15 +6,8 @@
 \ before each split row; the drawing looks colours up by the cell's row.
 \ ***************************************************************************
 
-\ This room's bands, set by setup_bands when the room is drawn.
-.band_cmaps SKIP 24             ; band k's colour map at 8k (band 0 = the room's)
-.band_off   SKIP 32             ; for each screen row (and a little beyond), 8 * its band
-.band_ula   SKIP 8              ; bands 1 and 2: logical 2's four &FE21 values
-.band_rows  SKIP 2              ; bands 1 and 2: the first row of each
-.band_count SKIP 1              ; how many splits, 0-2
-\ T1's latch values (irq.6502): from the status bar's split to band 1, and
-\ from band 1 to band 2; &FFFF (past the next VSync) where there's no band.
-.band_t1    SKIP 4
+\ This room's bands, set by setup_bands when the room is drawn, are in
+\ LowState and the scratch zero page (memory.6502).
 
 \ The bands of room A (set_room_palette has filled band_cmaps' band 0).
 .setup_bands
@@ -77,4 +70,3 @@
     DEY : BNE colour
     RTS
 }
-.sb_room EQUB 0

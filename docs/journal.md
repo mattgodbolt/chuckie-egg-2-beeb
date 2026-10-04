@@ -761,3 +761,44 @@ gathers any number of one ingredient (and makes jumps lower).
   gains at least 2 points. 99.03% of pixels in their own colour becomes
   99.53%; fewer splits are needed (75 for 93), so sideways RAM goes from
   28 to 105 bytes free. Rooms, scenarios and the front end all pass.
+
+### Where the bytes were
+
+- Main RAM was down to 134 bytes free and sideways RAM to 34. A subagent
+  went looking for memory the game owns but doesn't use, measuring each
+  claim in jsbeeb (decision 19):
+  - **Zero page**: baron's pool was `&00-&5F`, but the game and `MENU`
+    together use `&00-&27` (from the symbols), and `&7B-&8E` was spare.
+    LowState's most used variables went there, whole blocks in their
+    order (egg_init clears `delivered` and `in_basket` as one): the
+    objects, the falling thing, the train, the lift, the monsters' count,
+    cells and flags, the draw list, the RNG. A byte saved on every access:
+    322 bytes of main RAM.
+  - **The palette bands' variables** (72 bytes) moved from sideways RAM
+    to the LowState the move freed; `band_count` and `band_rows` to the
+    last of the scratch zero page. The interrupt's reads keep their
+    addressing modes and stay within a page, so the splits' timing is
+    unchanged. Sideways RAM 34 bytes free becoming 116. (The interrupt no
+    longer reads sideways RAM at all.)
+  - **The stack**: filled with a marker, then every room entered, deaths
+    and two minutes of random keys: the deepest byte written is `&01EA`,
+    22 bytes, the interrupt's included. A static bound from the listing
+    (JSR 2, PHA 1, the deepest call chain plus the interrupt) gives 28.
+    The stack keeps `&01C0-&01FF`; page 1 below it takes 69 bytes of
+    tables.
+  - **The OS vectors**: both MOS's IRQ entries (OS 1.20 at `&DC1C`, MOS
+    3.20 at `&E59E`) touch only `&FC` and IRQ1V, and a reset puts the
+    vectors back, so `&0206-&0235` takes 48 bytes of tables. Page 3's last
+    48 bytes take the death tune's notes.
+  - **Start-up code** (the screen and interrupts set up, the tables
+    copied, a new game or a resumed one: 265 bytes) runs once per load, so
+    it moved into the loader (`startup.6502`), which the first room's
+    `cls` clears. `resume` keeps a tail in main RAM (`resume_room`) for
+    what comes after drawing.
+  - Main RAM 886 bytes free. Rooms, scenarios and the front end pass on
+    the Model B and the Master.
+- Not free after all: the screen (every one of its 12,288 bytes is shown;
+  the status bar's empty cells must show black, and the room fills rows
+  2-23), and the maps' rows 0-1 (always the background fill in every room
+  of the original, but Harry's and the monsters' look-ups above row 2 and
+  sprites crossing into row 1 read them).

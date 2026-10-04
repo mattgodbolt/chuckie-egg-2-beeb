@@ -3,37 +3,8 @@
 \ &7743-&78BE and &8A29).
 \ ***************************************************************************
 
-\ Each time the game is loaded (MENU runs it for every game): a new game,
-\ or the one at STATE carried on.
-.init_game
-{
-    LDA #0 : STA dbg_room : STA noise_flag : STA save_armed
-    LDA mb_start : BEQ fresh
-    LDA #0 : STA mb_start
-    JMP resume
-.fresh
-    STA o_index
-    \ The original never reseeds its RNG: it carries on from the last game.
-    LDX #3
-.seed
-    LDA mb_rng,X : STA rng_state,X
-    DEX : BPL seed
-    \ Fall into new_game.
-}
-
-\ Start a game (&7743).
-.new_game
-{
-    LDA #0 : STA egg
-    LDA #5 : STA lives
-    LDX #9
-    LDA #0
-.zero
-    STA score,X
-    DEX : BPL zero
-    STA carrying_name
-    \ Fall into next_egg.
-}
+\ (A new game, or a saved one carried on, starts in startup.6502: init_game,
+\ new_game and resume.)
 
 \ The next egg (&7763): room 1, Harry jumping out of the truck, the
 \ factory reset.
@@ -293,7 +264,7 @@ CHECKPOINT_VARS = h_frame + 2 - h_cell    ; h_cell .. h_frame
     JSR any_key : BEQ press
     RTS
 }
-.delivered_text EQUS "EGGS DELIVERED:-", 0
+\ (delivered_text is in page 1: pages.6502.)
 \ Character A, yellow on black, at `cell`; step right.
 .yellow_char
 {
@@ -359,22 +330,11 @@ CHECKPOINT_VARS = h_frame + 2 - h_cell    ; h_cell .. h_frame
     RTS
 }
 
-
-\ The RNG's state on the tape (&91B1).
-\ Carry on with the game at STATE, as the original's load does (&A21B):
-\ the room drawn again, its things, then the main loop, with no truck. The
-\ original's cipher leaves the RNG in a fixed state after a save or a load.
-.resume
-{
-    SEC : JSR copy_state
-    LDX #3
-.seed_rng
-    LDA resumed_rng,X : STA rng_state,X
-    DEX : BPL seed_rng
-    LDX #&FF : TXS
+\ The rest of resume (startup.6502), which can't stay in the loader: the
+\ room drawn again (its cls clears the loader), its things, then the main
+\ loop, with no truck.
+.resume_room
     LDA room : JSR draw_room
     LDA #0 : STA drawn
     JSR room_things
     JMP game_loop
-}
-.resumed_rng EQUB &5D, &00, &07, &B1

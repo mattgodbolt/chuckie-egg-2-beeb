@@ -229,6 +229,4 @@ MTF_TYPE = 6
     JMP type_last
 }
 
-\ TEXT_CHARS in tools/packrooms.py.
-.text_chars
-    EQUS " &ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+\ (TEXT_CHARS in tools/packrooms.py, text_chars, is in page 2: pages.6502.)

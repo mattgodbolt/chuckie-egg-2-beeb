@@ -95,7 +95,7 @@ ENDIF
 .run_game
 {
     JSR put_mailbox
-    LDA data_bank : STA DATA_BANK_ZP        ; for the game (swram.6502)
+    LDA data_bank : STA DATA_BANK_ZP        ; for the game (startup.6502)
     LDX #LO(loading) : LDY #HI(loading) : JSR print_lines
     LDX #LO(run_ce2) : LDY #HI(run_ce2) : JMP oscli
 }

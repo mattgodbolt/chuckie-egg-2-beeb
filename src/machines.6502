@@ -247,14 +247,8 @@ ZA_AUTO2 ds_p
     RTS
 }
 
-\ The lifts (&9090, table &90E0): room, row, column, type.
-.lift_table
-    EQUB 26, 23, 7, 1
-    EQUB 55, 23, 23, 1
-    EQUB 34, 4, 15, 2
-    EQUB 104, 4, 17, 2
-
-\ SetupLift (&9088), on entering a room.
+\ SetupLift (&9088), on entering a room: the lifts' table, lift_table, is
+\ in page 2 (pages.6502).
 .setup_lift
 {
     LDX #0

@@ -96,14 +96,4 @@
     JMP (&FFFC)                 ; a Master's loader makes it JMP master_reset
 }
 
-\ Note what a soft BREAK keeps, before the game's tables overwrite page 2.
-.keep_os
-{
-    LDX #OS_KEPT_LEN - 1
-.copy
-    LDA OS_KEPT,X : STA mb_os,X
-    DEX : BPL copy
-    LDA #MB_PLAYING : STA mb_reason
-    LDA #0 : STA mb_game        ; (what's at STATE is stale from now)
-    RTS
-}
+\ (keep_os notes what a soft BREAK keeps at start-up: startup.6502.)

@@ -27,7 +27,7 @@ mon_type  = monster_table + &300
 \ The RNG (&918A): 32 bits, big-endian, shifted left with bit 30 EOR bit
 \ 27 coming in at the bottom; returns the new top byte. Called once for
 \ every monster every tick, so the calls must stay in the original's
-\ order.
+\ order. X and Y are kept (the tick relies on X).
 .rng
 {
     LDA rng_state : AND #&48 : CLC : ADC #&38   ; bit 6 = bit 6 EOR bit 3
@@ -60,40 +60,32 @@ mon_type  = monster_table + &300
 {
     LDA mon_row,Y : STA m_srow,X
     LDA mon_col,Y : STA m_scol,X
-    JSR m_to_start
     LDA mon_type,Y : ASL A : ASL A : TAY
     LDA mon_types,Y : STA m_ink,X
     LDA mon_types+1,Y : STA m_base,X
     LDA mon_types+2,Y : STA m_flags,X
     LDA mon_types+3,Y : STA m_speed,X
-    TXA : CLC : ADC #1 : STA m_tick,X       ; staggers the first moves
-    LDA #0 : STA m_sub,X : STA m_vis,X      ; not drawn until it first moves
+    JSR m_to_start
+    INX : TXA : DEX : STA m_tick,X          ; staggers the first moves
+    LDA #0 : STA m_sub,X
+    STA m_dx,X : STA m_dy,X
     \ The step: 1, or 2 when fast; negative if NEG.
-    LDA #1
-    LDY m_flags,X : BPL slow
-    LDA #2
-.slow
-    STA m_step
+    LDY #1
     LDA m_flags,X : AND #MF_NEG : BEQ positive
-    LDA #0 : SEC : SBC m_step : STA m_step
+    LDY #&FF
 .positive
+    TYA
+    LDY m_flags,X : BPL slow
+    ASL A
+.slow
+    TAY
     LDA m_flags,X : AND #MF_VERT : BNE vertical
-    LDA m_step : STA m_dx,X
-    LDA #0 : STA m_dy,X
+    TYA : STA m_dx,X
     JMP choose_frame
 .vertical
-    LDA #0 : STA m_dx,X
-    LDA m_step : ASL A : STA m_dy,X
-    JMP choose_frame
+    TYA : ASL A : STA m_dy,X
+    \ Fall into choose_frame.
 }
-
-\ Monster X to its start cell, top line.
-.m_to_start
-    LDA m_srow,X : LSR A : LSR A : LSR A : STA m_cell_hi,X
-    LDA m_srow,X : ASL A : ASL A : ASL A : ASL A : ASL A
-    ORA m_scol,X : STA m_cell_lo,X
-    LDA #0 : STA m_yf,X
-    RTS
 
 \ ChooseFrame (&8E70): base + (dx < 0 ? 4 : 0) + sub, halved when fast.
 .choose_frame
@@ -115,6 +107,14 @@ mon_type  = monster_table + &300
     RTS
 }
 
+\ Monster X to its start cell, top line.
+.m_to_start
+    LDY m_scol,X : LDA m_srow,X : JSR row_col_cell
+    STA m_cell_lo,X
+    TYA : STA m_cell_hi,X
+    LDA #0 : STA m_yf,X
+    RTS
+
 \ Both ticks of a pass (&8C0A): every monster, in order; the ones that move
 \ go on the draw list.
 .monsters_tick
@@ -135,8 +135,7 @@ mon_type  = monster_table + &300
 .tick
 {
     JSR rng                                 ; every monster, every tick
-    LDX m_cur
-    DEC m_tick,X : BPL not_yet
+    DEC m_tick,X : BPL not_yet              ; (X = m_cur, all through a tick)
     LDA m_speed,X : AND #&1F : STA m_tick,X
     LDA m_speed,X : BPL normal
     JMP m_special
@@ -145,15 +144,11 @@ mon_type  = monster_table + &300
 .normal
     LDA m_flags,X : AND #MF_STATIC : BEQ moves
     LDA #0 : STA m_dx,X : STA m_dy,X
-    JMP m_move
+    BEQ to_move                             ; (always)
 .moves
-    LDA m_flags,X : AND #MF_VERT : BEQ horizontal
-    JMP vertical
+    LDA m_flags,X : AND #MF_VERT : BNE vertical
 \ Horizontal movers (4.3): tested only on a character boundary.
-.horizontal
-    LDA m_sub,X : BEQ boundary
-    JMP m_move
-.boundary
+    LDA m_sub,X : BNE to_move
     JSR m_size                              ; m_w, m_h; mon_p = type map at the cell
     LDA m_cell_lo,X : AND #31 : STA m_c
     LDA m_dx,X : BMI left
@@ -180,9 +175,9 @@ mon_type  = monster_table + &300
 .no_page
     DEC m_n : BNE cells
     \ ... and unless it flies, the cell below them must be floor.
-    LDA m_flags,X : AND #MF_FREE : BNE clear
+    LDA m_flags,X : AND #MF_FREE : BNE to_move
     LDA (mon_p),Y : AND #&21 : BEQ blocked
-.clear
+.to_move
     JMP m_move
 .blocked
     LDA m_flags,X : AND #MF_RESPAWN : BEQ turn
@@ -195,24 +190,9 @@ mon_type  = monster_table + &300
 \ fourth step, on a character boundary.
 .vertical
     LDA m_yf,X : LSR A : STA m_sub,X
-    BEQ vcheck_entry
-    JMP m_move
-.vcheck_entry
-    JMP vcheck
+    BNE to_move
+    \ Fall into vcheck.
 }
-\ (the scratch the tick uses)
-
-\ m_w, m_h from monster X's frame; mon_p = type_map + its cell.
-ZA_AUTO2 mon_p
-ZA_AUTO2 mframe
-.m_size
-    LDA m_frame_lo,X : STA mframe
-    LDA m_frame_hi,X : STA mframe+1
-    LDY #0 : LDA (mframe),Y : STA m_h
-    INY : LDA (mframe),Y : STA m_w
-    LDA m_cell_lo,X : STA mon_p
-    CLC : LDA m_cell_hi,X : ADC #HI(type_map) : STA mon_p+1
-    RTS
 
 \ VCheck (&8CD3): up needs the row above clear, down the row below; each
 \ cell clear but for ropes, and unless free, at least one rope.
@@ -229,7 +209,7 @@ ZA_AUTO2 mframe
     SEC : LDA mon_p : SBC #32 : STA mon_p
     BCS test
     DEC mon_p+1
-    JMP test
+    BCC test                                ; (always)
 .down
     \ Down: blocked if row + h reaches 24.
     LDA m_cell_lo,X : LSR A : LSR A : LSR A : LSR A : LSR A : STA m_n
@@ -264,6 +244,18 @@ ZA_AUTO2 mframe
     JMP m_move
 }
 
+\ m_w, m_h from monster X's frame; mon_p = type_map + its cell.
+ZA_AUTO2 mon_p
+ZA_AUTO2 mframe
+.m_size
+    LDA m_frame_lo,X : STA mframe
+    LDA m_frame_hi,X : STA mframe+1
+    LDY #0 : LDA (mframe),Y : STA m_h
+    INY : LDA (mframe),Y : STA m_w
+    LDA m_cell_lo,X : STA mon_p
+    CLC : LDA m_cell_hi,X : ADC #HI(type_map) : STA mon_p+1
+    RTS
+
 \ Specials (4.5): icicles, drips, bubbles, clouds. State in speed bits 6, 5.
 .m_special
 {
@@ -278,36 +270,37 @@ ZA_AUTO2 mframe
     JMP m_move
 .idle
     LDA m_flags,X : AND #MF_NEG : BNE appear
-    JSR rng : LDX m_cur : CMP #10 : BCS wait    ; 10 in 256 a tick
+    JSR rng : CMP #10 : BCS wait            ; 10 in 256 a tick
 .appear
     LDA #0 : STA m_sub,X : STA m_dy,X
     LDA #&20 : JSR set_special
     LDA #10 : STA m_tick,X
-    JMP m_move
+    BNE go                                  ; (always)
 .forming
     LDA m_sub,X : CMP #3 : BNE next_frame
     LDA #&40 : JSR set_special
-    JMP m_move
+    BNE go                                  ; (always)
 .next_frame
     LDA #10 : STA m_tick,X
     INC m_sub,X
-    JMP m_move
+    BNE go                                  ; (always: 1-3)
 .formed
     LDA m_flags,X : AND #MF_NEG : BEQ fall_now
-    JSR rng : LDX m_cur : CMP #10 : BCS wait
+    JSR rng : CMP #10 : BCS wait
 .fall_now
     LDA m_flags,X : AND #MF_NEG : BEQ rise
-    LDA #&FE : JMP set_dy
+    LDA #&FE : BNE set_dy                   ; (always)
 .rise
     LDA #2
 .set_dy
     STA m_dy,X
     LDA #&60 : JSR set_special
-    JMP m_move
+    BNE go                                  ; (always)
 .wait
     RTS
 }
-\ The special state (speed bits 6, 5) of monster X to A.
+\ The special state (speed bits 6, 5) of monster X to A. Returns Z clear
+\ unless the speed byte is now 0.
 .set_special
     STA m_n
     LDA m_speed,X : AND #&9F : ORA m_n : STA m_speed,X
@@ -345,10 +338,8 @@ ZA_AUTO2 mframe
     \ Specials vanish now, and wait invisible.
     JSR m_erase
     LDX m_cur
-    LDA #0 : STA m_vis,X
-    LDA m_speed,X : AND #&9F : STA m_speed,X
-    JSR m_to_start
-    RTS
+    LDA #0 : JSR set_special             ; idle
+    JMP m_to_start
 .back
     JSR m_to_start
     JMP m_move_nosave                   ; and step from the start at once
@@ -359,9 +350,8 @@ ZA_AUTO2 mframe
 .m_move
     LDX m_cur
     JSR m_save_old
-.m_move_nosave
+.m_move_nosave                              ; (X = m_cur)
 {
-    LDX m_cur
     \ Step (&8E94): across by dx quarter cells, up by dy lines.
     LDA m_sub,X : CLC : ADC m_dx,X : TAY
     AND #3 : STA m_sub,X
@@ -369,7 +359,7 @@ ZA_AUTO2 mframe
     CMP #4 : BCC vertical
     INC m_cell_lo,X : BNE vertical
     INC m_cell_hi,X
-    JMP vertical
+    BNE vertical                            ; (always)
 .left
     LDA m_cell_lo,X : BNE no_borrow
     DEC m_cell_hi,X
@@ -383,7 +373,7 @@ ZA_AUTO2 mframe
     CLC : LDA m_cell_lo,X : ADC #32 : STA m_cell_lo,X
     BCC framed
     INC m_cell_hi,X
-    JMP framed
+    BNE framed                              ; (always)
 .up
     SEC : LDA m_cell_lo,X : SBC #32 : STA m_cell_lo,X
     BCS framed
@@ -431,10 +421,8 @@ ZA_AUTO2 mframe
     LDA m_frame_hi,X : STA sp_frame+1
     LDA m_ink,X : STA sp_ink
     JSR draw_sprite
-    LDY dl_i : LDX draw_list,Y
-    LDA #1 : STA m_vis,X
-    INY
-    JMP loop
+    LDY dl_i : INY
+    BNE loop                                ; (always)
 .done
     RTS
 }

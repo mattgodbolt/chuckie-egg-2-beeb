@@ -66,7 +66,7 @@ def harry_state(m, n):
     }
 
 
-def teleport(spec, start, power=False):
+def teleport(spec, start, power=False, factory=None, carry=None):
     """After one pass in room 1, put Harry in room, row, col, yf, xf with
     state and facing, call the room set-up (&7913) and take the checkpoint.
     With power, the lever's power is on first (&A48C bit 0)."""
@@ -92,6 +92,16 @@ def teleport(spec, start, power=False):
     m[0xA487], m[0xA485], m[0xA486] = state, 0, 0
     if power:
         m[0xA48C] |= 1
+    if factory is not None:
+        m[0xA48C] = factory
+    if carry is not None:
+        # Carried, as the take leaves it (&956B): out of the world, its
+        # height (from its type's frame, &6A00 and &8A98) for the drop.
+        m[0xA560] = carry
+        m[0x6600 + carry] |= 0x80
+        gfx = m[0x6A00 + 3 * m[0x6900 + carry] + 1]
+        frame = m[0x8A98 + 2 * gfx] | m[0x8A99 + 2 * gfx] << 8
+        m[0xA561] = m[frame]
     # Call the room set-up, returning to the main loop's top.
     sp = regs[SP] - 2
     m[sp], m[sp + 1] = MAIN_LOOP & 0xFF, MAIN_LOOP >> 8
@@ -112,6 +122,8 @@ def main():
     ap.add_argument("--out", default="build/zx_passes.json")
     ap.add_argument("--start", help="room,row,col,yf,xf,state,face")
     ap.add_argument("--power", action="store_true", help="with --start: the power on")
+    ap.add_argument("--factory", type=lambda v: int(v, 0), help="with --start: the factory flags (&A48C)")
+    ap.add_argument("--carry", type=lambda v: int(v, 0), help="with --start: Harry carrying this thing")
     args = ap.parse_args()
     inputs = parse_inputs(args.inputs)
     spec = Spectrum(args.snap)
@@ -126,7 +138,7 @@ def main():
     spec.frames(5)
     spec.key("P", False)
     if args.start:
-        teleport(spec, [int(v) for v in args.start.split(",")], args.power)
+        teleport(spec, [int(v) for v in args.start.split(",")], args.power, args.factory, args.carry)
     log = []
     for n in range(args.passes):
         # (After a teleport the set-up has just returned to the loop's top.)

@@ -6,16 +6,16 @@
 \ train's random beeper.
 \ ***************************************************************************
 
-\ Write A to the sound chip, through the System VIA's slow bus.
+\ Write A to the sound chip, through the System VIA's slow bus. X is kept.
 .sound_write
 {
-    LDX #&FF : STX sysvia_ddra
+    LDY #&FF : STY sysvia_ddra
     STA sysvia_ora_nh
-    LDX #0 : STX sysvia_orb         ; write enable low
-    LDX #3                          ; ... for 8us
+    LDY #0 : STY sysvia_orb         ; write enable low
+    LDY #3                          ; ... for 8us
 .hold
-    DEX : BNE hold
-    LDX #8 : STX sysvia_orb
+    DEY : BNE hold
+    LDY #8 : STY sysvia_orb
     RTS
 }
 
@@ -25,9 +25,8 @@
     LDA #0 : STA noise_on
     LDX #sound_init_end - sound_init_bytes - 1
 .loop
-    STX si_x
     LDA sound_init_bytes,X : JSR sound_write
-    LDX si_x : DEX : BPL loop
+    DEX : BPL loop
     RTS
 }
 \ (sound_init_bytes is in page 1: pages.6502.)
@@ -45,10 +44,10 @@
     LDA #&90 : JSR sound_write      ; channel 0 loud
     LDX #0
 .note
-    STX dt_i
     LDA death_notes,X : JSR sound_write
-    LDX dt_i : LDA death_notes+1,X : JSR sound_write
-    LDX dt_i : LDA death_notes+2,X : STA dt_n
+    LDA death_notes+1,X : JSR sound_write
+    LDA death_notes+2,X : STA dt_n
+    STX dt_i
 .hold
     LDX #LO(4000) : LDY #HI(4000) : JSR wait_us
     DEC dt_n : BNE hold
@@ -69,7 +68,7 @@
     LDA h_cnt : ASL A : ADC #42             ; (cnt < 128: carry clear)
     LDX h_cnt : CPX #10 : BCS l0
     EOR #&FF : ADC #1                       ; low for the first 9 steps
-    JMP l0
+    BNE l0                                  ; (always)
 .not_jump
     CMP #0 : BNE other
     LDA h_fall : ASL A : ADC #50
@@ -86,10 +85,10 @@
     LDA ms_l0 : CLC : ADC #3 : LSR A : LSR A
     CLC : ADC ms_n : ADC #8 : STA ms_n      ; N, under 80
     AND #15 : ORA #&A0 : JSR sound_write
-    LDA ms_n : LSR A : LSR A : LSR A : LSR A : JSR sound_write
+    LDA ms_n : LSR A : LSR A : LSR A : LSR A : TAX : JSR sound_write
     LDA #&B2 : JSR sound_write              ; on
     \ Two cycles: 16N microseconds.
-    LDA ms_n : LSR A : LSR A : LSR A : LSR A : TAY
+    TXA : TAY                               ; (N >> 4: sound_write keeps X)
     LDA ms_n : ASL A : ASL A : ASL A : ASL A : TAX
     JSR wait_us
     LDA #&BF : JMP sound_write              ; off

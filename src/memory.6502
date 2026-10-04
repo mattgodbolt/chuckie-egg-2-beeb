@@ -40,7 +40,7 @@ SECTION ZeroPage, org = ZP_FIXED, guard = DATA_BANK_ZP
 .d_frame    SKIP 2
 \ The RNG (&91B1), big-endian: "9090" when the game is loaded.
 .rng_state  SKIP 4
-.dbg_room   SKIP 1          ; tests: a room to put Harry in (game.6502)
+.dbg_room   SKIP 1          ; tests: non-zero, the pass ends in teleport (game.6502)
 \ The monsters' most used (the rest are in LowState).
 .m_count    SKIP 1          ; monsters in this room (&A48F)
 .m_cell_lo  SKIP NM         ; top-left cell
@@ -50,29 +50,29 @@ SECTION ZeroPage, org = ZP_FIXED, guard = DATA_BANK_ZP
 .draw_list  SKIP NM
 \ The objects (docs/research/objects.md).
 .egg        SKIP 1          ; the egg being made, 1 up (&A3F9)
-.factory    SKIP 1          ; power, toy made, girder, toy placed, egg made, 3 vats (&A48C)
 .carried_h  SKIP 1          ; the carried thing's height (&A561)
+\ (factory to in_basket: cleared together by egg_init)
+.factory    SKIP 1          ; power, toy made, girder, toy placed, egg made, 3 vats (&A48C)
 .take_latch SKIP 1          ; one take or drop per press (&A562)
 .delivered  SKIP 4          ; toy parts, milk, cocoa, sugar delivered (&A563)
 .in_basket  SKIP 4          ; ... in their baskets (&A567)
 .cell_hit   SKIP 1          ; the last non-zero cell a footprint met (&9B24)
 \ The current thing (&A402): the round robin's pick, drawn every frame.
 .o_index    SKIP 1          ; the round robin's pointer ((&A400) low byte)
-.o_thing    SKIP 1          ; the thing loaded into the record
 .o_sel      SKIP 1          ; non-zero: one is selected (&A405)
+\ A sprite record (sp_record in objects.6502), as are f_cell, l_cell,
+\ l_ocell and d_cell: cell (2), yf, frame (2), and to draw, the ink.
 .o_cell     SKIP 2
+.o_yf       SKIP 1          ; always 0 (startup.6502's init_game)
 .o_frame    SKIP 2          ; its graphic's header
 .o_ink      SKIP 1
 .o_kind     SKIP 1          ; (&A414)
-.o_gfx      SKIP 1          ; (&A40F)
 \ A dropped thing falling into a hopper (&A546).
 .f_thing    SKIP 1          ; which; bit 7 set: none (&A54E)
 .f_cell     SKIP 2
 .f_yf       SKIP 1
 .f_frame    SKIP 2
 .f_ink      SKIP 1
-.f_ocell    SKIP 2          ; where it was drawn
-.f_oyf      SKIP 1
 .train_room SKIP 1          ; the train: its room (&A48D)
 .train_pos  SKIP 1          ; ... and position (&A48E)
 .noise_flag SKIP 1          ; the train's noise on (&91B5)
@@ -97,7 +97,6 @@ ENDSECTION
 SECTION LowState, org = &0D00, guard = &0E00
 \ The checkpoint (&A46B): Harry as he entered the room, for a death.
 .checkpoint SKIP 16
-.dbg_start  SKIP 6          ; tests: Harry's cell (2), yf, xf, state, face (game.6502)
 \ The monsters (&A490, docs/research/monsters.md 2.2): parallel arrays,
 \ one entry a monster, at most NM in a room (m_count, m_cell_lo and
 \ m_flags are in zero page).
@@ -119,9 +118,6 @@ SECTION LowState, org = &0D00, guard = &0E00
 .m_oyf      SKIP NM
 .m_oframe_lo SKIP NM
 .m_oframe_hi SKIP NM
-.m_vis      SKIP NM         ; drawn and not since erased (collide.6502)
-\ Things drawn in this room since it was entered (for collide.6502).
-.on_screen  SKIP 32         ; a bit per thing
 .score      SKIP 10         ; the score's digits, most significant first (&A445)
 .lives      SKIP 1          ; (&A3FA)
 .carrying_name SKIP 1       ; the carried thing's name in the status bar
@@ -176,8 +172,6 @@ SECTION Scratch, org = &90, guard = &FC
 \ (rooms.6502)
 .back_cells_n  SKIP 1
 \ (status.6502)
-.vb_value      SKIP 1
-.vb_n          SKIP 1
 .status_i      SKIP 1
 .status_x      SKIP 1
 \ (unpack.6502)
@@ -191,7 +185,6 @@ SECTION Scratch, org = &90, guard = &FC
 .harry_vec     SKIP 2
 \ (monsters.6502)
 .m_entry       SKIP 1
-.m_step        SKIP 1
 .cf_x          SKIP 1
 .m_cur         SKIP 1
 .m_c           SKIP 1
@@ -216,11 +209,6 @@ SECTION Scratch, org = &90, guard = &FC
 .drop_row      SKIP 1
 .drop_col      SKIP 1
 .drop_g        SKIP 1
-.drop_g2       SKIP 1
-.old_row       SKIP 1
-.old_col       SKIP 1
-.dv_g          SKIP 1
-.wl_x          SKIP 1
 .ei_n          SKIP 1
 \ (machines.6502)
 .ds_ink        SKIP 1
@@ -230,17 +218,12 @@ SECTION Scratch, org = &90, guard = &FC
 .ds_d          SKIP 1          ; column
 .ds_e          SKIP 1          ; row
 .rc_b          SKIP 1
-.rc_c          SKIP 1
-.rc_d          SKIP 1
 .ta_b          SKIP 1
 .w10_n         SKIP 1
-.sl_row        SKIP 1
 \ (game.6502)
 .ed_n          SKIP 1
-.keys_i        SKIP 1
 .save_armed    SKIP 1
 \ (sound.6502)
-.si_x          SKIP 1
 .dt_i          SKIP 1
 .dt_n          SKIP 1
 .ms_l0         SKIP 1

@@ -28,9 +28,7 @@ const spots = (wanted.length ? wanted : [...Array(120).keys()].map((i) => i + 1)
 for (const [room, row, col] of spots) {
     // Teleport (game.6502's test hook) to row 21, column 1 if possible; then
     // let the room settle and count frames over 20 passes.
-    const cell = row * 32 + col;
-    await b.write("dbg_start", [cell & 255, cell >> 8, 0, 0, 1, 0]);
-    await b.write("dbg_room", [room]);
+    await b.teleport(room, row * 32 + col);
     for (let i = 0; i < 3; i++) await b.runUntil("game_loop", 20);
     await b.write("lives", [5]);
     const hist = {};

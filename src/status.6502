@@ -16,14 +16,14 @@
 
 .draw_status_bar
 {
-    LDA #LO(5) : STA cell : LDA #0 : STA cell+1
+    LDA #5 : JSR status_at
     LDX #0
 .labels
     LDA status_labels,X : BEQ done
     STX status_i
     JSR status_char
     LDX status_i : INX
-    JMP labels
+    BNE labels                  ; (always)
 .done
     JSR draw_score
     JSR visit_bonus
@@ -36,74 +36,70 @@
 {
     LDX room
     LDA visits,X : BMI done
-    STA vb_value
+    PHA
     ORA #&80 : STA visits,X
-    LDA egg : STA vb_n
-.add
-    LDA vb_value : LDX #7 : JSR add_score
-    DEC vb_n : BNE add
+    PLA : LDX #7 : JMP times_egg
 .done
     RTS
 }
 
+\ cell = A, a status bar cell (rows 0-1). X, Y kept.
+.status_at
+    STA cell : LDA #0 : STA cell+1
+    RTS
+
 \ Redraw score digit X (add_score does, as the digits change).
 .draw_digit
-    TXA : CLC : ADC #32 : STA cell : LDA #0 : STA cell+1
-    LDA score,X : CLC : ADC #48 : JMP status_char
+    TXA : CLC : ADC #32 : JSR status_at
+    LDA score,X : ORA #'0' : JMP status_char
 
 \ (status_labels is in page 1: pages.6502.)
 
 \ The score at row 1, columns 0-9.
 .draw_score
 {
-    LDA #32 : STA cell : LDA #0 : STA cell+1
-    LDA #&80 : STA status_i     ; bit 7: still in leading zeros
+    LDA #32 : JSR status_at
     LDX #0
-.digit
+.lead
+    \ Leading zeros in the first five as spaces.
+    LDA score,X : BNE digits
     STX status_x
-    LDA score,X
-    CPX #5 : BCS show           ; the last five always show
-    BIT status_i : BPL show
-    CMP #0 : BNE show
-    LDA #32 : JMP put_it        ; a leading zero: a space
-.show
-    LSR status_i                ; out of the leading zeros
-    CLC : ADC #48               ; '0'
-.put_it
-    JSR status_char
+    LDA #' ' : JSR status_char
     LDX status_x : INX
-    CPX #10 : BNE digit
+    CPX #5 : BNE lead
+.digits
+    STX status_x
+    JSR draw_digit
+    LDX status_x : INX
+    CPX #10 : BNE digits
     RTS
 }
 
 \ What Harry carries, at row 1, columns 12-19.
 .draw_carrying
 {
-    LDA #32 + 12 : STA cell : LDA #0 : STA cell+1
+    LDA #32 + 12 : JSR status_at
     LDA carrying_name : ASL A : ASL A : ASL A : TAX
-    LDY #8
 .char
-    STY status_x
     STX status_i
     LDA object_names,X
     JSR status_char
     LDX status_i : INX
-    LDY status_x : DEY : BNE char
+    TXA : AND #7 : BNE char     ; 8 characters
     RTS
 }
 
 \ The lives icons at row 1, column 22 on: min(lives, 9), then a blank.
 .draw_lives
 {
-    LDA #32 + 22 : STA cell : LDA #0 : STA cell+1
+    LDA #32 + 22 : JSR status_at
     LDA lives : CMP #10 : BCC few
     LDA #9
 .few
     STA status_x
 .icon
-    LDA status_x : BEQ blank
+    DEC status_x : BMI blank
     LDA #&56 : JSR status_tile
-    DEC status_x
     JMP icon
 .blank
     LDA #&37
@@ -112,16 +108,23 @@
 \ Tile A, white on black, at `cell`; step right.
 .status_tile
 {
+    LDX #cbyte(1) EOR cbyte(0) : STX diff
     SEC : SBC #&20
     LDX #LO(tiles) : LDY #HI(tiles)
     JMP status_glyph
 }
-\ Character A (ASCII), white on black, from the OS's font (decision 4), at
-\ `cell`; step right.
+\ Character A (ASCII) from the OS's font (decision 4), on black at `cell`,
+\ in yellow (the EGGS DELIVERED screen's) or white; step right.
+.yellow_char
+    LDX #cbyte(3) EOR cbyte(0)
+    BNE text_char               ; (always)
 .status_char
+    LDX #cbyte(1) EOR cbyte(0)
+.text_char
+    STX diff
     SEC : SBC #32
     LDX #LO(text_font) : LDY #HI(text_font)
-\ glyph = font (Y:X) + 8 * A; draw in logical 1 on 0.
+\ glyph = font (Y:X) + 8 * A; draw in diff's colour on logical 0.
 .status_glyph
 {
     STA glyph : LDA #0 : STA glyph+1
@@ -129,7 +132,6 @@
     TXA : CLC : ADC glyph : STA glyph
     TYA : ADC glyph+1 : STA glyph+1
     LDA #cbyte(0) : STA paper
-    LDA #cbyte(1) EOR cbyte(0) : STA diff
     JSR draw_glyph_pd
     INC cell : BNE done
     INC cell+1

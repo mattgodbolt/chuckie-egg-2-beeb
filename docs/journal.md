@@ -802,3 +802,31 @@ gathers any number of one ingredient (and makes jumps lower).
   2-23), and the maps' rows 0-1 (always the background fill in every room
   of the original, but Harry's and the monsters' look-ups above row 2 and
   sprites crossing into row 1 read them).
+
+### Code size, and a bug no scenario reached
+
+- The code-size agent for objects, machines, monsters, the game loop, the
+  status bar and sound saved 945 bytes of main RAM (886 free becoming
+  1,831): sprite records in zero page drawn and erased through shared
+  helpers, dead state removed (`on_screen` and `m_vis` were written and
+  never read, leftovers of decision 9's collision test), shared helpers
+  for cells from rows and columns, things on and off, the "value x egg"
+  scores, one text routine for both colours, the strips painted through
+  `draw_glyph`, the test teleport moved into the harness.
+- **It found a real bug.** In `drop`, `set_carrying` (which draws the
+  name, leaving X = 8) came before the `CPX #&27` that recognises the toy,
+  so a toy dropped on the egg maker never counted and the egg could never
+  be made. Fixed in the patch. A new scenario, toy-egg, starts Harry in
+  room 48 carrying the toy with the factory otherwise ready (both pass
+  loggers take `--factory` and `--carry` now) and drops it: the egg, 20,000
+  points and a life, pass for pass as on the Spectrum.
+- Lesson: the scenarios covered moving, dying and taking, but nothing
+  reached the end of an egg. A bug in the game's goal sat there since the
+  objects layer. Each of the machines' outcomes deserves a scenario.
+- The quiet-line splits agent's verdict: don't build them. With decision
+  18, no room's best plan uses one, and two colours per split at any row
+  add only 0.01-0.02 points. My earlier "three colours a split" estimate
+  had mixed two things: most of its gain came from not keeping Harry's
+  colour, not from the extra writes. Its timing measurements are worth
+  keeping: 8 writes fit any blank with about 2us to spare each side; band
+  interrupts jitter by up to 4us in play.

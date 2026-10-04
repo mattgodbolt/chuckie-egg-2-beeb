@@ -5,7 +5,9 @@
 
 \ The parts of memory that make up a game in progress, copied to STATE
 \ on the way out and back on a resume: the fixed zero page, LowState, the
-\ thing and monster tables, the visit flags and the thing types.
+\ thing and monster tables, the visit flags and the thing types. (Not
+\ swapped, though one routine would serve both ways: the soft BREAK after a
+\ game over failed to find the DFS with load-time bytes put back in them.)
 .state_regions
     EQUW ZP_FIXED : EQUB &90 - ZP_FIXED
     EQUW &0D00 : EQUB 0         ; (0: 256)
@@ -34,7 +36,7 @@
 .byte
     PLP : PHP : BCS back
     LDA (sr_mem),Y : STA (sr_blk),Y
-    JMP next
+    BCC next                    ; (always)
 .back
     LDA (sr_blk),Y : STA (sr_mem),Y
 .next
@@ -42,7 +44,7 @@
     TYA : CMP state_regions+2,X : BNE byte
     CLC : TYA : BNE add
     INC sr_blk+1                ; a whole page
-    JMP done_add
+    BNE done_add                ; (always)
 .add
     ADC sr_blk : STA sr_blk
     BCC done_add

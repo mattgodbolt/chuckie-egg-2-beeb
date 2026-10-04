@@ -12,15 +12,14 @@
 {
     LDX #&FF : TXS
     LDA #1 : STA room
+    STA h_mom                       ; (Harry's template, below)
     INC egg
-    LDA room : JSR draw_room
-    LDA #0 : STA drawn
+    JSR show_room
     \ Harry's template (&89E5): row 18, column 6, jumping right, count 0.
     LDA #LO(18 * 32 + 6) : STA h_cell
     LDA #HI(18 * 32 + 6) : STA h_cell+1
     LDA #0 : STA h_yf : STA h_xf : STA h_face : STA h_cnt : STA h_fall
     STA ctrl : STA room_delta : STA h_dx : STA h_dy : STA o_sel : STA dl_count
-    LDA #1 : STA h_mom
     LDA #7 : STA h_state
     LDA harry_frames : STA h_frame
     LDA harry_frames+1 : STA h_frame+1
@@ -60,57 +59,51 @@
     JSR noise
     JSR monsters_tick
     JSR noise
-    JSR wait_vsync
-    JSR draw_monsters
-    JSR draw_object
+    JSR draw_frame
     \ Part 2: contact, drop, falling; monster tick B; the next thing.
-    JSR noise
-    JSR collide
-    JSR drop
-    JSR falling
+    JSR contact_pass
     JSR monsters_tick
     JSR noise
     JSR next_object
-    JSR wait_vsync
-    JSR draw_monsters
-    JSR draw_object
+    JSR draw_frame
     \ Part 3: contact, drop, falling.
-    JSR noise
-    JSR collide
-    JSR drop
-    JSR falling
+    JSR contact_pass
     LDA dbg_room : BEQ next_pass
     JSR teleport
 .next_pass
     JMP game_loop
 }
+\ At the next frame, the monsters that moved and the current thing (the
+\ original's interrupt).
+.draw_frame
+    JSR wait_vsync
+    JSR draw_monsters
+    JMP draw_object
+\ Contact, drop, falling.
+.contact_pass
+    JSR noise
+    JSR collide
+    JSR drop
+    JMP falling
 
-\ For the tests (tools/passlog.mjs --start): they set dbg_start (Harry's
-\ cell, yf, xf, state, facing) and dbg_room; at the end of the pass he is
-\ put there, as the original's room set-up would (tools/passlog.py calls
-\ the original's &7913 at the same point).
+\ For the tests (tools/beeb.mjs's teleport, for passlog.mjs --start): they
+\ set dbg_room, and when the pass ends here they put Harry, his frame and
+\ the room in place; the room is then entered as the original's set-up
+\ would (tools/passlog.py calls the original's &7913 at the same point).
 .teleport
-{
-    LDA dbg_start : STA h_cell
-    LDA dbg_start+1 : STA h_cell+1
-    LDA dbg_start+2 : STA h_yf
-    LDA dbg_start+3 : STA h_xf
-    LDA dbg_start+4 : STA h_state
-    LDA dbg_start+5 : STA h_face
-    LDA #0 : STA h_dx : STA h_dy
-    LDA dbg_room : STA room
-    LDA #0 : STA dbg_room : STA h_cnt : STA h_fall : STA room_delta
-    LDA h_face : CLC : ADC h_xf : ASL A : TAX
-    LDA harry_frames,X : STA h_frame
-    LDA harry_frames+1,X : STA h_frame+1
+    LDA #0 : STA dbg_room
     JSR enter_room
     JMP save_checkpoint
-}
 
-\ Draw the room and set it up (&7913). Nothing of Harry is on screen.
-.enter_room
+\ Draw the room (&7913). Nothing of Harry is on screen.
+.show_room
     LDA room : JSR draw_room
     LDA #0 : STA drawn
+    RTS
+
+\ Draw the room and set it up (&7913).
+.enter_room
+    JSR show_room
 \ The rest of the room set-up (&8B2A, &99F6, &9088).
 .room_setup
 {
@@ -130,11 +123,11 @@
     \ Rooms 80 and 71 are joined left to right.
     LDA room : CMP #80 : BNE not80
     LDA room_delta : CMP #1 : BNE not80
-    LDA #71 : JMP set
+    LDA #71 : BNE set               ; (always)
 .not80
     CMP #71 : BNE add
     LDA room_delta : CMP #&FF : BNE add
-    LDA #80 : JMP set
+    LDA #80 : BNE set               ; (always)
 .add
     LDA room : CLC : ADC room_delta
 .set
@@ -155,9 +148,7 @@
 .take_checkpoint
     LDA #0 : STA room_delta
     \ The take_checkpoint only if he came in walking or on a ladder.
-    LDA h_state : CMP #1 : BEQ save
-    CMP #3 : BNE done
-.save
+    LDA h_state : AND #&FD : CMP #1 : BNE done  ; states 1 and 3
     JMP save_checkpoint
 .done
     RTS
@@ -190,14 +181,11 @@ CHECKPOINT_VARS = h_frame + 2 - h_cell    ; h_cell .. h_frame
     \ What he carried goes back where it came from (the toy and the egg
     \ he keeps).
     LDX carried : CPX #&27 : BCS kept
-    LDA t_room,X : AND #&7F : STA t_room,X
+    JSR thing_on
     LDA #0 : JSR set_carrying
     LDA #&FF : STA carried
 .kept
-    \ The girder back to its start.
-    LDA #13 : STA t_row+&25
-    LDA #10 : STA t_col+&25
-    LDA factory : AND #&FB : STA factory
+    JSR girder_home
     DEC lives : BNE alive
     LDA #MB_OVER : JMP handoff      ; game over: the front end checks the score
 .alive
@@ -209,42 +197,33 @@ CHECKPOINT_VARS = h_frame + 2 - h_cell    ; h_cell .. h_frame
 \ screen until a key, then the next egg. (The truck driving off: later.)
 .egg_delivered
 {
-    LDA d_cell : STA sp_cell
-    LDA d_cell+1 : STA sp_cell+1
-    LDA d_yf : STA sp_yf
-    LDA d_frame : STA sp_frame
-    LDA d_frame+1 : STA sp_frame+1
-    JSR erase_image
-    LDA egg : STA ed_n
-.score_loop
-    LDA #3 : LDX #5 : JSR add_score
-    DEC ed_n : BNE score_loop
-    JSR extra_life
+    LDX #d_cell : JSR sp_erase_at
+    LDA #3 : JSR reward
     JSR truck_leaves
     \ Black, and the message in yellow (attribute 6) at row 11.
     JSR cls
-    LDX #0 : LDA #0 : JSR set_logical       ; black
-    LDX #3 : LDA #3 : JSR set_logical       ; yellow
+    LDA #0 : TAX : JSR set_logical          ; black
+    LDA #3 : TAX : JSR set_logical          ; yellow
     LDA #LO(11 * 32 + 7) : STA cell : LDA #HI(11 * 32 + 7) : STA cell+1
     LDX #0
 .text
     LDA delivered_text,X : BEQ number
     STX ed_n
     JSR yellow_char
-    LDX ed_n : INX : JMP text
+    LDX ed_n : INX : BNE text       ; (always)
 .number
     \ The egg number, at column 24 (two digits if it needs them).
     LDA #LO(11 * 32 + 24) : STA cell
     LDA egg : LDX #0
 .tens
     CMP #10 : BCC units
-    SBC #10 : INX : JMP tens
+    SBC #10 : INX : BCS tens        ; (always)
 .units
     PHA
     TXA : BEQ one_digit
-    CLC : ADC #48 : JSR yellow_char
+    ORA #'0' : JSR yellow_char
 .one_digit
-    PLA : CLC : ADC #48 : JSR yellow_char
+    PLA : ORA #'0' : JSR yellow_char
     JSR wait_key
     JMP next_egg
 }
@@ -264,40 +243,21 @@ CHECKPOINT_VARS = h_frame + 2 - h_cell    ; h_cell .. h_frame
     JSR any_key : BEQ press
     RTS
 }
-\ (delivered_text is in page 1: pages.6502.)
-\ Character A, yellow on black, at `cell`; step right.
-.yellow_char
-{
-    SEC : SBC #32 : STA glyph : LDA #0 : STA glyph+1
-    ASL glyph : ROL glyph+1 : ASL glyph : ROL glyph+1 : ASL glyph : ROL glyph+1
-    CLC : LDA glyph : ADC #LO(text_font) : STA glyph
-    LDA glyph+1 : ADC #HI(text_font) : STA glyph+1
-    LDA #cbyte(0) : STA paper
-    LDA #cbyte(3) : STA diff
-    JSR draw_glyph_pd
-    INC cell
-    RTS
-}
+\ (delivered_text is in page 1: pages.6502; yellow_char in status.6502.)
 
 \ Erase Harry where he was drawn, draw him where he is, in yellow
 \ (decision 6: Spectrum colour 6).
 .draw_harry
 {
     BIT drawn : BPL fresh
-    LDA d_cell : STA sp_cell
-    LDA d_cell+1 : STA sp_cell+1
-    LDA d_yf : STA sp_yf
-    LDA d_frame : STA sp_frame
-    LDA d_frame+1 : STA sp_frame+1
-    JSR erase_image
+    LDX #d_cell : JSR sp_erase_at
 .fresh
-    LDA h_cell : STA sp_cell : STA d_cell
-    LDA h_cell+1 : STA sp_cell+1 : STA d_cell+1
-    LDA h_yf : STA sp_yf : STA d_yf
-    LDA h_frame : STA sp_frame : STA d_frame
-    LDA h_frame+1 : STA sp_frame+1 : STA d_frame+1
-    LDA #6 : STA sp_ink             ; yellow
-    JSR draw_sprite
+    LDA h_cell : STA d_cell
+    LDA h_cell+1 : STA d_cell+1
+    LDA h_yf : STA d_yf
+    LDA h_frame : STA d_frame
+    LDA h_frame+1 : STA d_frame+1
+    LDA #6 : LDX #d_cell : JSR sp_draw_ink    ; yellow
     LDA #&80 : STA drawn
     RTS
 }
@@ -306,16 +266,11 @@ CHECKPOINT_VARS = h_frame + 2 - h_cell    ; h_cell .. h_frame
 \ abort, 6 take/drop, 5 save, 4 up, 3 down, 2 left, 1 right, 0 jump.
 .read_keys
 {
-    LDA #0 : STA ctrl
     LDY #7
 .key
-    STY keys_i
-    LDX mb_keys,Y : JSR key_down
-    CMP #0 : CLC : BEQ up
-    SEC
-.up
-    ROL ctrl
-    LDY keys_i : DEY : BPL key
+    LDX mb_keys,Y : JSR key_down    ; (which keeps Y)
+    ASL A : ROL ctrl                ; its bit 7 in; eight shift out the last
+    DEY : BPL key
     \ Abort and save go to the front end at once (&7902). A save needs a
     \ fresh press: the key may still be down when the game carries on.
     BIT ctrl : BPL no_abort
@@ -334,7 +289,6 @@ CHECKPOINT_VARS = h_frame + 2 - h_cell    ; h_cell .. h_frame
 \ room drawn again (its cls clears the loader), its things, then the main
 \ loop, with no truck.
 .resume_room
-    LDA room : JSR draw_room
-    LDA #0 : STA drawn
+    JSR show_room
     JSR room_things
     JMP game_loop

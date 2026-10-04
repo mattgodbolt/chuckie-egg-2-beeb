@@ -145,6 +145,20 @@ export async function startBeeb({ disc, model = process.env.CE2_MODEL || "B-DFS1
             await beeb.clearBreakpoints();
             return r;
         },
+        // The tests' teleport (the game's test build only): at the end of
+        // this pass Harry is put in another room, standing at a cell (or as
+        // given), and the room entered as the original's set-up would
+        // (game.6502's teleport does that part). Run from within a pass; it
+        // returns stopped at the teleport, breakpoints cleared.
+        async teleport(room, cell, yf = 0, xf = 0, state = 1, face = 0) {
+            await beeb.write("dbg_room", [room]);
+            await beeb.runUntil("teleport", 20);
+            await beeb.write("h_cell", [cell & 0xff, cell >> 8]);
+            for (const [sym, v] of [["h_yf", yf], ["h_xf", xf], ["h_state", state], ["h_face", face], ["h_dx", 0],
+                ["h_dy", 0], ["h_cnt", 0], ["h_fall", 0], ["room_delta", 0], ["room", room]])
+                await beeb.write(sym, [v]);
+            await beeb.write("h_frame", await beeb.read(beeb.addr("harry_frames") + 2 * (face + xf), 2));
+        },
     };
     if (disc) {
         await beeb.boot(disc);

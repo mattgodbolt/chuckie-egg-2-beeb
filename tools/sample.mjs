@@ -7,9 +7,7 @@
 import { startBeeb } from "./beeb.mjs";
 const [room, row, col, n] = process.argv.slice(2).map(Number);
 const b = await startBeeb({ disc: "build/test.ssd", symbols: "build/test.json", bootUntil: "game_loop" });
-const cell = row * 32 + col;
-await b.write("dbg_start", [cell & 255, cell >> 8, 0, 0, 1, 0]);
-await b.write("dbg_room", [room]);
+await b.teleport(room, row * 32 + col);
 for (let i = 0; i < 4; i++) await b.runUntil("game_loop", 20);
 await b.clearBreakpoints();
 import { readFileSync } from "fs";

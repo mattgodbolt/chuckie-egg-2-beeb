@@ -80,7 +80,10 @@ handoff, the front end or anything paged.
   after touching the room drawer, the palettes or the tile drawing.
 - `make passes` replays `tests/scenarios.txt` (keys held over main-loop
   passes) on the original and the port and compares Harry's state every
-  pass. Add a scenario for any movement or game logic that lands.
+  pass. Add a scenario for any movement or game logic that lands, and for
+  every outcome of the game's machinery (a bug that stopped the egg ever
+  being made went unseen because no scenario reached it). `--start`,
+  `--power`, `--factory` and `--carry` set a scene up on both machines.
 - `tools/mkrooms.py`, `tools/packrooms.py` and `tools/mkgfx.py` regenerate
   `src/data/` from the original. The build never runs them; their output
   is committed.

@@ -4,7 +4,8 @@
 // tools/passcmp.py.
 //
 //   node tools/passlog.mjs '<inputs>' passes [--out build/bbc_passes.json]
-//       [--start room,row,col,yf,xf,state,face] [--power] [--peek sym:len,...]
+//       [--start room,row,col,yf,xf,state,face] [--power] [--factory n] [--carry n]
+//       [--peek sym:len,...]
 //
 // Pass 0 is the first time game_loop is reached; keys are set at the top of
 // a pass, before read_keys.
@@ -22,6 +23,9 @@ const startIdx = args.indexOf("--start");
 const start = startIdx >= 0 ? args.splice(startIdx, 2)[1].split(",").map(Number) : null;
 const powerIdx = args.indexOf("--power");
 const power = powerIdx >= 0 && args.splice(powerIdx, 1).length > 0;
+const option = (name) => { const i = args.indexOf(name); return i >= 0 ? Number(args.splice(i, 2)[1]) : null; };
+const factory = option("--factory");
+const carry = option("--carry");
 const inputs = (args[0] ?? "").split(",").filter(Boolean).map((part) => {
     const [name, rng] = part.split(":");
     const [a, b] = rng.split("-").map(Number);
@@ -36,20 +40,27 @@ const log = [];
 try {
     await b.breakpoint("game_loop");
     if (start) {
-        // --start room,row,col,yf,xf,state,face: placed during the first
-        // pass, put in the room at its end (teleport in game.6502).
+        // --start room,row,col,yf,xf,state,face: put in the room at the end
+        // of the first pass (beeb.mjs's teleport).
         await b.run(30);
         const [room, row, col, yf, xf, state, face] = start;
-        const cell = row * 32 + col;
-        await b.write("dbg_start", [cell & 0xff, cell >> 8, yf, xf, state, face]);
-        await b.write("dbg_room", [room]);
-        if (power) {
-            // As the original's logger does, at the teleport itself: on at
-            // the top of this pass, room 1's machines would move the train.
-            await b.runUntil("teleport");
-            await b.write("factory", [(await b.peek("factory")) | 1]);
-            await b.breakpoint("game_loop");    // (runUntil cleared it)
+        await b.teleport(room, row * 32 + col, yf, xf, state, face);
+        // As the original's logger does, at the teleport itself: on at the
+        // top of this pass, room 1's machines would move the train.
+        if (power) await b.write("factory", [(await b.peek("factory")) | 1]);
+        if (factory !== null) await b.write("factory", [factory]);
+        if (carry !== null) {
+            // Carried, as touch_thing's take leaves it: out of the world,
+            // its height (its type's frame) for the drop, its name shown.
+            await b.write("carried", [carry]);
+            await b.write(b.addr("t_room") + carry, [(await b.peek(b.addr("t_room") + carry)) | 0x80]);
+            const type = await b.peek(b.addr("t_type") + carry);
+            const [, gfx, kind] = await b.read(b.addr("thing_types") + 3 * type, 3);
+            const frame = await b.read(b.addr("object_frames") + 2 * gfx, 2);
+            await b.write("carried_h", [await b.peek(frame[0] | (frame[1] << 8))]);
+            await b.write("carrying_name", [(kind & 15) + 1]);
         }
+        await b.breakpoint("game_loop");    // (runUntil cleared it)
     }
     for (let n = 0; n < passes; n++) {
         const r = await b.run(n === 0 ? 30 : 10);

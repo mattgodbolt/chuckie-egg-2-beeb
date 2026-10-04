@@ -37,8 +37,8 @@ KIND_FIXED = &40            ; kind bit 6 (with bit 7): a machine part
     \ The footprint: h x w cells from the thing's cell.
     LDA o_cell : STA tp
     CLC : LDA o_cell+1 : ADC #HI(type_map) : STA tp+1
-    LDY #0 : LDA (o_frame_zp),Y : STA th
-    INY : LDA (o_frame_zp),Y : STA tw
+    LDY #0 : LDA (o_frame),Y : STA th
+    INY : LDA (o_frame),Y : STA tw
 .row
     LDY #0
 .col
@@ -56,26 +56,35 @@ KIND_FIXED = &40            ; kind bit 6 (with bit 7): a machine part
     RTS
 }
 
-\ Load thing X's position, ink and graphic into the current-thing record
-\ (and its frame into o_frame_zp for reading), as &9A10 and &7F01 do. The
-\ round robin's pointer (o_index, the original's &A400) is the round
-\ robin's alone: touching and taking act on that thing, whatever the
-\ record last had loaded into it.
-ZA_AUTO2 o_frame_zp
+\ Load thing X's position, ink and graphic into the current-thing record,
+\ as &9A10 and &7F01 do. The round robin's pointer (o_index, the
+\ original's &A400) is the round robin's alone: touching and taking act on
+\ that thing, whatever the record last had loaded into it.
 .thing_load
 {
-    STX o_thing
-    LDA t_row,X : LSR A : LSR A : LSR A : STA o_cell+1
-    LDA t_row,X : ASL A : ASL A : ASL A : ASL A : ASL A
-    ORA t_col,X : STA o_cell
+    LDY t_col,X : LDA t_row,X : JSR row_col_cell
+    STA o_cell : STY o_cell+1
     LDA #1 : STA o_sel              ; (the original: the attribute's high byte)
     LDA t_type,X : STA tl_t : ASL A : CLC : ADC tl_t : TAY
     LDA thing_types,Y : STA o_ink
-    LDA thing_types+1,Y : STA o_gfx
     LDA thing_types+2,Y : STA tl_kind
-    LDA o_gfx : ASL A : TAY
-    LDA object_frames,Y : STA o_frame : STA o_frame_zp
-    LDA object_frames+1,Y : STA o_frame+1 : STA o_frame_zp+1
+    LDA thing_types+1,Y : ASL A : TAY       ; its graphic
+    LDA object_frames,Y : STA o_frame
+    LDA object_frames+1,Y : STA o_frame+1
+    RTS
+}
+
+\ The cell at row A, column Y: its low byte in A, its high byte in Y. X is
+\ kept.
+.row_col_cell
+{
+    ZA_AUTO1 col
+    STY col
+    PHA
+    LSR A : LSR A : LSR A : TAY
+    PLA
+    ASL A : ASL A : ASL A : ASL A : ASL A
+    ORA col
     RTS
 }
 
@@ -90,11 +99,6 @@ ZA_AUTO2 o_frame_zp
 .next
     INX : CPX #&29 : BNE loop
     LDA #0 : STA o_sel
-    \ Nothing of this room's is on screen yet.
-    LDX #31
-.clear
-    STA on_screen,X
-    DEX : BPL clear
     RTS
 }
 
@@ -122,136 +126,40 @@ ZA_AUTO2 o_frame_zp
 .draw_object
 {
     LDA o_sel : BEQ none
-    LDA o_cell : STA sp_cell
-    LDA o_cell+1 : STA sp_cell+1
-    LDA #0 : STA sp_yf
-    LDA o_frame : STA sp_frame
-    LDA o_frame+1 : STA sp_frame+1
-    LDA o_ink : STA sp_ink
-    JSR draw_sprite
-    LDX o_thing : JSR thing_bit
-    ORA on_screen,Y : STA on_screen,Y
+    LDX #o_cell : JMP sp_draw_at
 .none
     RTS
 }
 
 \ Erase the current thing where it is (&884D then &7FC9).
 .erase_object
-{
-    LDA o_cell : STA sp_cell
-    LDA o_cell+1 : STA sp_cell+1
-    LDA #0 : STA sp_yf
-    LDA o_frame : STA sp_frame
-    LDA o_frame+1 : STA sp_frame+1
-    JSR erase_image
-    LDX o_thing : JSR thing_bit
-    EOR #&FF : AND on_screen,Y : STA on_screen,Y
-    RTS
-}
+    LDX #o_cell : JMP sp_erase_at
 
-\ Y = X / 8, A = the bit for X in on_screen.
-.thing_bit
-{
-    TXA : LSR A : LSR A : LSR A : TAY
-    TXA : AND #7 : TAX
-    LDA bits,X
+\ Draw or erase the sprite whose record is at X in zero page (memory.6502):
+\ cell (2), yf, frame (2), and to draw, the ink.
+.sp_draw_at
+    LDA 5,X
+\ ... in Spectrum colour A.
+.sp_draw_ink
+    STA sp_ink
+    JSR sp_record
+    JMP draw_sprite
+.sp_erase_at
+    JSR sp_record
+    JMP erase_image
+.sp_record
+    LDA 0,X : STA sp_cell
+    LDA 1,X : STA sp_cell+1
+    LDA 2,X : STA sp_yf
+    LDA 3,X : STA sp_frame
+    LDA 4,X : STA sp_frame+1
     RTS
-.bits
-    EQUB 1, 2, 4, 8, 16, 32, 64, 128
-}
-
-\ Harry touched the current thing (&9515).
-.touch_thing
-{
-    LDA o_kind : BMI not_bonus
-    \ A bonus item: kind x 100 x egg points, plus random tens and units.
-    LDX o_index
-    LDA t_room,X : ORA #&80 : STA t_room,X     ; gone for this egg
-    LDA egg : STA bonus_n
-.score_loop
-    LDA o_kind
-    CMP #10 : BCC hundreds
-    SBC #10 : PHA
-    LDA #1 : LDX #6 : JSR add_score            ; a thousand
-    PLA
-.hundreds
-    LDX #7 : JSR add_score
-    DEC bonus_n : BNE score_loop
-    JSR rng : AND #7 : LDX #8 : JSR add_score
-    JSR rng : AND #7 : LDX #9 : JSR add_score
-    JMP erase_object
-.not_bonus
-    AND #KIND_FIXED : BEQ take
-    JMP fixed_thing
-\ Take (&956B)
-.take
-    LDA ctrl : AND #&40 : BEQ done          ; TAKE held
-    LDA take_latch : BNE done
-    LDX o_index
-    CPX #&25 : BEQ done                     ; the girder is never taken
-    CPX #&26 : BNE not_ladder
-    LDA h_state : CMP #1 : BNE done         ; the ladder: standing only
-.not_ladder
-    LDA carried : BMI hands_empty
-    CMP #&20 : BCC done                     ; hands full: only a basket
-    CMP #&24 : BCS done
-    STA bonus_n
-    TXA : LSR A : LSR A : LSR A : CLC : ADC #&20
-    CMP bonus_n : BNE done                  ; ... and its own kind
-    LDA bonus_n : SEC : SBC #&20 : TAY
-    LDA in_basket,Y : CLC : ADC #1 : STA in_basket,Y
-    JMP out_of_world
-.hands_empty
-    LDA o_kind : AND #15 : CLC : ADC #1 : JSR set_carrying
-    LDX o_index : STX carried
-    LDY #0 : LDA (o_frame_zp),Y : STA carried_h
-    CPX #&27 : BNE out_of_world
-    LDA factory : AND #&F7 : STA factory    ; the toy off the egg maker
-.out_of_world
-    LDX o_index
-    LDA t_room,X : ORA #&80 : STA t_room,X
-    JSR thing_cells
-    JSR erase_object
-    LDA #10 : STA take_latch
-.done
-    RTS
-}
-
-\ Fixed things (&95F0): the power lever and the LIFT sign.
-.fixed_thing
-{
-    LDA o_kind : AND #7
-    CMP #1 : BEQ lever
-    CMP #2 : BNE done
-    \ The LIFT sign (&9663): OUT OF ORDER instead, for the rest of the egg.
-    LDX o_index
-    LDA t_room,X : ORA #&80 : STA t_room,X
-    LDA t_room-3,X : AND #&7F : STA t_room-3,X
-    JMP erase_object
-.lever
-    \ (&95FF) Jumped across from the left: on; from the right: off.
-    LDA h_dx : BMI power_off
-    JMP power_on
-.power_off
-    \ (&9649)
-    LDA factory : AND #&FE : STA factory
-    LDA t_room+&34 : ORA #&80 : STA t_room+&34
-    LDA t_room+&35 : ORA #&80 : STA t_room+&35
-    LDA t_room+&37 : AND #&7F : STA t_room+&37
-    LDA t_room+&38 : AND #&7F : STA t_room+&38
-    JMP train_reset
-.done
-    RTS
-}
 
 \ PowerOn (&9606): the generator on; and the restart point is moved.
 .power_on
 {
     LDA factory : ORA #1 : STA factory
-    LDA t_room+&34 : AND #&7F : STA t_room+&34
-    LDA t_room+&35 : AND #&7F : STA t_room+&35
-    LDA t_room+&37 : ORA #&80 : STA t_room+&37
-    LDA t_room+&38 : ORA #&80 : STA t_room+&38
+    LDX #&34 : LDY #&37 : JSR power_signs
     JSR toy_check
     JSR egg_check
     \ The restart record (&962F): room 115, row 21, column 30, facing
@@ -269,111 +177,102 @@ ZA_AUTO2 o_frame_zp
     EQUW sprites                    ; frame 0 (&DFA4 - 2)
     EQUB 115
 
+\ Fixed things (&95F0): the power lever and the LIFT sign.
+.fixed_thing
+{
+    LDA o_kind : AND #7
+    CMP #1 : BEQ lever
+    CMP #2 : BNE done
+    \ The LIFT sign (&9663): OUT OF ORDER instead, for the rest of the egg.
+    LDX o_index : JSR thing_off
+    DEX : DEX : DEX : JSR thing_on
+    JMP erase_object
+.lever
+    \ (&95FF) Jumped across from the left: on; from the right: off.
+    LDA h_dx : BPL power_on
+    \ (&9649)
+    LDA factory : AND #&FE : STA factory
+    LDX #&37 : LDY #&34 : JSR power_signs
+    JMP train_reset
+.done
+    RTS
+}
+
+\ Harry touched the current thing (&9515).
+.touch_thing
+{
+    LDA o_kind : BPL bonus
+    AND #KIND_FIXED : BNE fixed_thing
+\ Take (&956B)
+    BIT ctrl : BVC done                     ; TAKE held
+    LDA take_latch : BNE done
+    LDX o_index
+    CPX #&25 : BEQ done                     ; the girder is never taken
+    CPX #&26 : BNE not_ladder
+    LDA h_state : CMP #1 : BNE done         ; the ladder: standing only
+.not_ladder
+    LDA carried : BMI hands_empty
+    CMP #&24 : BCS done                     ; hands full: only a basket...
+    TXA : LSR A : LSR A : LSR A : TAY       ; (the thing's group)
+    ORA #&20 : CMP carried : BNE done       ; ... of the thing's group
+    LDA in_basket,Y : CLC : ADC #1 : STA in_basket,Y
+    JMP out_of_world
+.hands_empty
+    LDA o_kind : AND #15 : CLC : ADC #1 : JSR set_carrying
+    LDX o_index : STX carried
+    LDY #0 : LDA (o_frame),Y : STA carried_h
+    CPX #&27 : BNE out_of_world
+    LDA factory : AND #&F7 : STA factory    ; the toy off the egg maker
+.out_of_world
+    LDX o_index : JSR thing_off
+    JSR thing_cells
+    JSR erase_object
+    LDA #10 : STA take_latch
+.done
+    RTS
+.bonus
+    \ A bonus item: kind x 100 x egg points, plus random tens and units.
+    LDX o_index : JSR thing_off             ; gone for this egg
+    LDA egg : STA bonus_n
+.score_loop
+    LDA o_kind
+    CMP #10 : BCC hundreds
+    SBC #10 : PHA
+    LDA #1 : LDX #6 : JSR add_score         ; a thousand
+    PLA
+.hundreds
+    LDX #7 : JSR add_score
+    DEC bonus_n : BNE score_loop
+    JSR rng : AND #7 : LDX #8 : JSR add_score
+    JSR rng : AND #7 : LDX #9 : JSR add_score
+    JMP erase_object
+}
+
+\ The power's signs: things X and X+1 into the world, Y and Y+1 out of it.
+.power_signs
+    JSR thing_on : INX : JSR thing_on
+    TYA : TAX
+    JSR thing_off : INX
+    \ Fall into thing_off.
+\ Thing X out of the world (its room's bit 7 set), or into it. X, Y kept.
+.thing_off
+    LDA t_room,X : ORA #&80 : STA t_room,X
+    RTS
+.thing_on
+    LDA t_room,X : AND #&7F : STA t_room,X
+    RTS
+
 \ The train back to its start (&9AFD).
 .train_reset
     LDA #74 : STA train_room
     LDA #6 : STA train_pos
     RTS
 
-\ Drop (&96B1), twice a pass after the contact test. With empty hands,
-\ the girder (&9934).
-.drop
-{
-    LDA take_latch : BEQ unlatched
-    LDA ctrl : AND #&40 : BNE done
-    LDA #0 : STA take_latch
-.unlatched
-    LDA ctrl : AND #&40 : BEQ done
-    LDA f_thing : BPL done                  ; something is still falling
-    LDA h_state : CMP #1 : BNE done         ; Harry must be standing
-    LDX carried : BPL holding
-    JMP girder
-.done
+\ The girder back to its start, the gap open (&9934; and a death, &8A29).
+.girder_home
+    LDA #13 : STA t_row+&25 : LDA #10 : STA t_col+&25
+    LDA factory : AND #&FB : STA factory
     RTS
-.holding
-    STX drop_x
-    \ Its column: Harry's left column facing left, his right facing right;
-    \ its bottom level with his feet.
-    LDA h_cell : AND #31 : STA drop_col
-    LDA h_face : BNE left
-    LDY #1 : LDA (h_frame),Y
-    SEC : SBC #1 : CLC : ADC drop_col : STA drop_col
-.left
-    LDA h_cell : LSR A : LSR A : LSR A : LSR A : LSR A : STA drop_row
-    LDA h_cell+1 : ASL A : ASL A : ASL A : ORA drop_row  ; Harry's top row
-    CLC : ADC #1                            ; + h - 1 = his bottom row (h = 2)
-    SEC : SBC carried_h : CLC : ADC #1 : STA drop_row
-    LDA t_row,X : STA old_row
-    LDA t_col,X : STA old_col
-    LDA drop_row : STA t_row,X
-    LDA drop_col : STA t_col,X
-    JSR thing_cells
-    LDA cell_hit : BEQ placed
-    \ Refused: something there. Take the footprint back; still carried.
-    JSR thing_cells
-    LDA old_row : STA t_row,X
-    LDA old_col : STA t_col,X
-    RTS
-.placed
-    LDA room : STA t_room,X                 ; in the world
-    LDA #0 : JSR set_carrying
-    LDA #10 : STA take_latch
-    LDA #&FF : STA carried
-    CPX #&27 : BNE not_toy
-    JMP toy_placed
-.not_toy
-    \ Gravity exists only for hoppers: the cell under its left column must
-    \ be empty, the column 9-23, the room and the thing a match.
-    JSR under_object : BNE no_fall
-    LDA o_cell : AND #31
-    CMP #9 : BCC no_fall
-    CMP #24 : BCS no_fall
-    TXA : LSR A : LSR A : LSR A : STA drop_g
-    LDA room
-    LDY #&21 : CMP #33 : BEQ hopper
-    LDY #&22 : CMP #51 : BEQ hopper
-    LDY #&23 : CMP #110 : BEQ hopper
-    LDY #&20 : CMP #95 : BEQ hopper
-.no_fall
-    RTS
-.hopper
-    STY drop_g2
-    CPX drop_g2 : BEQ falls                 ; its basket
-    TYA : SEC : SBC #&20
-    CMP drop_g : BEQ falls                  ; or one of its group
-    RTS
-.falls
-    \ (&9796) Out of the world, its footprint lifted; it falls 2 lines a
-    \ call.
-    STX f_thing
-    LDA t_room,X : ORA #&80 : STA t_room,X
-    JSR thing_cells
-    LDA o_cell : STA f_cell : STA f_ocell
-    LDA o_cell+1 : STA f_cell+1 : STA f_ocell+1
-    LDA #0 : STA f_yf : STA f_oyf
-    LDA o_frame : STA f_frame
-    LDA o_frame+1 : STA f_frame+1
-    LDA o_ink : STA f_ink
-    RTS
-}
-
-\ Is the cell under the current thing's left column taken? Z clear if so.
-.under_object
-{
-    ZA_AUTO2 up
-    LDA o_cell : STA up
-    CLC : LDA o_cell+1 : ADC #HI(type_map) : STA up+1
-    LDY #0 : LDA (o_frame_zp),Y : TAX       ; its height
-.down
-    CLC : LDA up : ADC #32 : STA up
-    BCC ok
-    INC up+1
-.ok
-    DEX : BNE down
-    LDX drop_x
-    LDY #0 : LDA (up),Y
-    RTS
-}
 
 \ Girder (&9934): in room 96, standing on it with empty hands, TAKE swings
 \ it between the floor and the gap; Harry falls.
@@ -384,16 +283,113 @@ ZA_AUTO2 o_frame_zp
     LDX #&25 : JSR thing_cells
     JSR erase_object
     LDA #0 : STA h_state : STA h_fall
-    LDA factory : AND #4 : BNE back
+    LDA factory : EOR #4 : STA factory      ; factory bit 2: across the gap
+    AND #4 : BEQ back
     LDA #14 : STA t_row+&25 : LDA #19 : STA t_col+&25
-    LDA factory : ORA #4 : STA factory
-    JMP place
+    BNE place                               ; (always)
 .back
-    LDA #13 : STA t_row+&25 : LDA #10 : STA t_col+&25
-    LDA factory : AND #&FB : STA factory
+    JSR girder_home
 .place
     LDX #&25 : JMP thing_cells
 .done
+    RTS
+}
+
+\ Drop (&96B1), twice a pass after the contact test. With empty hands,
+\ the girder (&9934).
+.drop
+{
+    \ One take or drop a press: TAKE released clears the latch.
+    BIT ctrl : BVS held
+    LDA #0 : STA take_latch
+.done
+    RTS
+.held
+    LDA take_latch : BNE done
+    LDA f_thing : BPL done                  ; something is still falling
+    LDA h_state : CMP #1 : BNE done         ; Harry must be standing
+    LDX carried : BMI girder
+    STX drop_x
+    \ Its column: Harry's left column facing left, his right facing right;
+    \ its bottom level with his feet.
+    LDA h_cell : AND #31 : STA drop_col
+    LDA h_face : BNE left
+    LDY #1 : LDA (h_frame),Y
+    CLC : ADC drop_col : STA drop_col : DEC drop_col
+.left
+    LDA h_cell : LSR A : LSR A : LSR A : LSR A : LSR A : STA drop_row
+    LDA h_cell+1 : ASL A : ASL A : ASL A : ORA drop_row  ; Harry's top row
+    \ + h - 1 = his bottom row (h = 2), - the thing's height + 1
+    CLC : ADC #2 : SEC : SBC carried_h : STA drop_row
+    JSR swap_place                          ; tried there, the old place kept
+    JSR thing_cells
+    LDA cell_hit : BNE refused
+    LDA room : STA t_room,X                 ; in the world
+    LDA #10 : STA take_latch
+    LDA #&FF : STA carried
+    LDA #0 : JSR set_carrying
+    LDX drop_x
+    CPX #&27 : BNE not_toy
+    JMP toy_placed
+.not_toy
+    \ Gravity exists only for hoppers: the cell under its left column must
+    \ be empty, the column 9-23, the room and the thing a match.
+    LDX #o_cell : JSR under_record : BNE no_fall
+    LDX drop_x
+    LDA o_cell : AND #31
+    CMP #9 : BCC no_fall
+    CMP #24 : BCS no_fall
+    LDY #3
+.find
+    LDA hopper_rooms,Y : CMP room : BEQ hopper
+    DEY : BPL find
+.no_fall
+    RTS
+.hopper
+    TYA : ORA #&20 : STA drop_g
+    CPX drop_g : BEQ falls                  ; its basket (&20 + Y)
+    TXA : LSR A : LSR A : LSR A : STA drop_g
+    CPY drop_g : BEQ falls                  ; or one of its group (Y)
+    RTS
+.falls
+    \ (&9796) Out of the world, its footprint lifted; it falls 2 lines a
+    \ call from where it is: the current-thing record (cell, yf 0, frame,
+    \ ink), as the original copies it.
+    STX f_thing
+    JSR thing_off
+    JSR thing_cells
+    LDX #5
+.copy
+    LDA o_cell,X : STA f_cell,X
+    DEX : BPL copy
+    RTS
+.refused
+    \ Something there. Take the footprint back; still carried.
+    JSR thing_cells
+    \ Fall into swap_place.
+.swap_place
+    \ The thing's row and column swapped with drop_row and drop_col.
+    LDA t_row,X : LDY drop_row : STA drop_row : TYA : STA t_row,X
+    LDA t_col,X : LDY drop_col : STA drop_col : TYA : STA t_col,X
+    RTS
+}
+\ The hoppers' rooms: the toy parts' (basket &20), the milk's, the
+\ cocoa's, the sugar's.
+.hopper_rooms
+    EQUB 95, 33, 51, 110
+
+\ The type of the cell under the bottom-left of the sprite record at X in
+\ zero page (its height, at most 5, rows below); Z set if it is empty.
+.under_record
+{
+    ZA_AUTO2 p
+    LDA 3,X : STA p
+    LDA 4,X : STA p+1
+    LDY #0 : LDA (p),Y                      ; the height
+    ASL A : ASL A : ASL A : ASL A : ASL A
+    CLC : ADC 0,X : STA p
+    LDA 1,X : ADC #HI(type_map) : STA p+1
+    LDA (p),Y
     RTS
 }
 
@@ -404,80 +400,42 @@ ZA_AUTO2 o_frame_zp
     LDA f_thing : BPL active
     RTS
 .active
-    LDA f_frame : STA f_frame_zp
-    LDA f_frame+1 : STA f_frame_zp+1
+    LDX #f_cell
     LDA f_yf : BNE step_down
     \ On a cell boundary: is the cell under it taken?
-    LDA f_cell : STA fall_p
-    CLC : LDA f_cell+1 : ADC #HI(type_map) : STA fall_p+1
-    LDY #0 : LDA (f_frame_zp),Y : TAX
-.down
-    CLC : LDA fall_p : ADC #32 : STA fall_p
-    BCC ok
-    INC fall_p+1
-.ok
-    DEX : BNE down
-    LDY #0 : LDA (fall_p),Y : BNE land
+    JSR under_record : BNE land
 .step_down
-    \ Save where it was, step down 2 lines, erase the old, draw the new.
-    LDA f_cell : STA f_ocell
-    LDA f_cell+1 : STA f_ocell+1
-    LDA f_yf : STA f_oyf
-    CLC : ADC #2 : AND #7 : STA f_yf
+    \ Erase it, step down 2 lines, draw it (the original saves where it was
+    \ to erase it after the step: the same erase, then the same draw).
+    JSR sp_erase_at
+    LDA f_yf : CLC : ADC #2 : AND #7 : STA f_yf
     BNE same_cell
     CLC : LDA f_cell : ADC #32 : STA f_cell
     BCC same_cell
     INC f_cell+1
 .same_cell
-    JSR f_erase
-    JMP f_draw
+    LDX #f_cell : JMP sp_draw_at
 .land
-    LDA f_cell : STA f_ocell
-    LDA f_cell+1 : STA f_ocell+1
-    LDA f_yf : STA f_oyf
-    JSR f_erase
+    JSR sp_erase_at                 ; where it is
     LDA f_thing : JSR deliver       ; (which can read f_thing)
     LDA #&FF : STA f_thing
     RTS
 }
-ZA_AUTO2 fall_p
-ZA_AUTO2 f_frame_zp
-
-.f_erase
-    LDA f_ocell : STA sp_cell
-    LDA f_ocell+1 : STA sp_cell+1
-    LDA f_oyf : STA sp_yf
-    LDA f_frame : STA sp_frame
-    LDA f_frame+1 : STA sp_frame+1
-    JMP erase_image
-.f_draw
-    LDA f_cell : STA sp_cell
-    LDA f_cell+1 : STA sp_cell+1
-    LDA f_yf : STA sp_yf
-    LDA f_frame : STA sp_frame
-    LDA f_frame+1 : STA sp_frame+1
-    LDA f_ink : STA sp_ink
-    JMP draw_sprite
 
 \ Deliver (&97FA) thing A into its hopper.
 .deliver
 {
     CMP #&20 : BCC single
-    BNE basket
-    JMP toy_basket
-.basket
-    SEC : SBC #&20 : STA dv_g
-    TAY : LDA in_basket,Y               ; a basket: its contents
-    JMP count
+    BEQ toy_basket
+    \ A basket (&21-&23): its contents.
+    AND #3 : TAY
+    LDA in_basket,Y
+    BCS count                           ; (always: C from the compare)
 .single
-    LSR A : LSR A : LSR A
-    BNE ingredient
-    JMP part_delivered
-.ingredient
-    STA dv_g
+    LSR A : LSR A : LSR A : TAY         ; 0 a toy part, 1-3 an ingredient
+    BEQ part_delivered
     LDA #1
 .count
-    LDY dv_g
     CLC : ADC delivered,Y : STA delivered,Y
     CMP #8 : BNE done                   ; exactly 8
     LDA t_room+&30,Y : AND #&7F : STA t_room+&30,Y  ; FULL!
@@ -485,11 +443,7 @@ ZA_AUTO2 f_frame_zp
 .shift
     ASL A : DEY : BNE shift
     ORA factory : STA factory
-    LDA egg : STA bonus_n
-.score_loop
-    LDA #1 : LDX #5 : JSR add_score     ; 10,000 a time
-    DEC bonus_n : BNE score_loop
-    JSR extra_life
+    LDA #1 : JSR reward                 ; 10,000 a time
     JMP egg_check
 .done
     RTS
@@ -504,34 +458,29 @@ ZA_AUTO2 f_frame_zp
     JMP toy_check
 .toy_basket
 {
-    LDX #0
+    LDX #7
 .loop
     LDA t_room,X : BPL next
     LDA t_room+&29,X : AND #&7F : STA t_room+&29,X
 .next
-    INX : CPX #8 : BNE loop
+    DEX : BPL loop
     LDA delivered : CLC : ADC in_basket : STA delivered
     \ Fall into toy_check.
 }
 \ ToyCheck (&989E): with power and all eight parts, the toy.
 .toy_check
 {
-    LDA factory : AND #1 : BEQ done
-    LDA factory : AND #2 : BNE done
+    LDA factory : AND #3 : CMP #1 : BNE done    ; power on, no toy yet
     LDA delivered : CMP #8 : BNE done
     LDX #7
 .lights
     LDA t_room+&29,X : ORA #&80 : STA t_room+&29,X
     DEX : BPL lights
-    LDA t_room+&27 : AND #&7F : STA t_room+&27  ; THE TOY!
+    LDX #&27 : JSR thing_on             ; THE TOY!
     LDA factory : ORA #2 : STA factory
-    LDA egg : STA bonus_n
-.score_loop
-    LDA #2 : LDX #5 : JSR add_score     ; 20,000 a time
-    DEC bonus_n : BNE score_loop
-    JSR extra_life
+    LDA #2 : JSR reward                 ; 20,000 a time
     LDA room : CMP #95 : BNE done
-    JSR wipe_lights
+    JMP wipe_lights
 .done
     RTS
 }
@@ -552,14 +501,10 @@ ZA_AUTO2 f_frame_zp
 .egg_check
 {
     LDA factory : ORA #4 : CMP #&EF : BNE done
-    LDA t_room+&28 : AND #&7F : STA t_room+&28  ; THE EGG!
+    LDX #&28 : JSR thing_on             ; THE EGG!
     LDA factory : ORA #&10 : STA factory
-    LDA t_room+&27 : ORA #&80 : STA t_room+&27  ; the toy is used up
-    LDA egg : STA bonus_n
-.score_loop
-    LDA #2 : LDX #5 : JSR add_score
-    DEC bonus_n : BNE score_loop
-    JSR extra_life
+    LDX #&27 : JSR thing_off            ; the toy is used up
+    LDA #2 : JSR reward
     LDA room : CMP #48 : BNE done
     LDX #&27 : JSR thing_cells          ; the toy's footprint and picture go
     JMP erase_object
@@ -590,6 +535,24 @@ ZA_AUTO2 f_frame_zp
     JMP draw_digit
 }
 
+\ Add A to score digit X, egg times.
+.times_egg
+{
+    ZA_AUTO1 n
+    ZA_AUTO1 digit
+    ZA_AUTO1 value
+    STA value : STX digit
+    LDA egg : STA n
+.loop
+    LDA value : LDX digit : JSR add_score
+    DEC n : BNE loop
+    RTS
+}
+
+\ The factory's rewards: A x 10,000 x egg, and a life.
+.reward
+    LDX #5 : JSR times_egg
+    \ Fall into extra_life.
 \ ExtraLife (&A2DD): at most 255.
 .extra_life
 {
@@ -600,25 +563,17 @@ ZA_AUTO2 f_frame_zp
 }
 
 \ The toy maker's lights wiped when the toy is made in front of you (the
-\ original prints spaces in black over them, {AT 21,9}..{AT 22,9}).
+\ original prints spaces in black over them, {AT 21,9}..{AT 22,9}). Black
+\ is room 95's paper, logical 0 in every band of its (src/data/rooms.6502,
+\ bands.6502), so the cells are cleared to zero.
 .wipe_lights
 {
-    LDX #3
+    LDA #0 : LDX #4 * 16 - 1
 .loop
-    STX wl_x
-    LDA #LO(21 * 32 + 9) : CLC : ADC wl_x : STA cell : LDA #HI(21 * 32 + 9) : STA cell+1
-    JSR black_cell
-    LDA #LO(22 * 32 + 9) : CLC : ADC wl_x : STA cell : LDA #HI(22 * 32 + 9) : STA cell+1
-    JSR black_cell
-    LDX wl_x : DEX : BPL loop
+    STA screen + 16 * (21 * 32 + 9),X
+    STA screen + 16 * (22 * 32 + 9),X
+    DEX : BPL loop
     RTS
-}
-\ A space in attribute 0 (black on black) at `cell`.
-.black_cell
-{
-    LDA #LO(text_font) : STA glyph
-    LDA #HI(text_font) : STA glyph+1
-    LDA #0 : JMP draw_glyph
 }
 
 \ EggInit (&9A80): every new egg, the factory back as it was.
@@ -636,65 +591,51 @@ ZA_AUTO2 f_frame_zp
     LDA thing_init+41,X : STA t_row,X
     LDA thing_init+82,X : STA t_col,X
     DEX : BPL init
-    LDA #0 : JSR set_carrying
     \ In the world: 0-&26 and &37-&FF; out: &27-&36.
     LDX #0
 .world
-    LDA t_room,X
-    CPX #&27 : BCC in
-    CPX #&37 : BCS in
-    ORA #&80 : JMP set
-.in
-    AND #&7F
+    LDA t_room,X : AND #&7F
+    CPX #&27 : BCC set
+    CPX #&37 : BCS set
+    ORA #&80
 .set
     STA t_room,X
     INX : BNE world
-    LDA #0 : STA factory : STA take_latch
     LDA #&FF : STA carried : STA f_thing
-    LDX #7
     LDA #0
+    LDX #in_basket + 3 - factory
 .counts
-    STA delivered,X
+    STA factory,X               ; factory, take_latch, delivered, in_basket
     DEX : BPL counts
+    JSR set_carrying            ; NOTHING
     \ More monsters each egg: entries 1 .. min(130 + 25 * egg, 255).
     LDA egg : CMP #5 : BCC few
     LDA #5
 .few
     TAX
-    LDA #&83
+    LDA #&82
 .add
     CLC : ADC #&19 : DEX : BNE add
-    STA ei_n                    ; entries 0 .. n-1 on (n = 0: all 256)
+    STA ei_n                    ; the last entry on
     LDX #0
 .monsters
-    LDA mon_room,X
-    CPX ei_n : BCC on
-    ORA #&80 : JMP mset
-.on
-    AND #&7F
+    LDA mon_room,X : AND #&7F
+    CPX ei_n : BEQ mset : BCC mset
+    ORA #&80
 .mset
     STA mon_room,X
     INX : BNE monsters
-    LDA ei_n : BEQ all_on       ; (the original's loop: n = 0 clears all)
     LDA mon_room : ORA #&80 : STA mon_room   ; and entry 0 (the sitting dog) off
-    JMP toy
-.all_on
-    LDX #0
-.all
-    LDA mon_room,X : AND #&7F : STA mon_room,X
-    INX : BNE all
-    LDA mon_room : ORA #&80 : STA mon_room
-.toy
     LDA #4 : STA truck_strip    ; (&9AF5)
     \ This egg's toy (&9B08): motorbike, car, boat, jet, then again.
-    LDA egg : SEC : SBC #1 : AND #3 : TAX : INX
-    LDA #&1C
-.base
-    CLC : ADC #9 : DEX : BNE base
+    LDA egg : SEC : SBC #1 : AND #3 : TAX
+    LDA toy_frames,X
     LDX #0
 .gfx
     STA thing_types+1,X
     CLC : ADC #1
     INX : INX : INX : CPX #27 : BNE gfx
     JMP train_reset
+.toy_frames
+    EQUB &25, &2E, &37, &40     ; each toy's first graphic
 }

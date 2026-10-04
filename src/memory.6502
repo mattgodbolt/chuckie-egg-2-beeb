@@ -4,6 +4,42 @@
 \ an address.
 \ ***************************************************************************
 
+\ Zero page &00-&5F is baron's allocator pool (ZA_POOL in main.6502). The
+\ game's permanent state is here, outside it: death resets the stack and
+\ jumps back into the main loop, as the original does, which the allocator
+\ would read as recursion.
+ZP_FIXED = &60
+SECTION ZeroPage, org = ZP_FIXED, guard = &90
+\ Harry (docs/research/harry.md). The original keeps addresses; the logic
+\ needs only the cell (row * 32 + col), yf and xf.
+.h_cell     SKIP 2          ; top-left cell
+.h_yf       SKIP 1          ; pixel line in the cell, 0-7
+.h_xf       SKIP 1          ; 2-pixel step in the cell, 0-3; climbing phase on ladders
+.h_dx       SKIP 1          ; this update's move: -1/0/+1 (2 walking off an edge)
+.h_dy       SKIP 1          ; ... pixels, up positive
+.h_face     SKIP 1          ; 0 right, 4 left, 8 climbing
+.h_mom      SKIP 1          ; momentum: the direction of a jump or slope
+.h_state    SKIP 1          ; 0 fall 1 walk 2 pipe 3 ladder 4 rope 5 slope up 6 slide 7 jump 8 lift
+.h_cnt      SKIP 1          ; jump count (&A485)
+.h_fall     SKIP 1          ; fall counter (&A486)
+.h_frame    SKIP 2          ; the frame to draw
+.hptr       SKIP 2          ; type_map + h_cell, for T(off)
+.hptr_up    SKIP 2          ; ... a row up, for the negative offsets
+.ctrl       SKIP 1          ; the keys: 4 up 3 down 2 left 1 right 0 jump (&A48A)
+.room       SKIP 1          ; 1-120 (&A3FE)
+.room_delta SKIP 1          ; set by leaving a room (&A48B)
+.carried    SKIP 1          ; the object Harry carries, &FF none (&A560)
+.drawn      SKIP 1          ; bit 7: Harry is on screen at d_cell, d_yf, d_frame
+.d_cell     SKIP 2
+.d_yf       SKIP 1
+.d_frame    SKIP 2
+ENDSECTION
+
+\ The checkpoint (&A46B): Harry as he entered the room, for a death.
+SECTION LowState, org = &0D00, guard = &0E00
+.checkpoint SKIP 16
+ENDSECTION
+
 \ The three 32 x 24 maps the room drawer fills, one byte a cell, indexed by
 \ cell = row * 32 + column, as the original's at &5D00, &6000 and &6300.
 \ They sit in OS workspace the game doesn't use once it is running: the

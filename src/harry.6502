@@ -1,0 +1,715 @@
+\ ***************************************************************************
+\ Harry: a transcription of the original's update (&80B6-&8A97), from
+\ docs/research/harry.md section 6, which follows the code in order. The
+\ original's labels are given with their addresses.
+\
+\ The original keeps Harry as screen and attribute addresses; here he is a
+\ cell (row * 32 + col), a pixel line yf and a 2-pixel step xf, which is
+\ all the logic uses. T(off) is the cell type at his top-left cell + off
+\ (off = 32 a row down + 1 a column right): (hptr),Y, or (hptr_up),Y with
+\ off + 32 for the negative ones. Lifts (state 8 and the landing test) are
+\ not in yet.
+\ ***************************************************************************
+
+ZA_AUTO1 vE                 ; VCollide's E: yf before the move
+ZA_AUTO1 vD                 ; ... D: xf + dx + 1
+ZA_AUTO1 vB                 ; the offset of the cell a test looked at
+ZA_AUTO1 vC
+ZA_AUTO1 vT                 ; the type of the cell a landing found
+ZA_AUTO1 vTile              ; the slope tile a landing found
+ZA_AUTO2 pp                 ; SideWalls' column pointer
+
+\ hptr = type_map + h_cell; hptr_up = hptr - 32.
+.harry_ptrs
+    LDA h_cell : STA hptr
+    CLC : LDA h_cell+1 : ADC #HI(type_map) : STA hptr+1
+    SEC : LDA hptr : SBC #32 : STA hptr_up
+    LDA hptr+1 : SBC #0 : STA hptr_up+1
+    RTS
+
+\ face = (1 - dx) * 2: 0 going right, 4 going left.
+.face_from_dx
+    LDA #1 : SEC : SBC h_dx : ASL A : STA h_face
+    RTS
+
+\ HarryUpdate (&80B6): once a pass of the main loop.
+.harry_update
+{
+    JSR harry_ptrs
+    LDA h_state : BEQ keys
+    LDA #0 : STA h_fall
+.keys
+    LDX #0                      ; dx = right - left
+    LDA ctrl : AND #2 : BEQ no_r
+    INX
+.no_r
+    LDA ctrl : AND #4 : BEQ no_l
+    DEX
+.no_l
+    STX h_dx
+    LDX #0                      ; dy = 2 * up - 2 * down
+    LDA ctrl : AND #&10 : BEQ no_u
+    INX : INX
+.no_u
+    LDA ctrl : AND #8 : BEQ no_d
+    DEX : DEX
+.no_d
+    STX h_dy
+    LDA h_state : BEQ dispatch
+    CMP #7 : BEQ dispatch
+    LDA ctrl : AND #1 : BEQ dispatch
+    JMP start_jump
+.dispatch
+    LDX h_state
+    LDA states_lo,X : STA harry_vec
+    LDA states_hi,X : STA harry_vec+1
+    JMP (harry_vec)
+    ZA_CANJUMP st_fall, st_walk, st_pipe, st_ladder, st_rope, st_slope_up, st_slide, st_jump
+}
+.harry_vec EQUW 0
+\ The states (&8A17). Lifts aren't in yet: state 8 falls.
+.states_lo
+    EQUB LO(st_fall), LO(st_walk), LO(st_pipe), LO(st_ladder), LO(st_rope)
+    EQUB LO(st_slope_up), LO(st_slide), LO(st_jump), LO(st_fall)
+.states_hi
+    EQUB HI(st_fall), HI(st_walk), HI(st_pipe), HI(st_ladder), HI(st_rope)
+    EQUB HI(st_slope_up), HI(st_slide), HI(st_jump), HI(st_fall)
+
+\ StWalk (&8113): state 1, on a platform.
+.st_walk
+{
+    LDA h_dx : BEQ facing
+    JSR face_from_dx
+.facing
+    LDA h_xf : BEQ aligned
+    JMP walk_mid
+.aligned
+    LDA h_dy : BEQ walls
+    BPL up
+    LDY #&40 : LDA (hptr),Y : AND #&12 : BNE start_climb   ; under the feet
+    JMP no_climb
+.up
+    LDY #0 : LDA (hptr),Y : AND #&12 : BNE start_climb     ; the head cell
+.no_climb
+    LDA #0 : STA h_dy
+.walls
+    LDA h_dx : BEQ go
+    JSR wall_check
+.go
+    JMP move
+\ StartClimb (&8143)
+.start_climb
+    LDX #3 : CMP #2 : BEQ ladder
+    LDX #4
+.ladder
+    STX h_state
+    LDA #8 : STA h_face
+    LDA #0 : STA h_dx
+    JMP move
+}
+
+\ WalkMid (&8172): walking, between cells.
+.walk_mid
+{
+    LDA #0 : STA h_dy
+    LDA h_xf : CMP #2 : BNE go
+    LDA h_dx : BEQ go
+    CLC : ADC #1 : LSR A : STA vC  ; 1 going right, 0 going left
+    CLC : ADC #&20 : TAY
+    LDA (hptr),Y : AND #&0C : BEQ no_slope  ; a slope at leg height ahead
+    LDA #5 : STA h_state
+    LDA h_dx : STA h_mom
+    LDA #2 : STA h_dy
+    JMP move
+.no_slope
+    LDA vC : CLC : ADC #&40 : TAY
+    LDA (hptr),Y : AND #&21 : BNE go        ; a floor ahead
+    JMP walk_off
+.go
+    JMP move
+}
+
+\ StPipe (&81B0): state 2, a slippery pipe holds Harry only while he walks.
+.st_pipe
+    LDA h_dx : BEQ walk_off
+    JMP st_walk
+
+\ WalkOff (&829A): one 4 x 4 step off the edge, then a fall.
+.walk_off
+    LDA #0 : STA h_cnt : STA h_state : STA h_fall
+    ASL h_dx
+    LDA #&FC : STA h_dy
+    JMP fall_count
+
+\ StFall (&82B2): state 0.
+.st_fall
+    LDA #0 : STA h_dx
+    LDA #&FC : STA h_dy
+\ FallCount (&82BA)
+.fall_count
+    INC h_fall
+    LDA h_dx : BEQ fall_test
+    JMP move
+.fall_test
+    JMP vcollide
+
+\ StRope (&8249): state 4. Ropes only slide: 1, 2 or 3 pixels a pass.
+.st_rope
+{
+    LDA h_dy : CMP #&80 : ROR A     ; dy / 2, signed
+    SEC : SBC #2 : STA h_dy
+    CMP #&FF : BNE st_ladder
+    LDA h_yf : AND #3 : STA h_xf    ; the hand-over-hand frames, holding up
+    \ Fall into st_ladder.
+}
+\ StLadder (&81BA): state 3 (and 4 from above).
+.st_ladder
+{
+    LDA h_yf : BNE on
+    LDA h_dx : BEQ on
+    LDY #&40 : LDA (hptr),Y : AND #&21 : BEQ on
+    \ A floor under the feet: step off, and walk this same pass.
+    TAX
+    LDA #0 : STA h_dy : STA h_xf
+    LDY #1
+    TXA : AND #1 : BNE walk
+    INY
+.walk
+    STY h_state
+    JSR face_from_dx
+    JMP st_walk
+.on
+    LDA h_state : CMP #4 : BNE ladder
+    JMP rope_tail
+.ladder
+    LDA h_yf : LSR A : STA h_xf     ; the climbing frame
+    LDA #0 : STA h_dx
+    LDA h_dy : BEQ go
+    BPL up
+    LDY #&40 : LDA (hptr),Y : AND #2 : BNE go       ; ladder below
+    JMP stop
+.up
+    LDA h_yf : BNE go
+    LDY #0 : LDA (hptr),Y : AND #2 : BEQ stop       ; head cell not ladder
+    LDY #0 : LDA (hptr_up),Y                        ; the cell above it
+    TAX : AND #&2D : BEQ go
+    TXA : AND #2 : BNE go
+.stop
+    LDA #0 : STA h_dy
+.go
+    JMP move
+}
+
+\ RopeTail (&8262)
+.rope_tail
+{
+    LDA h_yf : CMP #5 : BCC hold
+    LDY #&60 : LDA (hptr),Y : AND #&10 : BNE hold   ; rope below the feet
+    LDA h_yf : SEC : SBC #8 : STA h_dy
+    LDA #0 : STA h_state : STA h_dx : STA h_xf
+    LDA #1 : STA h_fall
+    JMP fall_count
+.hold
+    LDA #0 : STA h_dx
+    JMP move
+}
+
+\ StartJump (&82CB)
+.start_jump
+{
+    LDA h_state : CMP #4 : BNE not_rope
+    LDA h_dx : BNE not_rope
+    JMP st_rope                     ; no jumping straight off a rope
+.not_rope
+    LDA h_state : CMP #6 : BNE not_slide
+    LDA h_mom : STA h_dx            ; jump the way the slide goes
+.not_slide
+    LDA h_state : CMP #3 : BEQ zero_xf
+    CMP #4 : BNE xf_ok
+.zero_xf
+    LDA #0 : STA h_xf
+.xf_ok
+    LDA #7 : STA h_state
+    LDA h_dx : BEQ no_face
+    JSR face_from_dx
+.no_face
+    LDA #0 : STA h_cnt : STA h_fall
+    LDA h_dx : STA h_mom
+    LDA carried : CMP #&20 : BCC st_jump
+    CMP #&24 : BCS st_jump
+    LDA #3 : STA h_cnt              ; a basket: a lower jump
+    \ Fall into st_jump.
+}
+\ StJump (&832A): state 7.
+.st_jump
+{
+    LDA h_mom : STA h_dx
+    INC h_cnt
+    LDA h_cnt : CMP #22 : BCC arc
+    LDA #0 : STA h_state
+    LDA #5 : STA h_fall
+    JMP st_fall
+.arc
+    TAX : LDA jump_arc-1,X : STA h_dy
+    \ Fall into vcollide.
+}
+
+\ VCollide (&8355): ceilings, landings, grabbing, walls.
+.vcollide
+{
+    LDA h_yf : STA vE
+    LDA h_xf : CLC : ADC h_dx : CLC : ADC #1 : STA vD
+    LDA h_dy : BEQ descend
+    BMI descend
+    \ Rising.
+    LDA vE : SEC : SBC h_dy : BMI leaves_row
+    JMP ladder_grab                 ; the head stays in this cell row
+.leaves_row
+    LDA vD : SEC : SBC #1 : AND #3 : BEQ ceil_col
+    LDY #1 : LDA (hptr_up),Y        ; straddling: the right-hand column too
+    BMI die
+    AND #&2D : BNE hit_ceiling
+.ceil_col
+    LDY #0 : LDA (hptr_up),Y
+    BMI die
+    TAX : AND #&2D : BEQ lg
+    TXA : AND #&12 : BNE lg
+\ HitCeiling (&8397)
+.hit_ceiling
+    LDA h_cnt : CMP #1 : BNE top_of_cell
+    LDA #0 : STA h_dy               ; a ceiling right on the head: no jump
+    JMP descend
+.top_of_cell
+    LDA vE : STA h_dy               ; rise to the top of this cell only
+    LDA h_cnt : CMP #11 : BCS lg
+    LDA #11 : STA h_cnt             ; and start the way down
+.lg
+    JMP ladder_grab
+.die
+    JMP harry_died
+
+\ Descend (&83FA), SlopeSnap (&8489): a slope tile under the feet snaps
+\ Harry onto it.
+.descend
+    LDA h_xf : LSR A : AND #1 : STA vC
+    CLC : ADC #&20 : STA vB
+    LDA h_yf : BEQ tile_test
+    LDA vB : CLC : ADC #&20 : STA vB
+.tile_test
+    \ The tile map is three pages below the type map.
+    LDA hptr : STA pp
+    LDA hptr+1 : SEC : SBC #HI(type_map) - HI(tile_map) : STA pp+1
+    LDY vB : LDA (pp),Y : STA vTile
+    CMP #&39 : BNE not39
+    JMP snap39
+.not39
+    CMP #&38 : BNE not38
+    JMP snap38
+.not38
+    CMP #&54 : BEQ surface
+    CMP #&55 : BNE land_test
+.surface
+    JMP snap_surface
+
+\ LandTest (&83D4)
+.land_test
+    LDX #&40
+    LDA vE : SEC : SBC h_dy : BEQ test      ; aligned: test under the feet
+    CMP #8 : BCC lg                         ; the feet stay in the cell
+    LDX #&60                                ; the feet enter the next row
+.test
+    STX vB
+    LDA vD : CMP #4 : BCS land_right
+    LDY vB : LDA (hptr),Y : STA vT
+    BMI die
+    AND #&21 : BNE land
+\ LandRight (&859D)
+.land_right
+    LDA vD : CMP #3 : BCC lg
+    LDY vB : INY : LDA (hptr),Y : STA vT
+    BMI die
+    AND #&2D : BEQ lg
+\ Land (&8570)
+.land
+    LDA vE : BEQ on_surface
+    SEC : SBC #8
+.on_surface
+    STA h_dy                        ; finish exactly on the surface
+    LDA vT : JSR set_standing
+    LDA h_fall : CMP #15 : BCS die_land     ; fell too far
+    LDA #0 : STA h_fall
+    LDA h_face : CMP #8 : BNE lg_land
+    LDA #0 : STA h_xf : STA h_face
+.lg_land
+    JMP ladder_grab
+.die_land
+    JMP harry_died
+}
+
+\ LadderGrab (&85B4), HeadSlope (&8614), SideWalls (&862D)
+.ladder_grab
+{
+    LDA h_xf : BEQ can_grab
+    LDA h_face : CMP #8 : BNE head_slope
+.can_grab
+    LDA carried : CMP #&20 : BCC no_basket
+    CMP #&24 : BCC head_slope       ; not with a basket
+.no_basket
+    LDA ctrl : AND #&18 : BEQ head_slope    ; up or down held
+    LDA h_cnt : CMP #1 : BEQ head_slope
+    LDY #0 : LDA (hptr),Y : AND #&12 : BEQ head_slope
+    LDX #3 : CMP #2 : BEQ grab
+    INX
+    LDY #&40 : LDA (hptr),Y : AND #&10 : BNE grab
+    LDX #0
+.grab
+    STX h_state
+    LDA #0 : STA h_dx
+    LDA vE : AND #1 : STA h_dy
+    LDA #8 : STA h_face
+.head_slope
+    LDY #0 : LDA (hptr),Y : AND #&0C : BEQ side_walls
+    LDA #16 : STA h_cnt
+    LDA #0 : STA h_dx : STA h_mom
+    JMP move
+.side_walls
+    LDA hptr : STA pp : LDA hptr+1 : STA pp+1
+    LDA vE : SEC : SBC h_dy : STA vC
+    BPL not_up
+    SEC : LDA pp : SBC #32 : STA pp
+    BCS got_p
+    DEC pp+1
+    JMP got_p
+.not_up
+    CMP #8 : BCC got_p
+    CLC : LDA pp : ADC #32 : STA pp
+    BCC got_p
+    INC pp+1
+.got_p
+    LDX #2                          ; rows the sprite will cover
+    LDA vC : AND #7 : BEQ rows
+    INX
+.rows
+    STX vB
+    LDA h_dx : BMI left
+    BNE right
+    LDA h_xf : CMP #1 : BEQ right
+    CMP #3 : BEQ left
+    JMP move
+.right
+    INC pp : BNE right_p
+    INC pp+1
+.right_p
+    JSR column_blocked : BEQ go
+    LDA #&FF : STA h_dx
+    JMP bounce
+.left
+    LDA h_xf : BNE left_p
+    LDA pp : BNE no_borrow
+    DEC pp+1
+.no_borrow
+    DEC pp
+.left_p
+    JSR column_blocked : BEQ go
+    LDA #1 : STA h_dx
+.bounce
+    LDA #0 : SEC : SBC h_mom : STA h_mom
+.go
+    JMP move
+}
+
+\ ColumnBlocked (&8699): any of vB cells down from pp solid? Z clear if so.
+.column_blocked
+{
+.loop
+    LDY #0 : LDA (pp),Y
+    BMI die
+    AND #&21 : BNE done
+    CLC : LDA pp : ADC #32 : STA pp
+    BCC next
+    INC pp+1
+.next
+    DEC vB : BNE loop
+.done
+    RTS                             ; Z set: clear all the way down
+.die
+    JMP harry_died
+}
+
+\ WallCheck (&86AC): walking, cell-aligned: a wall ahead stops him.
+.wall_check
+{
+    LDA h_dx : BMI left
+    LDY #1 : LDA (hptr),Y : JMP head
+.left
+    LDY #31 : LDA (hptr_up),Y       ; T(-1)
+.head
+    BMI die
+    AND #&2D : BEQ legs
+    LDA h_state : CMP #5 : BNE stop
+    \ Climbing a slope into a wall: turn back, and abandon the caller.
+    LDA #0 : SEC : SBC h_mom : STA h_dx
+    PLA : PLA
+    JMP st_slope_up
+.stop
+    LDA #0 : STA h_dx
+    RTS
+.legs
+    LDA h_dx : CLC : ADC #&20 : TAY : LDA (hptr),Y
+    BMI die
+    AND #&21 : BEQ ok
+    LDA #0 : STA h_dx
+.ok
+    RTS
+.die
+    JMP harry_died
+}
+
+\ StSlopeUp (&86EF): state 5, climbing only while the uphill key is held.
+.st_slope_up
+{
+    LDA h_mom : CMP h_dx : BEQ uphill
+    LDA #0 : SEC : SBC h_mom : STA h_mom : STA h_dx
+    LDA #&FE : STA h_dy
+    LDA #6 : STA h_state
+    JMP move
+.uphill
+    LDA #2 : STA h_dy
+    LDA h_xf : BEQ slope_aligned
+    JMP move
+}
+\ SlopeAligned (&871B)
+.slope_aligned
+{
+    LDY #&40 : LDA (hptr),Y : AND #&2D : BNE supported
+    LDA #0 : STA h_state
+    JMP st_fall
+.supported
+    JSR wall_check
+    LDA h_state : CMP #5 : BNE slope_end
+    JMP move
+}
+\ StSlide (&873A): state 6.
+.st_slide
+    LDA h_mom : STA h_dx
+    LDA #&FE : STA h_dy
+    LDA h_xf : BEQ slope_aligned
+\ SlopeEnd (&874B)
+.slope_end
+{
+    LDA h_yf : BNE go
+    LDA h_mom : CLC : ADC #1 : LSR A : CLC : ADC #&40 : TAY
+    LDA (hptr),Y : TAX : AND #&21 : BEQ go
+    TXA : JSR set_standing
+    LDA #0 : STA h_dy
+.go
+    JMP move
+}
+
+\ SetStanding (&87FD): type A under the feet decides walking or pipe.
+.set_standing
+{
+    AND #&21
+    CMP #1 : BNE not_floor
+    LDA #1 : STA h_state : RTS
+.not_floor
+    CMP #&20 : BNE done
+    LDA #2 : STA h_state
+.done
+    RTS
+}
+
+\ SetSlopeState (&87E8): tile A is a slope; climb it or slide down it.
+.set_slope_state
+{
+    CMP #&54 : BEQ back
+    CMP #&38 : BEQ back
+    CMP #&55 : BEQ fwd
+    CMP #&39 : BEQ fwd
+    RTS
+.back                               ; '\'
+    LDA h_mom : BPL slide_right
+    LDA #5 : STA h_state : RTS
+.slide_right
+    LDA #1 : STA h_mom
+    LDA #6 : STA h_state : RTS
+.fwd                                ; '/'
+    LDA h_mom : BMI slide_left
+    BEQ slide_left
+    LDA #5 : STA h_state : RTS
+.slide_left
+    LDA #&FF : STA h_mom
+    LDA #6 : STA h_state : RTS
+}
+
+\ The slope snaps (&84C0, &84F8, &8535). vC is the column Harry's feet are
+\ over (0 or 1), vTile the slope tile there.
+.snap_surface
+    LDA #0 : STA h_xf
+    JSR snap_col
+    LDA #4 : STA h_yf
+    JMP snap_done
+.snap39
+    LDA #2 : STA h_xf
+    DEC vC                          ; one column left of the feet
+    JSR snap_col
+    JSR snap_up
+    JMP snap_done
+.snap38
+    LDA vTile : STA h_xf            ; (sic: &38, which apply_delta turns
+    JSR snap_col                    ;  into xf 0 and a column right)
+    JSR snap_up
+.snap_done
+    LDA #0 : STA h_dx : STA h_dy
+    LDA h_face : AND #&F7 : STA h_face
+    LDA vTile : JSR set_slope_state
+    JMP move_nosave
+\ h_cell += vC (signed).
+.snap_col
+{
+    LDA vC : BMI minus
+    CLC : ADC h_cell : STA h_cell
+    BCC done
+    INC h_cell+1
+.done
+    RTS
+.minus
+    LDA h_cell : BNE no_borrow
+    DEC h_cell+1
+.no_borrow
+    DEC h_cell
+    RTS
+}
+\ Up a row, to its top line. The original subtracts 32 from (attribute low
+\ byte, screen high byte with yf cleared), so leaving the top row of a
+\ screen third (rows 8, 16) borrows into the third's bits and gives yf 7:
+\ kept, because it moves Harry.
+.snap_up
+{
+    LDX #0
+    LDA h_cell : AND #&E0 : BNE same_third  ; row AND 7 = 0 (cell bits 5-7)
+    LDX #7
+.same_third
+    STX h_yf
+    SEC : LDA h_cell : SBC #32 : STA h_cell
+    BCS done
+    DEC h_cell+1
+.done
+    RTS
+}
+
+\ Move (&887E), MoveNoSave (&8881): the original saves the old position
+\ for its erase here; the sprite engine records what it drew instead.
+.move
+.move_nosave
+    JSR apply_delta
+    \ The frame: picked before the edges change xf (an original glitch,
+    \ harry.md section 10: kept).
+    LDA h_face : CLC : ADC h_xf : ASL A : TAX
+    LDA harry_frames,X : STA h_frame
+    LDA harry_frames+1,X : STA h_frame+1
+    JMP edges
+
+\ ApplyDelta (&8E94)
+.apply_delta
+{
+    LDA h_xf : CLC : ADC h_dx : TAX
+    AND #3 : STA h_xf
+    TXA : BMI left
+    CMP #4 : BCC vertical
+    INC h_cell : BNE vertical
+    INC h_cell+1
+    JMP vertical
+.left
+    LDA h_cell : BNE no_borrow
+    DEC h_cell+1
+.no_borrow
+    DEC h_cell
+.vertical
+    LDA h_yf : SEC : SBC h_dy : TAX
+    AND #7 : STA h_yf
+    TXA : BMI up
+    CMP #8 : BCC done
+    CLC : LDA h_cell : ADC #32 : STA h_cell     ; down a row
+    BCC done
+    INC h_cell+1
+.done
+    RTS
+.up
+    SEC : LDA h_cell : SBC #32 : STA h_cell     ; up a row
+    BCS done
+    DEC h_cell+1
+    RTS
+}
+
+\ The room edges (&8890-&89BC), after the move.
+.edges
+{
+    LDA h_cell : AND #31 : CMP #31 : BNE not_right
+    LDA h_dx : BEQ top
+    BMI top
+    \ Right: to column 0, xf 2.
+    LDA #-31 AND &FF : JSR add_cell
+    LDA #2 : STA h_xf
+    LDA #1 : STA room_delta
+    LDA h_state : CMP #5 : BNE done
+    LDA #-31 AND &FF : JSR add_cell             ; on a slope: up a row,
+    LDA #0 : STA h_yf                           ; column 1
+.done
+    RTS
+.not_right
+    CMP #0 : BNE top
+    LDA h_dx : BPL top
+    LDA h_xf : BNE top
+    \ Left: to column 30, xf 3.
+    LDA #30 : JSR add_cell
+    LDA #3 : STA h_xf
+    LDA #&FF : STA room_delta
+    RTS
+.top
+    LDA h_cell+1 : BNE bottom
+    LDA h_cell : CMP #64 : BCS bottom
+    \ Top: to row 21, yf 4.
+    AND #31 : CLC : ADC #LO(21 * 32) : STA h_cell
+    LDA #HI(21 * 32) : STA h_cell+1
+    LDA #4 : STA h_yf
+    LDA #&F6 : STA room_delta
+    LDA h_state : CMP #5 : BNE done
+    LDA h_dx : ASL A : JSR add_cell
+    LDA h_xf : CLC : ADC h_dx : STA h_xf        ; (left unnormalised)
+    RTS
+.bottom
+    LDA h_cell+1 : CMP #HI(21 * 32) : BCC none
+    BNE low_enough
+    LDA h_cell : CMP #LO(21 * 32) : BCC none
+.low_enough
+    LDA h_yf : CMP #4 : BCC none
+    LDA h_dy : BPL none
+    \ Bottom: to row 2, yf 0.
+    LDA h_cell : AND #31 : ORA #64 : STA h_cell
+    LDA #0 : STA h_cell+1 : STA h_yf
+    LDA #10 : STA room_delta
+    LDA h_state : CMP #6 : BNE done
+    LDA h_dx : ASL A : CLC : ADC h_dx : JSR add_cell
+    LDA h_xf : CLC : ADC h_dx : STA h_xf        ; (left unnormalised)
+    RTS
+.none
+    LDA #0 : STA room_delta
+    RTS
+}
+
+\ h_cell += A, signed.
+.add_cell
+{
+    LDX #0
+    CMP #&80 : BCC positive
+    LDX #&FF
+.positive
+    CLC : ADC h_cell : STA h_cell
+    TXA : ADC h_cell+1 : STA h_cell+1
+    RTS
+}
+
+\ The jump arc (&89CF): dy for each pass of a jump, up positive.
+.jump_arc
+    EQUB 4, 4, 3, 2, 1, 1, 1, 0, 0, 0, 0, -1, -1, -1, -2, -3, -4, -4, -4, -4, -4, -4

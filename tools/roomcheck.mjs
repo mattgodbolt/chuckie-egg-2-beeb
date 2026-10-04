@@ -12,7 +12,9 @@ import { startBeeb } from "./beeb.mjs";
 const first = parseInt(process.argv[2] ?? "1");
 const last = parseInt(process.argv[3] ?? "120");
 mkdirSync("build/bbcrooms", { recursive: true });
-const b = await startBeeb({ disc: "build/ce2.ssd", bootSecs: 4 });
+// The viewer build (make rooms makes it): the same program, stepping
+// through the rooms instead of playing.
+const b = await startBeeb({ disc: "build/viewer.ssd", bootSecs: 4, symbols: "build/viewer.json" });
 try {
     // Text is drawn from the OS's font, copied into text_font at start-up
     // (decision 4): the comparison needs it. (The data bank stays paged in,

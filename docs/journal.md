@@ -370,3 +370,37 @@ the egg maker with the vats full, deliver the egg to the truck in room
 the next egg resets the factory, enables more monsters and changes the
 toy. The "unless..." of "you only have two hands" is the basket, which
 gathers any number of one ingredient (and makes jumps lower).
+
+### Harry, transcribed — and checked pass by pass
+
+- `src/harry.6502` is the original's update (`&80B6-&8A97`) transcribed
+  from `docs/research/harry.md`'s pseudocode, with the original's code
+  read wherever the arithmetic mattered (the rise and land tests, the
+  slope snaps, the room edges). Harry is a cell, yf and xf; T(off) is an
+  indexed load from his cell in the type map. Lifts aren't in yet.
+- Quirks kept, each because it moves Harry: the snap up a row that gives
+  yf 7 instead of 0 where the Spectrum screen's thirds meet; the frame
+  picked before the edge code changes xf (one drawing a few pixels off
+  after every room change); the `Snap38` that stores the tile number as
+  xf and lets `ApplyDelta` turn it into a column.
+- `src/sprite.6502`: frames drawn masked in the sprite's colour (yellow for
+  Harry), erased by redrawing the covered cells from the maps; that is the
+  original's own method, at cell granularity.
+- `src/game.6502`: the three-frame main loop, room changes (with 80-71),
+  the checkpoint, death (back to the checkpoint, a life gone; the stack
+  is reset and the loop re-entered as in the original). Harry's state is
+  in fixed zero page outside baron's allocator pool, which would read that
+  jump as recursion; the allocator raised no objection.
+- `make rooms` now builds a viewer variant (`-D VIEWER=1`) for the room
+  check, since the main build plays.
+- **The oracle for movement**: `tools/passlog.py` plays the original and
+  `tools/passlog.mjs` the port with the same keys held over the same
+  main-loop passes, each logging Harry's room, cell, yf, xf, state,
+  facing, jump count and fall counter at the top of every pass;
+  `tools/passcmp.py` compares. Every scenario tried matches, pass for
+  pass: idle (the jump out of the truck and the landing), walking right
+  across room 1 and into the ladder gap and down to room 11, jumping on the
+  move both ways, holding down at the ladder, walking left into the
+  truck's invisible wall, jumping repeatedly. The one difference is pass
+  0's fall counter: the original starts a game with 250 there, left over,
+  and zeroes it on the first update; the comparison ignores it.

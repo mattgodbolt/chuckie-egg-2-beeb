@@ -7,6 +7,8 @@
 #                 chuckie-egg-2-wip.ssd, which the README links
 #   make fetch    download the Spectrum original into original/
 #   make zx       load the original's tape into build/ce2.z80 (SkoolKit)
+#   make disasm   the original's disassembly with the research's labels,
+#                 build/ce2.skool (from disasm/*.ctl)
 #   make venv     the Python tools' environment (.venv with SkoolKit, Pillow)
 
 BARON   ?= $(firstword $(wildcard ../baron/build/src/baron) baron)
@@ -19,7 +21,7 @@ WIP      = chuckie-egg-2-wip.ssd
 # commit, with + if the tree (the WIP disc itself aside) had changes.
 BUILD   := $(shell date -u '+%Y-%m-%d %H:%M UTC') $(shell git rev-parse --short HEAD 2>/dev/null || echo NOGIT)$(shell git diff --quiet HEAD -- . ':(exclude)$(WIP)' 2>/dev/null || echo +)
 
-.PHONY: all run rooms wip fetch zx venv clean
+.PHONY: all run rooms wip fetch zx disasm venv clean
 
 all: $(TARGET)
 
@@ -34,7 +36,13 @@ build:
 run: $(TARGET)
 	node tools/play.mjs '3,!run' shots/ --disc $(TARGET)
 
-rooms: $(TARGET) build/rooms/room_120.bin
+# The room viewer: the same program with -D VIEWER=1, which steps through
+# the rooms instead of playing.
+VIEWER = build/viewer.ssd
+$(VIEWER): $(SOURCES) | build
+	$(BARON) -D VIEWER=1 -D 'BUILD="$(BUILD) viewer"' -o $(VIEWER) --title CHUCKIE2 --opt 3 --symbols build/viewer.json src/main.6502
+
+rooms: $(VIEWER) build/rooms/room_120.bin
 	node tools/roomcheck.mjs
 	python3 tools/roomcmp.py
 
@@ -57,6 +65,15 @@ fetch:
 	tools/fetch_original.sh
 
 zx: build/ce2.z80
+
+# The research's control files, merged (monsters.ctl's `i` lines only mark
+# where its blocks end, and would clash with the others').
+disasm: build/ce2.skool
+
+build/ce2.skool: build/ce2.z80 $(wildcard disasm/*.ctl)
+	rm -rf build/ctl && mkdir -p build/ctl
+	for f in disasm/*.ctl; do grep -v '^i' $$f > build/ctl/$$(basename $$f); done
+	.venv/bin/sna2skool.py -H -c build/ctl build/ce2.z80 > $@
 
 build/ce2.z80: original/ChuckieEgg2.tap | build
 	.venv/bin/tap2sna.py original/ChuckieEgg2.tap $@

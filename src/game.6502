@@ -1,0 +1,165 @@
+\ ***************************************************************************
+\ The game: the main loop and what happens between rooms (the original's
+\ &7743-&78BE and &8A29). So far: Harry, the rooms, the status bar.
+\ ***************************************************************************
+
+\ Start a game (&7743, &7763): room 1, Harry jumping out of the truck.
+.new_game
+{
+    LDA #5 : STA lives
+    LDA #&FF : STA carried
+    LDX #9
+    LDA #0
+.zero
+    STA score,X
+    DEX : BPL zero
+    LDA #1 : STA room
+    \ Harry's template (&89E5): row 18, column 6, jumping right, count 0.
+    LDA #LO(18 * 32 + 6) : STA h_cell
+    LDA #HI(18 * 32 + 6) : STA h_cell+1
+    LDA #0 : STA h_yf : STA h_xf : STA h_face : STA h_cnt : STA h_fall
+    STA ctrl : STA room_delta
+    LDA #1 : STA h_mom
+    LDA #7 : STA h_state
+    LDA harry_frames : STA h_frame
+    LDA harry_frames+1 : STA h_frame+1
+    JSR save_checkpoint
+    JSR enter_room
+    \ Fall into game_loop.
+}
+
+\ The main loop (&77B9): three frames a pass, always.
+.game_loop
+{
+    JSR read_keys
+    JSR harry_update
+    LDA room_delta : BEQ same_room
+    JSR change_room
+.same_room
+    JSR wait_vsync
+    JSR draw_harry
+    JSR wait_vsync
+    JSR wait_vsync
+    JMP game_loop
+}
+
+\ Draw the room and set it up (&7913). Nothing of Harry is on screen.
+.enter_room
+    LDA room : JSR draw_room
+    LDA #0 : STA drawn
+    RTS
+
+\ Leaving a room (&77CF-&7856).
+.change_room
+{
+    \ Rooms 80 and 71 are joined left to right.
+    LDA room : CMP #80 : BNE not80
+    LDA room_delta : CMP #1 : BNE not80
+    LDA #71 : JMP set
+.not80
+    CMP #71 : BNE add
+    LDA room_delta : CMP #&FF : BNE add
+    LDA #80 : JMP set
+.add
+    LDA room : CLC : ADC room_delta
+.set
+    STA room
+    JSR enter_room
+    \ Riding a lift out of a room becomes a jump.
+    LDA h_state : CMP #8 : BNE not_lift
+    LDA #7 : STA h_state
+    LDA #0 : STA h_cnt
+    LDA #1 : STA h_mom
+.not_lift
+    \ Unless he went up, a floor under the feet sets walking or pipe.
+    LDA room_delta : CMP #&F6 : BEQ checkpoint
+    JSR harry_ptrs
+    LDA h_xf : LSR A : CLC : ADC #&40 : TAY
+    LDA (hptr),Y : AND #&12 : BNE checkpoint
+    LDA (hptr),Y : JSR set_standing
+.checkpoint
+    LDA #0 : STA room_delta
+    \ The checkpoint only if he came in walking or on a ladder.
+    LDA h_state : CMP #1 : BEQ save
+    CMP #3 : BNE done
+.save
+    JMP save_checkpoint
+.done
+    RTS
+}
+
+\ The checkpoint (&7838, &A46B): Harry, the room and the state.
+CHECKPOINT_VARS = h_frame + 2 - h_cell    ; h_cell .. h_frame
+.save_checkpoint
+{
+    LDX #CHECKPOINT_VARS - 1
+.copy
+    LDA h_cell,X : STA checkpoint,X
+    DEX : BPL copy
+    LDA room : STA checkpoint + CHECKPOINT_VARS
+    RTS
+}
+
+\ Harry dies (&8A29): back to the checkpoint, a life gone. Reached by a
+\ jump from wherever the test was, as in the original; the stack is reset.
+.harry_died
+{
+    LDX #&FF : TXS
+    LDX #CHECKPOINT_VARS - 1
+.copy
+    LDA checkpoint,X : STA h_cell,X
+    DEX : BPL copy
+    LDA checkpoint + CHECKPOINT_VARS : STA room
+    LDA #0 : STA h_cnt : STA h_fall : STA ctrl : STA room_delta
+    DEC lives : BNE alive
+    JMP new_game                    ; (game over: the menu, later)
+.alive
+    JSR enter_room
+    JMP game_loop
+}
+
+\ Erase Harry where he was drawn, draw him where he is, in yellow
+\ (decision 6: Spectrum colour 6).
+.draw_harry
+{
+    BIT drawn : BPL fresh
+    LDA d_cell : STA sp_cell
+    LDA d_cell+1 : STA sp_cell+1
+    LDA d_yf : STA sp_yf
+    LDA d_frame : STA sp_frame
+    LDA d_frame+1 : STA sp_frame+1
+    JSR erase_sprite
+.fresh
+    LDA h_cell : STA sp_cell : STA d_cell
+    LDA h_cell+1 : STA sp_cell+1 : STA d_cell+1
+    LDA h_yf : STA sp_yf : STA d_yf
+    LDA h_frame : STA sp_frame : STA d_frame
+    LDA h_frame+1 : STA sp_frame+1 : STA d_frame+1
+    LDX cmap+6 : LDA colour_bytes,X : STA sp_colour
+    JSR draw_sprite
+    LDA #&80 : STA drawn
+    RTS
+}
+
+\ The keys (&78C1), the Spectrum's for now (decision 7), into ctrl: bit 7
+\ abort, 6 take/drop, 5 save, 4 up, 3 down, 2 left, 1 right, 0 jump.
+.read_keys
+{
+    LDA #0 : STA ctrl
+    LDY #7
+.key
+    STY keys_i
+    LDX key_codes,Y : JSR key_down
+    CMP #0 : CLC : BEQ up
+    SEC
+.up
+    ROL ctrl
+    LDY keys_i : DEY : BPL key
+    RTS
+}
+.keys_i EQUB 0
+\ Negative INKEY codes (internal key number EOR &FF; measured in jsbeeb),
+\ bit 0 first: SPACE, P, O, A, Q, S, 1, 0.
+.key_codes
+    EQUB 98 EOR &FF, 55 EOR &FF, 54 EOR &FF, 65 EOR &FF
+    EQUB 16 EOR &FF, 81 EOR &FF, 48 EOR &FF, 39 EOR &FF

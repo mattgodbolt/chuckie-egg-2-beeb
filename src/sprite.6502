@@ -1,0 +1,132 @@
+\ ***************************************************************************
+\ Sprites. The original ORs a frame on and sets the ink of the cells it
+\ covers; to erase, it puts back the tile pixels from the tile map and the
+\ attributes from the attribute map (docs/research/monsters.md, 2.3-2.4).
+\ Here a frame is drawn masked in the sprite's own colour, so the scenery
+\ under it keeps its colours, and erasing redraws the cells it covered
+\ from the same two maps.
+\
+\ Frames are the original's: height in character rows, width in bytes,
+\ then height * 8 rows of width bytes, 1 bit a pixel. Positions are whole
+\ cells across (the frames are pre-shifted in 2-pixel steps) and a cell
+\ plus a pixel line (yf) down.
+\ ***************************************************************************
+
+ZA_AUTO2 sp_frame           ; the frame's header
+ZA_AUTO2 sp_cell            ; the top-left cell
+ZA_AUTO1 sp_yf              ; the pixel line in that cell, 0-7
+ZA_AUTO1 sp_colour          ; a byte of four pixels in the sprite's colour
+
+\ Draw the frame at sp_frame, sp_cell, sp_yf in sp_colour.
+.draw_sprite
+{
+    ZA_AUTO2 src
+    ZA_AUTO2 scr
+    ZA_AUTO1 lines
+    ZA_AUTO1 width
+    ZA_AUTO1 yf
+    ZA_AUTO1 bcol
+    ZA_AUTO1 soff
+    ZA_AUTO1 mask
+    ZA_AUTO1 under
+    LDY #0 : LDA (sp_frame),Y
+    ASL A : ASL A : ASL A : STA lines
+    INY : LDA (sp_frame),Y : STA width
+    CLC : LDA sp_frame : ADC #2 : STA src
+    LDA sp_frame+1 : ADC #0 : STA src+1
+    \ scr = screen + 16 * cell + yf
+    LDA sp_cell : ASL A : ASL A : ASL A : ASL A : ORA sp_yf : STA scr
+    LDA sp_cell+1 : STA scr+1
+    LDA sp_cell
+    LSR scr+1 : ROR A : LSR scr+1 : ROR A : LSR scr+1 : ROR A : LSR scr+1 : ROR A
+    CLC : ADC #HI(screen) : STA scr+1
+    LDA sp_yf : STA yf
+.row
+    LDA #0 : STA bcol : STA soff
+.byte
+    LDY bcol : LDA (src),Y : BEQ next_byte
+    TAX
+    LDA spread_hi,X : STA mask  ; the left four pixels
+    LDY soff
+    LDA (scr),Y : STA under
+    EOR sp_colour : AND mask : EOR under : STA (scr),Y
+    TXA : AND #15 : TAX
+    LDA spread_lo,X : STA mask  ; the right four
+    TYA : ORA #8 : TAY
+    LDA (scr),Y : STA under
+    EOR sp_colour : AND mask : EOR under : STA (scr),Y
+.next_byte
+    LDA soff : CLC : ADC #16 : STA soff
+    INC bcol : LDA bcol : CMP width : BNE byte
+    \ The next row of the frame, the next line down the screen.
+    CLC : LDA src : ADC width : STA src
+    BCC src_ok
+    INC src+1
+.src_ok
+    INC yf : LDA yf : AND #7 : BEQ next_cell
+    INC scr                     ; (never carries: yf < 8 in a 16-byte cell)
+    JMP more
+.next_cell
+    CLC : LDA scr : ADC #LO(ROW_BYTES - 7) : STA scr
+    LDA scr+1 : ADC #HI(ROW_BYTES - 7) : STA scr+1
+.more
+    DEC lines : BNE row
+    RTS
+}
+
+\ Put back the cells a frame covered: sp_frame's size at sp_cell, sp_yf
+\ (one row more if yf isn't 0).
+.erase_sprite
+{
+    ZA_AUTO2 row_cell
+    ZA_AUTO1 rows
+    ZA_AUTO1 cols
+    ZA_AUTO1 width
+    LDY #0 : LDA (sp_frame),Y : STA rows
+    LDA sp_yf : BEQ aligned
+    INC rows
+.aligned
+    INY : LDA (sp_frame),Y : STA width
+    LDA sp_cell : STA row_cell
+    LDA sp_cell+1 : STA row_cell+1
+.row
+    LDA row_cell : STA cell
+    LDA row_cell+1 : STA cell+1
+    LDA width : STA cols
+.col
+    JSR redraw_cell
+    INC cell : BNE col_ok
+    INC cell+1
+.col_ok
+    DEC cols : BNE col
+    CLC : LDA row_cell : ADC #32 : STA row_cell
+    BCC row_ok
+    INC row_cell+1
+.row_ok
+    DEC rows : BNE row
+    RTS
+}
+
+\ Redraw `cell` from the tile and attribute maps.
+.redraw_cell
+{
+    ZA_AUTO2 mp
+    LDA cell : STA mp
+    CLC : LDA cell+1 : ADC #HI(tile_map) : STA mp+1
+    LDY #0 : LDA (mp),Y
+    BMI text
+    SEC : SBC #&20
+    LDX #LO(tiles) : LDY #HI(tiles)
+    JMP glyph_addr
+.text
+    AND #&7F : SEC : SBC #32
+    LDX #LO(text_font) : LDY #HI(text_font)
+.glyph_addr
+    STA glyph : LDA #0 : STA glyph+1
+    ASL glyph : ROL glyph+1 : ASL glyph : ROL glyph+1 : ASL glyph : ROL glyph+1
+    TXA : CLC : ADC glyph : STA glyph
+    TYA : ADC glyph+1 : STA glyph+1
+    LDA mp+1 : SEC : SBC #HI(tile_map) - HI(attr_map) : STA mp+1
+    LDY #0 : LDA (mp),Y
+    JMP draw_glyph
+}

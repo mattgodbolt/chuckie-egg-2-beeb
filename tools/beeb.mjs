@@ -28,7 +28,7 @@ export function loadSymbols(path = "build/symbols.json") {
     return out;
 }
 
-export async function startBeeb({ disc, model = "B-DFS1.2", bootSecs = 0 } = {}) {
+export async function startBeeb({ disc, model = "B-DFS1.2", bootSecs = 0, symbols = "build/symbols.json" } = {}) {
     const transport = new StdioClientTransport(MCP);
     const client = new Client({ name: "ce2-harness", version: "1.0.0" });
     await client.connect(transport);
@@ -41,7 +41,7 @@ export async function startBeeb({ disc, model = "B-DFS1.2", bootSecs = 0 } = {})
     const json = async (name, args) => JSON.parse(text(await call(name, args)));
 
     const { session_id } = await json("create_machine", { model });
-    const syms = loadSymbols();
+    const syms = loadSymbols(symbols);
 
     const beeb = {
         session_id,

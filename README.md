@@ -8,11 +8,15 @@ the BBC Micro, in 6502 assembly.
 That link boots [`chuckie-egg-2-wip.ssd`](chuckie-egg-2-wip.ssd), the latest
 work-in-progress disc, in [jsbeeb](https://github.com/mattgodbolt/jsbeeb).
 
-**Status: early.** Right now the disc is a room viewer: all 120 rooms of the
-factory and the status bar, drawn on the BBC from the original's data and
-checked against the original's own output. **Z** and **X** (or the cursor
-keys) step through the rooms. There is no Harry yet. `*TYPE !BOOT` on the
-disc shows when it was built and from which commit.
+**Status: early.** Harry is in: he walks, jumps, falls, climbs and changes
+rooms exactly as the original's code does (checked pass by pass against
+the original), through all 120 rooms of the factory. No monsters, objects
+or machines yet. Keys are the Spectrum's for now: **O** left, **P** right,
+**Q** up, **A** down, **SPACE** jump. `*TYPE !BOOT` on the disc shows when
+it was built and from which commit.
+
+It needs a BBC Model B with 16K of sideways RAM (or a B+128 or a Master);
+the browser link above provides one.
 
 See [docs/journal.md](docs/journal.md) for the story so far,
 [docs/research.md](docs/research.md) for what the original is, and

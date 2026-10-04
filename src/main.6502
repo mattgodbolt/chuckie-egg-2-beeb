@@ -56,6 +56,9 @@ SECTION Data, org = &8000, load = &FFFF3000, filename = "CE2DATA", guard = &C000
     \ The rooms, packed by tools/packrooms.py (decision 5).
 .packed_rooms
     INCBIN "data/packed.bin"
+    \ The original's sprites: Harry, monsters, truck, train, lifts.
+.sprites
+    INCBIN "data/sprites.bin"
     \ The OS's font, characters 32-127, copied in at start-up (decision 4):
     \ read through OSWORD 10, so it is the machine's own on a B or a Master.
 .text_font
@@ -67,7 +70,7 @@ ENDSECTION
 SECTION Loader, org = &1900, load = &FFFF1900, exec = &FFFF0000 + loader, filename = "CE2"
 .payload
     SECTION Code, org = &0E00, guard = screen
-    ZA_POOL &00..&8F
+    ZA_POOL &00..ZP_FIXED-1    ; ZP_FIXED-&8F: the game's permanent state (memory.6502)
 
 .start
 {
@@ -76,7 +79,11 @@ SECTION Loader, org = &1900, load = &FFFF1900, exec = &FFFF0000 + loader, filena
     JSR find_data_bank
     JSR copy_font
     JSR init_system
-    JMP viewer
+IF DEFINED(VIEWER)
+    JMP viewer                  ; the room viewer, for tools/roomcheck.mjs
+ELSE
+    JMP new_game
+ENDIF
 }
 
     INCLUDE "system.6502"
@@ -86,12 +93,18 @@ SECTION Loader, org = &1900, load = &FFFF1900, exec = &FFFF0000 + loader, filena
     INCLUDE "rooms.6502"
     INCLUDE "status.6502"
     INCLUDE "unpack.6502"
+    INCLUDE "sprite.6502"
+    INCLUDE "harry.6502"
+    INCLUDE "game.6502"
+IF DEFINED(VIEWER)
     INCLUDE "viewer.6502"
+ENDIF
 
     \ Data from the original: extracted by tools/mkrooms.py, the rooms
     \ packed by tools/packrooms.py (decision 5).
     INCLUDE "data/rooms.6502"
     INCLUDE "data/packed.6502"
+    INCLUDE "data/gfx.6502"
 .tiles
     INCBIN "data/tiles.bin"
 .room_buffer

@@ -700,6 +700,7 @@ ZA_AUTO2 f_frame_zp
     INX : BNE all
     LDA mon_room : ORA #&80 : STA mon_room
 .toy
+    LDA #4 : STA truck_strip    ; (&9AF5)
     \ This egg's toy (&9B08): motorbike, car, boat, jet, then again.
     LDA egg : SEC : SBC #1 : AND #3 : TAX : INX
     LDA #&1C

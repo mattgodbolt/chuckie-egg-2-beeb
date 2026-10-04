@@ -155,6 +155,19 @@ ZA_AUTO1 sp_colour          ; a byte of four pixels in the sprite's colour
     RTS
 }
 
+\ Sprite frame A's header: low byte in A, high in X. The table has 152
+\ entries, so frame numbers from &80 index its second page (as the
+\ original's &8BDE carries into its high byte).
+.sprite_frame
+{
+    ASL A : TAY : BCS high
+    LDX sprite_frames+1,Y : LDA sprite_frames,Y
+    RTS
+.high
+    LDX sprite_frames+257,Y : LDA sprite_frames+256,Y
+    RTS
+}
+
 \ How `cell` looks: glyph = its tile's 8 bytes, paper and diff its colours.
 .cell_looks
 {

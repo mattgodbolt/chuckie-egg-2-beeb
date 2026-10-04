@@ -61,12 +61,14 @@ def harry_state(m, n):
         "score": "".join(str(m[0xA445 + i]) for i in range(10)), "lives": m[0xA3FA],
         "carried": m[0xA560], "factory": m[0xA48C], "rr": m[0xA400],
         "sel": 1 if m[0xA405] else 0, "falling": m[0xA54E],
+        "train": [m[0xA48D], m[0xA48E]],
     }
 
 
-def teleport(spec, start):
+def teleport(spec, start, power=False):
     """After one pass in room 1, put Harry in room, row, col, yf, xf with
-    state and facing, call the room set-up (&7913) and take the checkpoint."""
+    state and facing, call the room set-up (&7913) and take the checkpoint.
+    With power, the lever's power is on first (&A48C bit 0)."""
     from skoolkit.simutils import PC, SP
     room, row, col, yf, xf, state, face = start
     m = spec.mem
@@ -87,6 +89,8 @@ def teleport(spec, start):
     m[HARRY + 0], m[HARRY + 1] = p & 0xFF, p >> 8
     m[HARRY + 6], m[HARRY + 7] = m[header], m[header + 1]
     m[0xA487], m[0xA485], m[0xA486] = state, 0, 0
+    if power:
+        m[0xA48C] |= 1
     # Call the room set-up, returning to the main loop's top.
     sp = regs[SP] - 2
     m[sp], m[sp + 1] = MAIN_LOOP & 0xFF, MAIN_LOOP >> 8
@@ -106,6 +110,7 @@ def main():
     ap.add_argument("--snap", default="build/ce2.z80")
     ap.add_argument("--out", default="build/zx_passes.json")
     ap.add_argument("--start", help="room,row,col,yf,xf,state,face")
+    ap.add_argument("--power", action="store_true", help="with --start: the power on")
     args = ap.parse_args()
     inputs = parse_inputs(args.inputs)
     spec = Spectrum(args.snap)
@@ -120,7 +125,7 @@ def main():
     spec.frames(5)
     spec.key("P", False)
     if args.start:
-        teleport(spec, [int(v) for v in args.start.split(",")])
+        teleport(spec, [int(v) for v in args.start.split(",")], args.power)
     log = []
     for n in range(args.passes):
         # (After a teleport the set-up has just returned to the loop's top.)

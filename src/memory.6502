@@ -103,6 +103,20 @@ NM = 5
 .train_pos  SKIP 1          ; ... and position (&A48E)
 \ Things drawn in this room since it was entered (for collide.6502).
 .on_screen  SKIP 32         ; a bit per thing
+.noise_flag SKIP 1          ; the train's noise on (&91B5)
+.truck_strip SKIP 1         ; the truck strip repainted last (&91B6)
+\ The lift (&A52C): type (0 none, 1 rising bar, 2 platform), start, place.
+.l_type     SKIP 1
+.l_srow     SKIP 1
+.l_scol     SKIP 1
+.l_width    SKIP 1
+.l_dy       SKIP 1
+.l_cell     SKIP 2
+.l_yf       SKIP 1
+.l_frame    SKIP 2
+.l_ocell    SKIP 2
+.l_oyf      SKIP 1
+.l_oframe   SKIP 2
 ENDSECTION
 
 \ The three 32 x 24 maps the room drawer fills, one byte a cell, indexed by

@@ -1,0 +1,378 @@
+\ ***************************************************************************
+\ Machines: the truck, the train and the lifts (&8EE8-&9189;
+\ docs/research/monsters.md section 6). The truck and the train are strips,
+\ one cell wide, painted over the cells (not ORed on) and repaired by
+\ repainting; the lifts are sprites, moved and redrawn once a pass.
+\ ***************************************************************************
+
+\ The noise flag (&91B5): set while the train is drawn with the power on.
+\ The noise routine (&92E7) is called nine times a pass and, while the flag
+\ is set, takes a random number each time, so the calls stay in the
+\ original's places even before there is sound.
+.noise
+{
+    LDA noise_flag : BEQ quiet
+    JSR rng                         ; (and the speaker: sound to come)
+.quiet
+    RTS
+}
+
+\ Paint strip frames C, C+1, ... (B of them) from column D, row E, a column
+\ each, in Spectrum colour A (&8FC1, &7F4F): each strip copied over the
+\ cells, its set pixels in the colour and the rest in the cell's paper.
+.draw_strips
+{
+    STA ds_ink
+.strip
+    LDA ds_c : JSR sprite_frame
+    STA glyph : STX glyph+1
+    LDY #0 : LDA (glyph),Y : STA ds_rows
+    CLC : LDA glyph : ADC #2 : STA glyph
+    BCC header
+    INC glyph+1
+.header
+    \ cell = E * 32 + D
+    LDA ds_e : LSR A : LSR A : LSR A : STA cell+1
+    LDA ds_e : ASL A : ASL A : ASL A : ASL A : ASL A : ORA ds_d : STA cell
+.cell_loop
+    \ The paper from the attribute map; the ink is the strip's.
+    LDA cell : STA ds_p
+    CLC : LDA cell+1 : ADC #HI(attr_map) : STA ds_p+1
+    LDY #0 : LDA (ds_p),Y
+    LSR A : LSR A : LSR A : AND #7 : TAX
+    LDA cmap,X : TAX : LDA colour_bytes,X : STA paper
+    LDX ds_ink : LDA cmap,X : TAX : LDA colour_bytes,X
+    EOR paper : STA diff
+    JSR draw_glyph_pd
+    CLC : LDA glyph : ADC #8 : STA glyph
+    BCC down
+    INC glyph+1
+.down
+    CLC : LDA cell : ADC #32 : STA cell
+    BCC next
+    INC cell+1
+.next
+    DEC ds_rows : JNE cell_loop
+    INC ds_d : INC ds_c
+    DEC ds_b : JNE strip
+    RTS
+}
+ZA_AUTO2 ds_p
+.ds_ink EQUB 0
+.ds_rows EQUB 0
+.ds_b EQUB 0                ; strips
+.ds_c EQUB 0                ; the first strip's frame
+.ds_d EQUB 0                ; column
+.ds_e EQUB 0                ; row
+
+\ Repaint B cells down from column D, row C from the maps (&8FA5).
+.restore_cells
+{
+    LDA rc_c : LSR A : LSR A : LSR A : STA cell+1
+    LDA rc_c : ASL A : ASL A : ASL A : ASL A : ASL A : ORA rc_d : STA cell
+.loop
+    JSR redraw_cell
+    CLC : LDA cell : ADC #32 : STA cell
+    BCC next
+    INC cell+1
+.next
+    DEC rc_b : BNE loop
+    RTS
+}
+.rc_b EQUB 0
+.rc_c EQUB 0
+.rc_d EQUB 0
+
+\ Redraw `cell` from the tile and attribute maps.
+.redraw_cell
+    JSR cell_looks
+    JMP draw_glyph_pd
+
+\ The truck, drawn on entering room 1 or 111 (&9011): strips &7C-&82 at
+\ columns 0-6, row 16 (room 1) or 17 (room 111).
+.truck_draw
+{
+    LDX #16
+    LDA room : CMP #1 : BEQ row
+    INX
+.row
+    STX ds_e
+    LDA #0 : STA ds_d
+    LDA #7 : STA ds_b
+    LDA #&7C : STA ds_c
+    LDA #6 : JMP draw_strips
+}
+
+\ Every pass in those rooms (&8FED): one strip repainted, in turn.
+.truck_refresh
+{
+    LDX #&11
+    LDA room : CMP #1 : BNE row
+    DEX
+.row
+    STX ds_e
+    LDX truck_strip : INX : CPX #7 : BCC ok
+    LDX #0
+.ok
+    STX truck_strip
+    STX ds_d
+    TXA : CLC : ADC #&7C : STA ds_c
+    LDA #1 : STA ds_b
+    LDA #6 : JMP draw_strips
+}
+
+\ The truck backing in at the start of every egg (&9028): 14 steps, ten
+\ frames each, the last few strips of either set from the left edge.
+.truck_arrives
+{
+    LDA #14 : STA ta_b
+.step
+    LDA #16 : SEC : SBC ta_b : LSR A : STA ds_b   ; strips showing
+    LDA #&83 : BCS shifted
+    CLC : ADC #7                                  ; the aligned set
+.shifted
+    SEC : SBC ds_b : STA ds_c
+    LDA #0 : STA ds_d
+    LDA #16 : STA ds_e
+    LDA #6 : JSR draw_strips
+    JSR wait10
+    DEC ta_b : BNE step
+    RTS
+}
+.ta_b EQUB 0
+
+\ Ten frames (&904E).
+.wait10
+{
+    LDA #10 : STA w10_n
+.loop
+    JSR wait_vsync
+    DEC w10_n : BNE loop
+    RTS
+}
+.w10_n EQUB 0
+
+\ The truck driving off with the egg (&9059), the cells behind it repainted.
+.truck_leaves
+{
+    LDA #14 : STA ta_b
+.step
+    LDA ta_b : LSR A : STA ds_b : PHP
+    LDA #&8A : BCC aligned
+    SEC : SBC #7
+.aligned
+    SEC : SBC ds_b : STA ds_c
+    LDA #0 : STA ds_d
+    LDA #&11 : STA ds_e
+    LDA ds_b : BEQ none
+    PHA
+    LDA #6 : JSR draw_strips
+    PLA : STA ds_b
+.none
+    PLP : BCC no_restore
+    \ An odd step: the column just left behind, rows 17-23.
+    LDA ds_b : STA rc_d
+    LDA #&11 : STA rc_c
+    LDA #7 : STA rc_b
+    JSR restore_cells
+.no_restore
+    JSR wait10
+    DEC ta_b : BNE step
+    RTS
+}
+
+\ The machines, once a pass (&8EE8): the train moves with the power on, and
+\ is drawn in its room, the front poking into the next; or the truck
+\ repaired.
+.machines
+{
+    LDA #0 : STA noise_flag
+    LDA factory : AND #1 : BEQ still
+    LDA train_pos : CLC : ADC #1 : AND #63 : STA train_pos
+    BNE still
+    LDX train_room : INX : CPX #81 : BNE set_room
+    LDX #71
+.set_room
+    STX train_room
+.still
+    LDA room : CMP #1 : BEQ truck
+    CMP #111 : BNE not_truck
+.truck
+    JMP truck_refresh
+.not_truck
+    CMP train_room : BEQ here
+    \ Just left this room: repaint column 31, rows 5-7.
+    LDA train_pos : BEQ before
+    LDX room : INX : CPX #81 : BNE next_ok
+    LDX #71
+.next_ok
+    CPX train_room : BNE before
+    LDA #31 : STA rc_d : LDA #5 : STA rc_c : LDA #3 : STA rc_b
+    JMP restore_cells
+.before
+    \ The front poking in from the room before.
+    LDX room : DEX : CPX #80 : BEQ done
+    CPX #70 : BNE prev_ok
+    LDX #80
+.prev_ok
+    CPX train_room : BNE done
+    LDA train_pos : CMP #&37 : BCC done
+    SEC : SBC #&35 : LSR A : STA ds_b
+    LDA #&4C : BCC parity
+    CLC : ADC #5
+.parity
+    SEC : SBC ds_b : STA ds_c
+    LDA #0 : STA ds_d
+    JMP draw_train
+.here
+    LDA train_pos : LSR A : STA ds_d
+    LDA #&47 : BCC aligned
+    CLC : ADC #5
+.aligned
+    STA ds_c
+    LDA #32 : SEC : SBC ds_d : CMP #5 : BCC few
+    LDA #5
+.few
+    STA ds_b
+    JMP draw_train
+.done
+    RTS
+}
+\ (&8F7F) The column before the train repainted, then its strips at row 5
+\ in cyan; with the power on, the noise.
+.draw_train
+{
+    LDA #5 : STA ds_e
+    LDA ds_d : BEQ paint
+    SEC : SBC #1 : STA rc_d
+    LDA #5 : STA rc_c : LDA #3 : STA rc_b
+    JSR restore_cells
+.paint
+    LDA #5 : JSR draw_strips
+    LDA factory : AND #1 : BEQ done
+    LDA #1 : STA noise_flag
+    JMP noise
+.done
+    RTS
+}
+
+\ The lifts (&9090, table &90E0): room, row, column, type.
+.lift_table
+    EQUB 26, 23, 7, 1
+    EQUB 55, 23, 23, 1
+    EQUB 34, 4, 15, 2
+    EQUB 104, 4, 17, 2
+
+\ SetupLift (&9088), on entering a room.
+.setup_lift
+{
+    LDX #0
+.find
+    LDA lift_table,X : CMP room : BEQ found
+    INX : INX : INX : INX : CPX #16 : BNE find
+    LDA #0 : STA l_type
+    RTS
+.found
+    LDA lift_table+1,X : STA l_srow : STA sl_row
+    LDA lift_table+2,X : STA l_scol
+    LDA lift_table+3,X : STA l_type
+    CMP #2 : BNE placed
+    LDA factory : AND #1 : BNE placed
+    INC sl_row                      ; type 2: a row lower without power
+.placed
+    LDA sl_row : LSR A : LSR A : LSR A : STA l_cell+1
+    LDA sl_row : ASL A : ASL A : ASL A : ASL A : ASL A : ORA l_scol : STA l_cell
+    LDA #0 : STA l_yf : STA l_dy
+    LDA l_type : CLC : ADC #&95 : JSR sprite_frame
+    STA l_frame : STA lf
+    STX l_frame+1 : STX lf+1
+    LDY #1 : LDA (lf),Y : STA l_width
+    RTS
+}
+ZA_AUTO2 lf
+.sl_row EQUB 0
+
+\ RunLift (&90F0), once a pass: move, erase, draw.
+.run_lift
+{
+    LDA l_type : BNE lift
+    RTS
+.lift
+    LDA factory : AND #1 : JEQ stop
+    LDA l_type : CMP #1 : BNE type2
+    \ Type 1: up 2 a pass; at row 3, aligned, back to the start.
+    LDA #2 : STA l_dy
+    LDA l_yf : JNE go
+    LDA l_cell+1 : JNE go           ; rows 8 and up
+    LDA l_cell : BPL top            ; rows 4-7 go on; rows 0-3 is the top
+    JMP go
+.top
+    JSR l_save_old
+    LDA l_srow : LSR A : LSR A : LSR A : STA l_cell+1
+    LDA l_srow : ASL A : ASL A : ASL A : ASL A : ASL A : ORA l_scol : STA l_cell
+    LDA #0 : STA l_yf
+    JMP step
+.type2
+    LDA h_state : CMP #8 : BEQ ridden
+    \ Not ridden: up 2 until its top is in row 4.
+    LDA #2 : STA l_dy
+    LDA l_cell+1 : BNE go
+    LDA l_cell : CMP #5 * 32 : BCS go
+    JMP stop
+.ridden
+    \ Ridden: down 2, until row 23 or anything but bit 5 below it.
+    LDA #&FE : STA l_dy
+    LDA l_yf : BNE go
+    LDA l_cell+1 : CMP #2 : BNE below
+    LDA l_cell : CMP #LO(23 * 32) : BCS stop
+.below
+    LDA l_cell : CLC : ADC #32 : STA lp
+    LDA l_cell+1 : ADC #HI(type_map) : STA lp+1
+    LDY #6
+.cells
+    LDA (lp),Y : AND #&DF : BNE stop
+    DEY : BPL cells
+    JMP go
+.stop
+    LDA #0 : STA l_dy
+.go
+    JSR l_save_old
+.step
+    \ Down or up dy lines (the original's &8E94, across 0).
+    LDA l_yf : SEC : SBC l_dy : TAX
+    AND #7 : STA l_yf
+    TXA : BMI up
+    CMP #8 : BCC moved
+    CLC : LDA l_cell : ADC #32 : STA l_cell
+    BCC moved
+    INC l_cell+1
+    JMP moved
+.up
+    SEC : LDA l_cell : SBC #32 : STA l_cell
+    BCS moved
+    DEC l_cell+1
+.moved
+    \ Erase where it was (&7FC9), draw where it is (&8063), yellow.
+    LDA l_ocell : STA sp_cell
+    LDA l_ocell+1 : STA sp_cell+1
+    LDA l_oyf : STA sp_yf
+    LDA l_oframe : STA sp_frame
+    LDA l_oframe+1 : STA sp_frame+1
+    JSR erase_image
+    LDA l_cell : STA sp_cell
+    LDA l_cell+1 : STA sp_cell+1
+    LDA l_yf : STA sp_yf
+    LDA l_frame : STA sp_frame
+    LDA l_frame+1 : STA sp_frame+1
+    LDX cmap+6 : LDA colour_bytes,X : STA sp_colour
+    JMP draw_sprite
+}
+ZA_AUTO2 lp
+
+.l_save_old
+    LDA l_cell : STA l_ocell
+    LDA l_cell+1 : STA l_ocell+1
+    LDA l_yf : STA l_oyf
+    LDA l_frame : STA l_oframe
+    LDA l_frame+1 : STA l_oframe+1
+    RTS

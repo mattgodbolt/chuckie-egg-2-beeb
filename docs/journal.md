@@ -501,3 +501,48 @@ gathers any number of one ingredient (and makes jumps lower).
   drawing, and the shifts made drawing a little slower. It now runs to the
   viewer's wait loop. Twice now a fixed wait in a test has passed for a bug;
   `CLAUDE.md` says run to a symbol, and that goes for every wait.
+
+### Machines: the truck, the train, the lifts
+
+- `src/machines.6502` transcribes `&8EE8-&9189`. **The truck** backs in at
+  every egg's start (14 steps of 10 frames, the strips growing in from the
+  left edge), drives off with a delivered egg, and in rooms 1 and 111 one of
+  its seven strips is repainted each pass, as the original repairs the
+  holes sprites leave. Matt saw Harry "kick out from thin air": now there's
+  a truck to kick out of.
+- **The train** runs through rooms 71-80 once the power is on, a position
+  step a pass, its front poking into the next room with the opposite
+  parity. While it is drawn with the power on, the original's noise
+  routine, called nine times a pass, takes a random number each time; the
+  port calls `noise` at the same nine places, so the monsters' RNG stays in
+  step (the train-runs scenario: 200 passes, two rooms).
+- **The lifts**: room 26's and 55's bars rising for ever, room 34's and
+  104's platforms that sink while Harry rides them. Harry's state 8 is in:
+  landing on a lift from a fall or jump (within 2 pixels above to 3 below
+  its top), riding it, walking off either end, crushed by a solid cell at
+  the head. The room 24 basket scenario that wandered onto room 34's
+  platform now matches all 120 passes.
+- **A sprite bug older than this layer**: frame numbers from &80 doubled
+  with `ASL A : TAY`, losing the top bit, where the original carries into
+  its high byte. The truck (&80-&89) and lifts (&96, &97) showed it, and so
+  would have the monsters of 19 rooms (types with base frames 138 and 142:
+  rooms 13, 40, 60, 63 and more), drawn with the wrong frames and
+  collided with the wrong boxes. `sprite_frame` does the lookup now; the
+  high-frames scenario (room 13) covers it.
+- **Main RAM ran out** by 32 bytes, with sideways RAM nearly full too
+  (decision 11): the keyboard is now read straight from the System VIA, so
+  nothing calls the OS during play, and pages 1-3 hold three constant
+  tables copied in at start-up. 395 bytes free. The eggs-delivered wait,
+  which used OSBYTE 122, now copies the Spectrum's LAST K behaviour: a new
+  press, or a held key once it would repeat (35 frames).
+- **Test tools**: `--power` on both pass loggers (the lever's power on at
+  the teleport), the train's room and position compared each pass, and
+  `--peek sym:len,...` on the BBC logger for debugging. A trap: my first
+  `--power` poked at the top of the room-1 pass, one pass early, so the
+  BBC's train was a step ahead; the RNG counts per pass showed the
+  original lagging by exactly one.
+- The original's main loop clears the current-object record at the end of
+  part 0 (`&7864`), so the frame interrupt after part 0 draws no object;
+  the port drew it there. Now it doesn't.
+- `make check`: 120 of 120 rooms, 15 scenarios (new: lift-ride,
+  high-frames, train-still, train-runs, lift-rises).

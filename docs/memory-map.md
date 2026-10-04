@@ -7,29 +7,52 @@ build output (`code &0E00-&xxxx (N bytes free)`), never from this file.
 
 | Range | Size | Use |
 |---|---|---|
-| `&0000-&008F` | 144 | zero page, baron's allocator (`ZA_POOL`) |
-| `&0090-&00FF` | 112 | the OS's (OSBYTE and friends still get called) |
-| `&0100-&01FF` | 256 | stack |
-| `&0200-&03FF` | 512 | OS vectors and workspace |
+| `&0000-&005F` | 96 | zero page, baron's allocator (`ZA_POOL`) |
+| `&0060-&008F` | 48 | zero page, the game's permanent state (`memory.6502`) |
+| `&0090-&00FF` | 112 | the OS's until the game starts; since then only `&FC` (the OS's IRQ entry saves A there) |
+| `&0100-&017F` | 128 | `thing_init` (page 1, copied in at start-up) |
+| `&0180-&01FF` | 128 | stack |
+| `&0200-&0235` | 54 | OS vectors (IRQ1V is the game's) |
+| `&0236-&02FF` | 202 | `thing_types` (page 2) |
+| `&0300-&03FF` | 256 | `mon_types` (page 3) |
 | `&0400-&06FF` | 768 | attribute map |
-| `&0700-&09FF` | 768 | tile map (`&0800-&083F` is the OS's sound workspace: the 100Hz interrupt is stopped so it stays put) |
+| `&0700-&09FF` | 768 | tile map |
 | `&0A00-&0CFF` | 768 | cell-type map |
-| `&0D00-&0DFF` | 256 | free once the disc is done with (DFS NMI workspace) |
+| `&0D00-&0DFF` | 256 | `LowState`: monsters, objects, machines, checkpoint |
 | `&0E00-&4FFF` | 16,896 | code and data (copied down from `&1900` after `*TAPE`) |
 | `&5000-&7FFF` | 12,288 | screen: 256 x 192, MODE 1 pixels (decision 1) |
+| `&8000-&BFFF` | 16,384 | sideways RAM: packed rooms, sprites, the font (decision 8) |
 
-## Code and data, 2026-10-04 (the room viewer)
+Pages 1-3 are the OS's until the game owns the interrupts (`install_irq`)
+and reads the keyboard itself (`key_down`, straight from the System VIA):
+from then on the game makes no OS calls. Their tables load after the code
+in the `CE2` file and `copy_os_pages` puts them in place.
+
+## Code and data, 2026-10-04 (machines in)
+
+Approximate, by each file's first label:
 
 | From | What | Bytes |
 |---|---|---|
-| `&0E00` | system, screen (palettes, tile drawing), room drawer, unpacker, viewer | 2,438 |
-| `&0F8C` | colour bytes and nibble-spreading tables | 276 |
-| `&1786` | room palettes (4 bytes a room) | 480 |
-| `&1966` | packed room offsets | 240 |
-| `&1A56` | packed rooms (decision 5) | 7,770 |
-| `&38B0` | tile font, `&20-&5B` | 480 |
-| `&3A90` | room buffer (the largest room unpacked) | 385 |
-| `&3C11` | end: **5,103 bytes free** | |
+| `&0E12` | system, swram, irq | 395 |
+| `&0F9D` | screen | 358 |
+| `&1103` | room drawer | 1,162 |
+| `&158D` | status bar | 420 |
+| `&1731` | room unpacker (streaming) | 560 |
+| `&1961` | sprites | 563 |
+| `&1B94` | Harry | 2,056 |
+| `&239C` | monsters | 1,180 |
+| `&2838` | collisions | 647 |
+| `&2ABF` | objects | 2,023 |
+| `&32A6` | machines: truck, train, lifts | 1,120 |
+| `&3706` | game loop, deaths, keys | 900 |
+| `&3A8A` | room palettes, packed room offsets | 720 |
+| `&3D5A` | Harry's and the sprites' frame pointers | 328 |
+| `&3EA2` | monster table | 1,024 |
+| `&42A2` | object frame pointers, things, visits | 1,291 |
+| `&47AD` | object graphics | 1,256 |
+| `&4C95` | tile font | 480 |
+| `&4E75` | end: **395 bytes free** | |
 
 ## The budget against a stock Model B (2026-10-04)
 

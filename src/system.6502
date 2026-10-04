@@ -19,6 +19,25 @@
     JMP install_irq
 }
 
+\ The tables that live in pages 1-3 (main.6502), from where they loaded.
+\ Only once the interrupts are ours: the OS's handler uses pages 2 and 3.
+.copy_os_pages
+{
+    LDX #page1_end - page1 - 1
+.p1
+    LDA page1_load,X : STA page1,X
+    DEX : BPL p1
+    LDX #page2_end - page2 - 1
+.p2
+    LDA page2_load,X : STA page2,X
+    DEX : CPX #&FF : BNE p2
+    LDX #page3_end - page3 - 1
+.p3
+    LDA page3_load,X : STA page3,X
+    DEX : CPX #&FF : BNE p3
+    RTS
+}
+
 \ Register, value pairs. R2 and R7 move with the narrower, shorter picture
 \ to keep its centre where MODE 1's is.
 .crtc_regs
@@ -33,16 +52,29 @@
     EQUB 8, 0
 .crtc_end
 
-\ Is a key down? X = internal key number EOR &FF (the negative INKEY
-\ value). Z clear (BNE) if it is.
+\ Is a key down? X = internal key number. Z clear (BNE) if it is. Read
+\ straight from the keyboard matrix, as the OS's own INKEY does, so the game
+\ makes no OS calls at all and pages 1-3 are free (main.6502).
 .key_down
+    LDA #&7F : STA sysvia_ddra      ; bits 0-6 the key, bit 7 its state
+    LDA #3 : STA sysvia_orb         ; auto-scan off: the matrix is ours
+    STX sysvia_ora_nh
+    LDA sysvia_ora_nh : AND #&80
+    RTS
+
+\ Is any key down, other than SHIFT, CTRL and the start-up links? Z clear if so.
+.any_key
 {
-    LDA #129 : LDY #&FF : JSR osbyte
-    TXA
+    LDX #&10
+.scan
+    JSR key_down : BNE done
+    INX : BPL scan
+    LDA #0
+.done
     RTS
 }
 
-K_Z      = &9E
-K_X      = &BD
-K_LEFT   = &E6
-K_RIGHT  = &86
+K_Z      = &61
+K_X      = &42
+K_LEFT   = &19
+K_RIGHT  = &79

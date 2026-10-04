@@ -79,6 +79,7 @@ SECTION Loader, org = &1900, load = &FFFF1900, exec = &FFFF0000 + loader, filena
     JSR find_data_bank
     JSR copy_font
     JSR init_system
+    JSR copy_os_pages
 IF DEFINED(VIEWER)
     JMP viewer                  ; the room viewer, for tools/roomcheck.mjs
 ELSE
@@ -98,6 +99,7 @@ ENDIF
     INCLUDE "monsters.6502"
     INCLUDE "collide.6502"
     INCLUDE "objects.6502"
+    INCLUDE "machines.6502"
     INCLUDE "game.6502"
 IF DEFINED(VIEWER)
     INCLUDE "viewer.6502"
@@ -113,10 +115,6 @@ ENDIF
     INCLUDE "data/objects.6502"
 .things
     INCBIN "data/things.bin"
-.thing_types
-    INCBIN "data/thingtypes.bin"
-.thing_init
-    INCBIN "data/thinginit.bin"
 .visits
     INCBIN "data/visits.bin"
 .objgfx
@@ -127,6 +125,34 @@ ENDIF
     .code_end
     PRINT "code &", ~start, "-&", ~code_end, " (", screen - code_end, " bytes free)"
     ENDSECTION
+
+    \ Constant tables for the OS's pages, which the game doesn't use once
+    \ it has the interrupts and reads the keyboard itself: loaded after the
+    \ code, copied into place by copy_os_pages, then overwritten by the
+    \ screen. (&0200-&0235 are the vectors, IRQ1V among them; the stack
+    \ keeps &0180-&01FF.)
+.page1_load
+    SECTION Page1, org = &0100, guard = &0180
+.page1
+.thing_init
+    INCBIN "data/thinginit.bin"
+.page1_end
+    ENDSECTION
+.page2_load
+    SECTION Page2, org = &0236, guard = &0300
+.page2
+.thing_types
+    INCBIN "data/thingtypes.bin"
+.page2_end
+    ENDSECTION
+.page3_load
+    SECTION Page3, org = &0300, guard = &0400
+.page3
+.mon_types
+    INCBIN "data/montypes.bin"
+.page3_end
+    ENDSECTION
+.payload_end
 
 \ Runs from where the file loaded, after the payload; nothing in here is
 \ needed afterwards.

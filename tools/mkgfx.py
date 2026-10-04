@@ -9,9 +9,10 @@ Writes, committed (the build never runs this):
                             (docs/research/monsters.md, section 8)
     src/data/gfx.6502       pointer tables into it, relocated to `sprites`
     src/data/monsters.bin   the monster table (&6B00, four 256-byte columns:
-                            room, row, column, type) and the 52 monster
-                            types (&6F00, 4 bytes: ink, base frame, flags,
-                            speed): docs/research/monsters.md, section 3
+                            room, row, column, type)
+    src/data/montypes.bin   the 52 monster types (&6F00, 4 bytes: ink, base
+                            frame, flags, speed): docs/research/monsters.md,
+                            section 3. (Apart, because it lives in page 3.)
 
 A sprite frame is the original's format: height in character rows, width
 in bytes, then height*8 rows of width bytes, row-major, 1 bit a pixel.
@@ -26,7 +27,7 @@ from zx import Spectrum  # noqa: E402
 SPRITES, SPRITES_END = 0xDFA2, 0xFDF8
 HARRY_FRAMES = 0x89FF       # 12 pointers to frame headers
 SPRITE_FRAMES = 0x91B7      # 152 pointers: monsters, truck, train, lifts
-MONSTERS, MONSTERS_END = 0x6B00, 0x6FD0
+MONSTERS, MONTYPES, MONTYPES_END = 0x6B00, 0x6F00, 0x6FD0
 
 
 def main():
@@ -62,7 +63,9 @@ def main():
     for i in range(152):
         lines.append(f"    EQUW {rel(word(SPRITE_FRAMES + 2 * i))}")
     with open(f"{args.out}/monsters.bin", "wb") as f:
-        f.write(bytes(m[MONSTERS:MONSTERS_END]))
+        f.write(bytes(m[MONSTERS:MONTYPES]))
+    with open(f"{args.out}/montypes.bin", "wb") as f:
+        f.write(bytes(m[MONTYPES:MONTYPES_END]))
     with open(f"{args.out}/gfx.6502", "w") as f:
         f.write("\n".join(lines) + "\n")
     print(f"sprites.bin: {SPRITES_END - SPRITES} bytes")

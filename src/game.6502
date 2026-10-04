@@ -6,7 +6,7 @@
 \ Once, when the game is loaded.
 .init_game
 {
-    LDA #0 : STA dbg_room : STA o_index
+    LDA #0 : STA dbg_room : STA o_index : STA noise_flag
     LDX #3
 .seed
     LDA rng_seed,X : STA rng_state,X
@@ -48,39 +48,53 @@
     LDA harry_frames+1 : STA h_frame+1
     JSR save_checkpoint
     JSR egg_init
-    JSR setup_monsters
-    JSR room_things
+    \ The truck backs in, then room 1 is set up as on entering it.
+    JSR wait_vsync
+    JSR truck_arrives
+    JSR room_setup
     JMP game_loop
 }
 
 \ The main loop (&77B9): three frames a pass, always.
 .game_loop
 {
-    \ Part 0: keys, Harry, a room change.
+    \ Part 0: keys, Harry, a room change. (The noise calls are where the
+    \ original's are: while the train is noisy each takes a random number.)
     JSR read_keys
     JSR harry_update
+    JSR noise
     LDA room_delta : BEQ same_room
     JSR change_room
 .same_room
+    LDA #0 : STA o_sel          ; no object redrawn this frame (&7864)
+    JSR noise
     JSR wait_vsync
     JSR draw_harry
-    JSR draw_object
-    \ Part 1: the next thing, monster tick A.
+    \ Part 1: the train or the truck, the lift, the next thing, monster
+    \ tick A.
+    JSR noise
+    JSR machines
+    JSR run_lift
     JSR next_object
+    JSR noise
     JSR monsters_tick
+    JSR noise
     JSR wait_vsync
     JSR draw_monsters
     JSR draw_object
     \ Part 2: contact, drop, falling; monster tick B; the next thing.
+    JSR noise
     JSR collide
     JSR drop
     JSR falling
     JSR monsters_tick
+    JSR noise
     JSR next_object
     JSR wait_vsync
     JSR draw_monsters
     JSR draw_object
     \ Part 3: contact, drop, falling.
+    JSR noise
     JSR collide
     JSR drop
     JSR falling
@@ -116,8 +130,18 @@
 .enter_room
     LDA room : JSR draw_room
     LDA #0 : STA drawn
+\ The rest of the room set-up (&8B2A, &99F6, &9088).
+.room_setup
+{
     JSR setup_monsters
-    JMP room_things
+    LDA room : CMP #1 : BEQ truck
+    CMP #111 : BNE no_truck
+.truck
+    JSR truck_draw
+.no_truck
+    JSR room_things
+    JMP setup_lift
+}
 
 \ Leaving a room (&77CF-&7856).
 .change_room
@@ -214,6 +238,7 @@ CHECKPOINT_VARS = h_frame + 2 - h_cell    ; h_cell .. h_frame
     LDA #3 : LDX #5 : JSR add_score
     DEC ed_n : BNE score_loop
     JSR extra_life
+    JSR truck_leaves
     \ Black, and the message in yellow (attribute 6) at row 11.
     JSR cls
     LDX #0 : LDA #0 : JSR set_logical       ; black
@@ -238,10 +263,24 @@ CHECKPOINT_VARS = h_frame + 2 - h_cell    ; h_cell .. h_frame
     CLC : ADC #48 : JSR yellow_char
 .one_digit
     PLA : CLC : ADC #48 : JSR yellow_char
-.wait
-    JSR wait_vsync
-    LDA #122 : JSR osbyte : CPX #&FF : BEQ wait     ; until any key
+    JSR wait_key
     JMP next_egg
+}
+
+\ The original's wait (&94D7) clears the Spectrum's LAST K and waits for the
+\ ROM to set it: a new key press, or a held key once it repeats (35 frames).
+.wait_key
+{
+    LDA #35 : STA ed_n
+.held
+    JSR wait_vsync
+    JSR any_key : BEQ press
+    DEC ed_n : BNE held
+    RTS
+.press
+    JSR wait_vsync
+    JSR any_key : BEQ press
+    RTS
 }
 .ed_n EQUB 0
 .delivered_text EQUS "EGGS DELIVERED:-", 0
@@ -302,8 +341,7 @@ CHECKPOINT_VARS = h_frame + 2 - h_cell    ; h_cell .. h_frame
 \ Negative INKEY codes (internal key number EOR &FF; measured in jsbeeb),
 \ bit 0 first: SPACE, P, O, A, Q, S, 1, 0.
 .key_codes
-    EQUB 98 EOR &FF, 55 EOR &FF, 54 EOR &FF, 65 EOR &FF
-    EQUB 16 EOR &FF, 81 EOR &FF, 48 EOR &FF, 39 EOR &FF
+    EQUB 98, 55, 54, 65, 16, 81, 48, 39
 
 \ The RNG's state on the tape (&91B1).
 .rng_seed EQUS "9090"

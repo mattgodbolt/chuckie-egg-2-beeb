@@ -22,7 +22,7 @@ mon_room  = monster_table           ; bit 7 set: disabled
 mon_row   = monster_table + &100
 mon_col   = monster_table + &200
 mon_type  = monster_table + &300
-mon_types = monster_table + &400    ; 4 bytes a type: ink, base, flags, speed
+\ (mon_types, 4 bytes a type: ink, base, flags, speed, is in page 3.)
 
 \ The RNG (&918A): 32 bits, big-endian, shifted left with bit 30 EOR bit
 \ 27 coming in at the bottom; returns the new top byte. Called once for
@@ -98,6 +98,7 @@ mon_types = monster_table + &400    ; 4 bytes a type: ink, base, flags, speed
     RTS
 
 \ ChooseFrame (&8E70): base + (dx < 0 ? 4 : 0) + sub, halved when fast.
+.cf_x EQUB 0
 .choose_frame
 {
     LDA m_sub,X
@@ -107,9 +108,13 @@ mon_types = monster_table + &400    ; 4 bytes a type: ink, base, flags, speed
     LDY m_flags,X : BPL slow
     LSR A
 .slow
-    CLC : ADC m_base,X : ASL A : TAY
-    LDA sprite_frames,Y : STA m_frame_lo,X
-    LDA sprite_frames+1,Y : STA m_frame_hi,X
+    CLC : ADC m_base,X
+    STX cf_x
+    JSR sprite_frame
+    LDY cf_x
+    STA m_frame_lo,Y
+    TXA : STA m_frame_hi,Y
+    LDX cf_x
     RTS
 }
 

@@ -1,6 +1,7 @@
-# Harry scenarios: name | keys held over main-loop passes | passes [| start].
-# start (room,row,col,yf,xf,state,face) puts Harry in another room first
-# (tools/passlog.py --start).
+# Harry scenarios: name | keys held over main-loop passes | passes [| start
+# [| flags]]. start (room,row,col,yf,xf,state,face) puts Harry in another
+# room first (tools/passlog.py --start); flags go to both loggers (--power:
+# the lever's power on).
 # make passes replays each on the original (tools/passlog.py) and the port
 # (tools/passlog.mjs) and compares them pass by pass (tools/passcmp.py).
 idle        |                                          | 60
@@ -13,3 +14,8 @@ dog-deaths  | right:20-300,jump:75                     | 260
 croc-bounce | right:5-100                              | 110 | 27,10,4,0,0,1,0
 bonus-pickup | right:5-40                             | 80  | 11,21,24,0,0,1,0
 visit-bonus | left:5-60,take:30-34                     | 80  | 33,10,12,0,0,1,0
+lift-ride   | right:5-30,take:20-26,left:40-50,take:55-60 | 120 | 24,21,22,0,0,1,0
+high-frames | right:10-30                              | 100 | 13,7,6,0,0,1,0
+train-still |                                          | 40  | 74,21,10,0,0,1,0
+train-runs  |                                          | 200 | 74,12,4,0,0,3,8 | --power
+lift-rises  |                                          | 120 | 26,4,10,0,0,1,0 | --power

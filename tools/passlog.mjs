@@ -4,6 +4,7 @@
 // tools/passcmp.py.
 //
 //   node tools/passlog.mjs '<inputs>' passes [--out build/bbc_passes.json]
+//       [--start room,row,col,yf,xf,state,face] [--power] [--peek sym:len,...]
 //
 // Pass 0 is the first time game_loop is reached; keys are set at the top of
 // a pass, before read_keys.
@@ -14,8 +15,13 @@ const KEYS = { up: "Q", down: "A", left: "O", right: "P", jump: "SPACE", take: "
 const args = process.argv.slice(2);
 const outIdx = args.indexOf("--out");
 const out = outIdx >= 0 ? args.splice(outIdx, 2)[1] : "build/bbc_passes.json";
+// --peek sym:len,...: extra memory to log each pass (for debugging; not compared).
+const peekIdx = args.indexOf("--peek");
+const peeks = peekIdx >= 0 ? args.splice(peekIdx, 2)[1].split(",").map((p) => p.split(":")) : [];
 const startIdx = args.indexOf("--start");
 const start = startIdx >= 0 ? args.splice(startIdx, 2)[1].split(",").map(Number) : null;
+const powerIdx = args.indexOf("--power");
+const power = powerIdx >= 0 && args.splice(powerIdx, 1).length > 0;
 const inputs = (args[0] ?? "").split(",").filter(Boolean).map((part) => {
     const [name, rng] = part.split(":");
     const [a, b] = rng.split("-").map(Number);
@@ -36,6 +42,13 @@ try {
         const cell = row * 32 + col;
         await b.write("dbg_start", [cell & 0xff, cell >> 8, yf, xf, state, face]);
         await b.write("dbg_room", [room]);
+        if (power) {
+            // As the original's logger does, at the teleport itself: on at
+            // the top of this pass, room 1's machines would move the train.
+            await b.runUntil("teleport");
+            await b.write("factory", [(await b.peek("factory")) | 1]);
+            await b.breakpoint("game_loop");    // (runUntil cleared it)
+        }
     }
     for (let n = 0; n < passes; n++) {
         const r = await b.run(10);
@@ -62,7 +75,13 @@ try {
             score, lives: await b.peek("lives"), carried: await b.peek("carried"),
             factory: await b.peek("factory"), rr: await b.peek("o_index"),
             sel: (await b.peek("o_sel")) ? 1 : 0, falling: await b.peek("f_thing"),
+            train: [await b.peek("train_room"), await b.peek("train_pos")],
         });
+        if (peeks.length) {
+            const extra = {};
+            for (const [sym, len] of peeks) extra[sym] = await b.read(sym, Number(len ?? 1));
+            log[log.length - 1].peek = extra;
+        }
     }
 } finally {
     await b.close();

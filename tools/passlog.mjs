@@ -57,7 +57,7 @@ try {
             const type = await b.peek(b.addr("t_type") + carry);
             const [, gfx, kind] = await b.read(b.addr("thing_types") + 3 * type, 3);
             const frame = await b.read(b.addr("object_frames") + 2 * gfx, 2);
-            await b.write("carried_h", [await b.peek(frame[0] | (frame[1] << 8))]);
+            await b.write("carried_h", [(await b.peek(frame[0] | (frame[1] << 8))) & 7]);   // (sprite.6502's header)
             await b.write("carrying_name", [(kind & 15) + 1]);
         }
         await b.breakpoint("game_loop");    // (runUntil cleared it)

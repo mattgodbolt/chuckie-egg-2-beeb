@@ -249,7 +249,7 @@ ZA_AUTO2 ds_p
     LDA l_type : CLC : ADC #&95 : JSR sprite_frame
     STA l_frame : STA lf
     STX l_frame+1 : STX lf+1
-    LDY #1 : LDA (lf),Y : STA l_width
+    LDY #1 : LDA (lf),Y : AND #15 : STA l_width   ; (the header's other bits: sprite.6502)
     RTS
 }
 ZA_AUTO2 lf

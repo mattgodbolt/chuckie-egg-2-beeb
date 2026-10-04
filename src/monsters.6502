@@ -250,8 +250,8 @@ ZA_AUTO2 mframe
 .m_size
     LDA m_frame_lo,X : STA mframe
     LDA m_frame_hi,X : STA mframe+1
-    LDY #0 : LDA (mframe),Y : STA m_h
-    INY : LDA (mframe),Y : STA m_w
+    LDY #0 : LDA (mframe),Y : AND #7 : STA m_h     ; (the header's other bits: sprite.6502)
+    INY : LDA (mframe),Y : AND #15 : STA m_w
     LDA m_cell_lo,X : STA mon_p
     CLC : LDA m_cell_hi,X : ADC #HI(type_map) : STA mon_p+1
     RTS

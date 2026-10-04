@@ -203,3 +203,14 @@ NEXT
 FOR n = 0..15
     EQUB n * &11
 NEXT
+\ The same with the nibble turned over (its leftmost pixel in bit 0), for
+\ drawing a mirror image (sprite.6502's sprite_mode patches it in).
+.spread_rev
+FOR n = 0..15
+    EQUB ((n AND 1) * 8 + (n AND 2) * 2 + (n AND 4) DIV 2 + (n AND 8) DIV 8) * &11
+NEXT
+\ Which of them sprite.6502 spreads an image's nibbles with: a frame as it
+\ is, and turned over. (sprite_mode patches only the low byte.)
+.mode_spread
+    EQUB LO(spread_lo), LO(spread_rev)
+    ASSERT HI(spread_lo) = HI(spread_rev) AND HI(spread_lo) = HI(spread_rev + 15)

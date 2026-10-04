@@ -192,8 +192,8 @@ ZA_AUTO2 cimg               ; who_was_hit's frames
 .frame_box
     PHA : AND #31 : STA box_l
     TYA : TAX : PLA : JSR cell_row : STA box_t
-    LDY #1 : LDA (cimg),Y : CLC : ADC box_l : STA box_r
-    DEY : LDA (cimg),Y : CLC : ADC box_t : STA box_b
+    LDY #1 : LDA (cimg),Y : AND #15 : CLC : ADC box_l : STA box_r     ; (the header's other
+    DEY : LDA (cimg),Y : AND #7 : CLC : ADC box_t : STA box_b         ; bits: sprite.6502)
     RTS
 
 \ Contact with monster c_m (&94E5).

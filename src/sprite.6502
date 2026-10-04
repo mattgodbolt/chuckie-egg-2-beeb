@@ -12,6 +12,14 @@
 \ are pre-shifted in 2-pixel steps) and a cell plus a pixel line (yf)
 \ down.
 \
+\ A monster's, a lift's or an object's frame leaves out what drawing
+\ doesn't need (decision 26, tools/mkgfx.py): its empty lines at the top
+\ and bottom, how many in bits 3-7 of the height byte (top) and 4-6 of the
+\ width byte (bottom); and a mirror image of another frame (bit 7 of the
+\ width byte) has no pixels of its own, but where its twin's are, relative
+\ to its header, which are drawn turned over. Everything but the drawing
+\ reads the header bytes masked to 3 and 4 bits.
+\
 \ Both routines work a cell row at a time, and in it a column at a time
 \ from the right: a frame byte's two screen bytes are touched by no other
 \ byte, so the order doesn't change what's drawn. Y is the line in the
@@ -30,6 +38,8 @@ ZA_AUTO1 sp_h8              ; its lines: a column's bytes
 ZA_AUTO1 sp_width           ; its width in bytes
 ZA_AUTO1 sp_w16             ; 16 * (width - 1): its last column on the screen
 ZA_AUTO1 sp_lines           ; its lines below this cell row
+ZA_AUTO2 sp_step            ; sp_p's step to the column on the left: -sp_h8, or a mirror's +sp_h8
+ZA_AUTO1 sp_half            ; which half of a cell sp_scr is: 0 the left, a mirror's 8 the right
 \ ... this cell row ...
 ZA_AUTO2 sp_rowcell         ; its first cell
 ZA_AUTO2 sp_rowscr          ; its screen address
@@ -40,7 +50,7 @@ ZA_AUTO1 sp_end             ; Y after its last line
 ZA_AUTO1 sp_c               ; from width - 1 down to 0
 ZA_AUTO2 sp_p               ; its frame bytes, for Y = 0
 ZA_AUTO2 sp_scr             ; the screen: this cell's top, its left four pixels
-ZA_AUTO2 sp_scr8            ; ... and its right four (sp_scr + 8)
+ZA_AUTO2 sp_scr8            ; ... and its right four (sp_scr EOR 8; a mirror's the other way)
 ZA_AUTO1 sp_yl              ; (erase_image's Y, kept through a look-up)
 
 \ Draw the frame at sp_frame, sp_cell, sp_yf in Spectrum colour sp_ink,
@@ -58,12 +68,17 @@ ZA_AUTO1 sp_yl              ; (erase_image's Y, kept through a look-up)
     LDA (sp_p),Y : BEQ next
     STA img
     LSR A : LSR A : LSR A : LSR A : BEQ right
-    TAX                         ; the left four pixels
-    LDA (sp_scr),Y : EOR sp_colour : AND spread_lo,X : EOR (sp_scr),Y : STA (sp_scr),Y
+    TAX                         ; the left four pixels (sprite_mode patches
+                                ; the spread_lo of .dl, .dr for a mirror)
+    LDA (sp_scr),Y : EOR sp_colour
+.dl AND spread_lo,X
+    EOR (sp_scr),Y : STA (sp_scr),Y
 .right
     LDA img : AND #15 : BEQ next
     TAX                         ; the right four
-    LDA (sp_scr8),Y : EOR sp_colour : AND spread_lo,X : EOR (sp_scr8),Y : STA (sp_scr8),Y
+    LDA (sp_scr8),Y : EOR sp_colour
+.dr AND spread_lo,X
+    EOR (sp_scr8),Y : STA (sp_scr8),Y
 .next
     INY : CPY sp_end : BNE line
     JSR sprite_left : BCC line
@@ -109,10 +124,15 @@ ZA_AUTO1 sp_yl              ; (erase_image's Y, kept through a look-up)
     LDA (sp_p),Y
 .clear_have
     STA img
+    \ (sprite_mode patches the spread_lo of .cl to .tr for a mirror.)
     LSR A : LSR A : LSR A : LSR A : EOR #15 : TAX
-    LDA (sp_scr),Y : AND spread_lo,X : STA (sp_scr),Y
+    LDA (sp_scr),Y
+.cl AND spread_lo,X
+    STA (sp_scr),Y
     LDA img : AND #15 : EOR #15 : TAX
-    LDA (sp_scr8),Y : AND spread_lo,X : STA (sp_scr8),Y
+    LDA (sp_scr8),Y
+.cr AND spread_lo,X
+    STA (sp_scr8),Y
 .clear_next
     INY : CPY sp_end : BEQ column_done
     LDA (sp_p),Y : BNE clear_have
@@ -122,15 +142,22 @@ ZA_AUTO1 sp_yl              ; (erase_image's Y, kept through a look-up)
     LDA (sp_p),Y : BEQ next
 .have
     STA img
-    LDA (glyph),Y : BNE tiled
+    LDA (glyph),Y
+.to_tiled
+    BNE tiled                       ; (tiled_m for a mirror: sprite_mode)
+    ZA_CANJUMP tiled, tiled_m
     \ The tile's line is blank: the room's pixels here are paper.
     LDA img : LSR A : LSR A : LSR A : LSR A : BEQ plain_right
     TAX
-    LDA (sp_scr),Y : EOR paper : AND spread_lo,X : EOR (sp_scr),Y : STA (sp_scr),Y
+    LDA (sp_scr),Y : EOR paper
+.pl AND spread_lo,X
+    EOR (sp_scr),Y : STA (sp_scr),Y
 .plain_right
     LDA img : AND #15 : BEQ next
     TAX
-    LDA (sp_scr8),Y : EOR paper : AND spread_lo,X : EOR (sp_scr8),Y : STA (sp_scr8),Y
+    LDA (sp_scr8),Y : EOR paper
+.pr AND spread_lo,X
+    EOR (sp_scr8),Y : STA (sp_scr8),Y
 .next
     INY : CPY sp_end : BNE line
 .column_done
@@ -141,17 +168,27 @@ ZA_AUTO1 sp_yl              ; (erase_image's Y, kept through a look-up)
     JMP each_row
 .done
     RTS
+.tiled_m
+    \ A mirror's screen halves are the other way round (sp_half), so the
+    \ tile's are too: its byte with the nibbles swapped.
+    ASL A : ADC #&80 : ROL A : ASL A : ADC #&80 : ROL A
 .tiled
-    \ The room's pixels: the tile's line, in the cell's colours.
+    \ The room's pixels: the tile's line, in the cell's colours (the
+    \ image's pixels by .tl and .tr, which sprite_mode patches; the tile's
+    \ by spread_lo always).
     STA tb
     LDA img : LSR A : LSR A : LSR A : LSR A : BEQ tiled_right
-    TAX : LDA spread_lo,X : STA mask
+    TAX
+.tl LDA spread_lo,X
+    STA mask
     LDA tb : LSR A : LSR A : LSR A : LSR A : TAX
     LDA spread_lo,X : AND diff : EOR paper
     EOR (sp_scr),Y : AND mask : EOR (sp_scr),Y : STA (sp_scr),Y
 .tiled_right
     LDA img : AND #15 : BEQ next
-    TAX : LDA spread_lo,X : STA mask
+    TAX
+.tr LDA spread_lo,X
+    STA mask
     LDA tb : AND #15 : TAX
     LDA spread_lo,X : AND diff : EOR paper
     EOR (sp_scr8),Y : AND mask : EOR (sp_scr8),Y : STA (sp_scr8),Y
@@ -162,33 +199,102 @@ ZA_AUTO1 sp_yl              ; (erase_image's Y, kept through a look-up)
 \ its first cell row.
 .sprite_start
 {
-    LDY #0 : LDA (sp_frame),Y
+    ZA_AUTO1 top
+    \ Its first line: sp_cell, sp_yf (a packed frame's, lower: below).
+    LDA sp_cell : STA sp_rowcell
+    LDA sp_cell+1 : STA sp_rowcell+1
+    LDA sp_yf : STA sp_y
+    \ The header: height + 8 * top, width + 16 * bottom (+ MIRROR).
+    LDY #1 : LDA (sp_frame),Y : TAX
+    AND #15 : STA sp_width
+    DEY : LDA (sp_frame),Y
+    CPX #16 : BCS packed
+    CMP #8 : BCS packed
+    \ Every line and its own pixels (Harry's frames, and the monsters' and
+    \ objects' with no empty lines): the quick way.
     ASL A : ASL A : ASL A : STA sp_h8 : STA sp_lines
-    INY : LDA (sp_frame),Y : STA sp_width
-    \ sp_rowp = the last column's first line, less yf: frame + 2 +
-    \ (width - 1) * lines - yf.
+    BCC own                         ; (always: height < 8)
+.packed
+    LSR A : LSR A : LSR A : STA top                             ; the lines left out above
+    LDA (sp_frame),Y : AND #7 : ASL A : ASL A : ASL A : SEC : SBC top : STA sp_h8
+    TXA : LSR A : LSR A : LSR A : LSR A : AND #7                ; ... and below
+    EOR #&FF : SEC : ADC sp_h8 : STA sp_h8 : STA sp_lines       ; the lines a column holds
+    \ The first of them is `top` lines down: whole cell rows of 32 cells,
+    \ then the line in the cell.
+    LDA top : BEQ moved
+    CLC : ADC sp_yf : STA top
+    AND #7 : STA sp_y
+    LDA top : AND #&F8 : BEQ moved
+    ASL A : ASL A
+    CLC : ADC sp_rowcell : STA sp_rowcell
+    BCC moved
+    INC sp_rowcell+1
+.moved
+    \ sp_rowp: the first line held of the column drawn first (the screen's
+    \ last), less sp_y.
+    TXA : BMI mirror
+.own
+    \ Its own pixels follow the header, a column at a time from the left;
+    \ the last column is frame + 2 + (width - 1) * lines, and the columns
+    \ go leftwards from there.
     CLC : LDA sp_frame : ADC #2 : STA sp_rowp
     LDA sp_frame+1 : ADC #0 : STA sp_rowp+1
     LDX sp_width
 .across
-    DEX : BEQ top
+    DEX : BEQ back
     CLC : LDA sp_rowp : ADC sp_h8 : STA sp_rowp
     BCC across
     INC sp_rowp+1
     BCS across                      ; (always)
-.top
-    SEC : LDA sp_rowp : SBC sp_yf : STA sp_rowp
+.back
+    SEC : TXA : SBC sp_h8 : STA sp_step         ; (X = 0)
+    DEX : STX sp_step+1
+    INX : STX sp_half               ; X = 0: drawn as it is
+    BEQ pixels                      ; (always)
+.mirror
+    \ A mirror image: its twin's pixels, which its next two bytes say
+    \ where, from the header. Each column is the twin's from the other
+    \ side, turned over: the first column is the screen's last, the
+    \ columns go rightwards, the screen halves are swapped (sp_half), and
+    \ each half's pixels are turned over (sprite_mode).
+    LDY #2 : LDA (sp_frame),Y : CLC : ADC sp_frame : STA sp_rowp
+    INY : LDA (sp_frame),Y : ADC sp_frame+1 : STA sp_rowp+1
+    LDA sp_h8 : STA sp_step
+    LDA #8 : STA sp_half
+    LDX #0 : STX sp_step+1
+    INX                             ; X = 1: turned over
+.pixels
+    LDA mode_spread,X : CMP draw_sprite.dl+1 : BEQ moded
+    JSR sprite_mode
+.moded
+    SEC : LDA sp_rowp : SBC sp_y : STA sp_rowp
     BCS screen_addr
     DEC sp_rowp+1
 .screen_addr
     \ The first cell's screen address; the last column 16 * (width - 1) on.
     LDA sp_width : SEC : SBC #1 : ASL A : ASL A : ASL A : ASL A : STA sp_w16
-    LDA sp_cell : LDX sp_cell+1 : JSR cell_screen
+    LDA sp_rowcell : LDX sp_rowcell+1 : JSR cell_screen
     STA sp_rowscr : STY sp_rowscr+1
-    LDA sp_cell : STA sp_rowcell
-    LDX sp_cell+1 : STX sp_rowcell+1
-    JSR cell_row : STA sp_row
-    LDA sp_yf : STA sp_y
+    LDA sp_rowcell : LDX sp_rowcell+1 : JSR cell_row : STA sp_row
+    RTS
+}
+
+\ Patch draw_sprite and erase_image for drawing frames as they are (X =
+\ 0) or turned over (X = 1): the table that spreads the image's nibbles,
+\ and the way into erase_image's tiled path. (sprite_start calls this only
+\ when it changes: the code says which way it is.)
+.sprite_mode
+{
+    LDA mode_spread,X
+    STA draw_sprite.dl+1 : STA draw_sprite.dr+1
+    STA erase_image.cl+1 : STA erase_image.cr+1
+    STA erase_image.pl+1 : STA erase_image.pr+1
+    STA erase_image.tl+1 : STA erase_image.tr+1
+    LDA #erase_image.tiled - erase_image.to_tiled - 2
+    CPX #1 : BCC as_is
+    LDA #erase_image.tiled_m - erase_image.to_tiled - 2
+.as_is
+    STA erase_image.to_tiled+1
     RTS
 }
 
@@ -209,7 +315,7 @@ ZA_AUTO1 sp_yl              ; (erase_image's Y, kept through a look-up)
     LDX sp_width : DEX : STX sp_c
     LDA sp_rowp : STA sp_p
     LDA sp_rowp+1 : STA sp_p+1
-    CLC : LDA sp_rowscr : ADC sp_w16 : STA sp_scr : ORA #8 : STA sp_scr8
+    CLC : LDA sp_rowscr : ADC sp_w16 : ORA sp_half : STA sp_scr : EOR #8 : STA sp_scr8
     LDA sp_rowscr+1 : ADC #0 : STA sp_scr+1 : STA sp_scr8+1
     LDY sp_y
     RTS
@@ -220,9 +326,9 @@ ZA_AUTO1 sp_yl              ; (erase_image's Y, kept through a look-up)
 .sprite_left
 {
     DEC sp_c : BMI done
-    SEC : LDA sp_p : SBC sp_h8 : STA sp_p
-    LDA sp_p+1 : SBC #0 : STA sp_p+1
-    SEC : LDA sp_scr : SBC #16 : STA sp_scr : ORA #8 : STA sp_scr8
+    CLC : LDA sp_p : ADC sp_step : STA sp_p
+    LDA sp_p+1 : ADC sp_step+1 : STA sp_p+1
+    SEC : LDA sp_scr : SBC #16 : STA sp_scr : EOR #8 : STA sp_scr8
     LDA sp_scr+1 : SBC #0 : STA sp_scr+1 : STA sp_scr8+1
     LDY sp_y
     CLC

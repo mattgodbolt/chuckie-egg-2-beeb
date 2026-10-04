@@ -37,8 +37,8 @@ KIND_FIXED = &40            ; kind bit 6 (with bit 7): a machine part
     \ The footprint: h x w cells from the thing's cell.
     LDA o_cell : STA tp
     CLC : LDA o_cell+1 : ADC #HI(type_map) : STA tp+1
-    LDY #0 : LDA (o_frame),Y : STA th
-    INY : LDA (o_frame),Y : STA tw
+    LDY #0 : LDA (o_frame),Y : AND #7 : STA th    ; (the header's other bits: sprite.6502)
+    INY : LDA (o_frame),Y : AND #15 : STA tw
 .row
     LDY #0
 .col
@@ -223,7 +223,7 @@ KIND_FIXED = &40            ; kind bit 6 (with bit 7): a machine part
 .hands_empty
     LDA o_kind : AND #15 : CLC : ADC #1 : JSR set_carrying
     LDX o_index : STX carried
-    LDY #0 : LDA (o_frame),Y : STA carried_h
+    LDY #0 : LDA (o_frame),Y : AND #7 : STA carried_h
     CPX #&27 : BNE out_of_world
     LDA factory : AND #&F7 : STA factory    ; the toy off the egg maker
 .out_of_world
@@ -388,8 +388,8 @@ KIND_FIXED = &40            ; kind bit 6 (with bit 7): a machine part
     ZA_AUTO2 p
     LDA 3,X : STA p
     LDA 4,X : STA p+1
-    LDY #0 : LDA (p),Y                      ; the height
-    ASL A : ASL A : ASL A : ASL A : ASL A
+    LDY #0 : LDA (p),Y                      ; the height (the shifts drop
+    ASL A : ASL A : ASL A : ASL A : ASL A   ; the header's other bits: sprite.6502)
     CLC : ADC 0,X : STA p
     LDA 1,X : ADC #HI(type_map) : STA p+1
     LDA (p),Y

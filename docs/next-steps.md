@@ -9,26 +9,16 @@ the toy and egg makers and an egg's delivery. The front end is MODE 7:
 instructions, high scores and names, redefined keys, saves and loads to
 disc under a name, BREAK back to the menu. `make check` runs it all, and
 the sound chip's bytes too; `make check MODEL=Master` on the Master.
-Main RAM has about 3K free, sideways RAM about 190 bytes.
+Main RAM has about 2.9K free, sideways RAM about 1.6K.
 
 ## Waiting on Matt
 
-1. **Footsteps** (for-review 8): the Spectrum's two-cycle click doesn't
-   carry on the SN76489. A next step that needs no decision: find how the
-   BBC *Chuckie Egg* makes its footfall (its disc, jsbeeb's sound capture
-   while Harry walks), then offer it and a couple of variants by ear.
-2. **Checkpoints** (for-review 13): the original's rule (a checkpoint
-   only on entering walking or on a ladder) is kept; a change would be a
-   decision.
-3. **A run on a real Master** (for-review 11).
-4. **The train's rumble** (for-review 7): close enough?
+1. **A run on a real Master** (for-review 11).
+2. **The train's rumble** (for-review 7): close enough?
 
-## In hand
-
-- **Sprite frames trimmed and shared** (an agent is on it): the empty top
-  and bottom lines of monster and lift frames, and the 15 frames that are
-  mirror images of others, measured earlier at about 1.4K of sideways RAM.
-  It must keep every screen identical and every pass within 3 frames.
+Settled after Matt's play: the footsteps and the life-lost tune ("now
+perfect"), the keys, Harry white where he is, the checkpoints (the
+original's rule stays), room 1's ladder, saving and loading.
 
 ## Worth doing, no decision needed
 
@@ -43,8 +33,10 @@ Main RAM has about 3K free, sideways RAM about 190 bytes.
   cycles in each of the first two stretches of a pass while Harry moves.
   Ending the tone from the interrupt would free them; the interrupt's
   sound write must not break into one of the game's.
-- **Sideways RAM headroom**: about 190 bytes, until the sprite work lands.
-  Anything new for the bank (footstep tunes, more text) wants that first.
+- **More from the sprite frames**, if the bank fills again (journal,
+  decision 26): each column's own empty lines (about 660 bytes, but
+  columns of different lengths in the inner loops), Harry's mirror frames
+  (118, but the collision test reads his pixels).
 - **The front end's text** is the original's word for word, including
   "Don't forget to enter the competition", long closed. Leave it, as the
   original is the specification, unless Matt says otherwise.
@@ -62,3 +54,6 @@ Main RAM has about 3K free, sideways RAM about 190 bytes.
 - No palette split cuts an object in two colours (decision 24): room 1's
   ladder is one colour.
 - Saves and loads ask for a filename, with the disc listed (decision 23).
+- Sprite frames packed (decision 26): monsters', lifts' and objects'
+  empty lines left out, 15 mirror images drawn from their twins; 1,427
+  bytes of sideways RAM back, every screen the same.

@@ -1000,3 +1000,70 @@ gathers any number of one ingredient (and makes jumps lower).
   it runs on and how it's checked; LICENSE is MIT for the port's own work,
   with A&F's game itself excluded. "Good enough" says Matt: the disc loses
   its `-wip` (`chuckie-egg-2.ssd`, `make disc`).
+
+### Sprite frames packed (decision 26)
+
+- The sprite agent redid, on the column-major frames, the two savings the
+  data agent had measured on the row-major ones: sideways RAM 174 bytes
+  free becoming 1,601, main RAM 3,010 becoming 2,889.
+  - **Empty lines.** A monster's or a lift's frame leaves out the lines
+    empty in every column, top and bottom: 772 bytes. The counts go in
+    the header bytes' spare bits, and `sprite_start` starts that many
+    lines down; the rest of the drawing never knew a frame's lines were
+    a multiple of 8. The objects' frames (main RAM) get the same, 93
+    bytes. The readers of a frame's size (the collision boxes, `m_size`,
+    the lift's width, the objects' footprint and carried height, and
+    `passlog.mjs`) mask the counts off. Harry's and the strips' frames
+    stay whole: the collision test reads Harry's pixels, and the strips'
+    empty lines are painted.
+  - **Mirror images.** 15 monster frames (and one object) are another
+    frame turned over, and become a stub: the header, then where the
+    twin's pixels are. Drawn column-major, a mirror walks the twin's
+    columns from the first instead of the last, with each cell's two
+    screen halves swapped (`sp_half`) and the nibbles spread through
+    `spread_rev`, so a byte costs what it always did; erasing over a
+    tile swaps the tile byte's nibbles too (12 cycles, mirrors only). The
+    tables and the way into the tiled path are patched by `sprite_mode`
+    only when the way changes, and the code itself says which way it is
+    (no state to keep). 639 bytes.
+  - The 16 bytes no pointer reaches (&EA8E) go.
+- Code: 220 bytes of main RAM, about 107 for the empty lines (28 of them a
+  quick path for frames with none, Harry's and the big monsters', which
+  the header decode had made about 60 cycles slower a call) and 113 for
+  the mirror images.
+- Checked against main: `tools/screencmp.mjs` the same, idle and moving,
+  over 95 rooms (6,551 and 6,458 screens); the mirror path ran in 16 of
+  those rooms and its tiled path in 7 (counted with breakpoints).
+  `make check` passes on the Model B and the Master (120 rooms, 20
+  scenarios, the front end, the sound); `tools/perf.mjs` lists the same
+  rooms as main's, all of them for a room change. The slowest stretch
+  between VSync waits: 24,400 cycles idle (25,700 before), 27,800 moving
+  (28,500). Room by room, idle, the drawing is faster where frames lose
+  many lines (up to 2,300 cycles a stretch) and up to 560 slower where
+  they lose few (rooms 81 and 56), the header decode costing more than
+  the lines save; 56 rooms of 95 are a little slower, the mean 135 cycles
+  faster.
+- Lesson: `frametime.mjs --move` over all rooms doesn't keep two builds in
+  step from room to room. Room 81 came out 2,400 cycles slower in the
+  full run and 120 slower run alone (room 68: 1,000 and 240). Compare
+  builds idle, or room by room.
+- Measured and left:
+  - Each column's own empty lines, beyond the frame's: another 660
+    bytes net of a byte per column, in 58 frames. Columns of different
+    lengths need a start and a pointer per column in the inner loops.
+  - Harry's left-facing frames are his right-facing ones turned over
+    (118 bytes as stubs), but the collision test reads his pixels: it
+    would need each byte turned over (a 32-byte copy when his frame
+    changes, about 90 bytes of main RAM and 1,500 cycles, or a 256-byte
+    table).
+  - Three frames' empty left column: 32 bytes, 26 net, and no header bits
+    left to say so.
+  - 23 one-cell objects are cells of the four 2x4 ones (main RAM, about
+    115 bytes with plain stubs).
+  - The strips' empty lines (76 bytes) and 18 repeated cells (144).
+  - Sprites and objects share no frame, turned over or not.
+- Baron: a two-byte table between `sprite_mode`'s RTS and `sprite_row`
+  drew "ZA_AUTO used in code unreachable" in the viewer build only, at
+  the table's label (the same shape as the long-standing `harry.6502:61`
+  one). A dummy table in the same place didn't. Moved, it went; the game
+  builds never warned.

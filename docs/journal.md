@@ -167,3 +167,30 @@ now a "Reserved macro name" error.
 
 Room 70 is the worst for colour (91.4% of pixels in their own colour):
 its red and yellow brickwork comes out magenta and yellow.
+
+### Packing the rooms
+
+- General-purpose compression doesn't see the rooms' structure. Per-room
+  ZX02 (the port kit's packer) took 13,633 bytes to 10,220; a shared
+  dictionary of whole rooms, which ZX02's `skip` allows, only to 9,671.
+- Measured instead: a room averages 2.7 distinct brushes (tile, attribute,
+  type); those fields repeat from one record to the next about 80% of the
+  time; positions and lengths carry 4.2-5 bits of entropy each, close to
+  their fixed widths. So `tools/packrooms.py` writes a bit stream per room:
+  a prefix code for the command class (a run is one bit), move-to-front
+  lists for attribute, tile and type, fixed widths for the rest, fields in
+  the bytecode's own order so the unpacker emits each as it goes. 7,770
+  bytes, round trip checked for every room. Decision 5.
+- **One record in the whole game says column 32** (room 33). The original's
+  arithmetic carries it into row 12, column 0; it is packed as that, and
+  the round trip compares against the room with that record normalised.
+- `src/unpack.6502` turns a room back into the original's bytecode in a
+  385-byte buffer and the transcribed drawer draws from it, unchanged.
+  Still 120 of 120 against the oracle; 5,103 bytes free under the screen
+  where there were 128.
+- Baron: `ZA_INDEXEDBY` belongs to the instruction just before it, so an
+  indexed load and store on one line need a line each; and it didn't like
+  `mtf-1,X` (Argument out of domain): index from the array's own address.
+- Matt asked for a work-in-progress disc in the repo, linked from the
+  README so the current state can be seen in a browser: `make wip`
+  copies the build to `chuckie-egg-2-wip.ssd`.

@@ -3,9 +3,18 @@
 A port of A&F Software's *Chuckie Egg 2* (1985) from the 48K ZX Spectrum to
 the BBC Micro, in 6502 assembly.
 
-**Status: just started.** The screen geometry is settled and the original is
-being taken apart. See [docs/journal.md](docs/journal.md) for the story so
-far, [docs/research.md](docs/research.md) for what the original is, and
+### ▶ [**Try the work in progress in your browser**](https://bbc.xania.org/?disc=https://raw.githubusercontent.com/mattgodbolt/chuckie-egg-2-beeb/main/chuckie-egg-2-wip.ssd&autoboot)
+
+That link boots [`chuckie-egg-2-wip.ssd`](chuckie-egg-2-wip.ssd), the latest
+work-in-progress disc, in [jsbeeb](https://github.com/mattgodbolt/jsbeeb).
+
+**Status: early.** Right now the disc is a room viewer: all 120 rooms of the
+factory, drawn on the BBC from the original's room data and checked
+against the original's own output. **Z** and **X** (or the cursor keys) step
+through the rooms. There is no Harry yet.
+
+See [docs/journal.md](docs/journal.md) for the story so far,
+[docs/research.md](docs/research.md) for what the original is, and
 [docs/decisions.md](docs/decisions.md) for the calls the port makes.
 
 ## Building

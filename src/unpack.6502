@@ -1,0 +1,219 @@
+\ ***************************************************************************
+\ Unpack a room into the original's bytecode (decision 5).
+\
+\ The rooms are stored as bit streams (tools/packrooms.py describes the
+\ format and checks the round trip); unpack_room turns one back into the
+\ original's command bytes in room_buffer, which the room drawer then reads
+\ as the original read its own data. The packed fields come in the
+\ bytecode's own order, so each is emitted as it is decoded.
+\ ***************************************************************************
+
+ZA_AUTO2 bp                 ; the next byte of the bit stream
+ZA_AUTO1 bbyte              ; the byte being read, used bits shifted out
+ZA_AUTO1 bleft              ; bits left in bbyte
+ZA_AUTO2 op                 ; where the next unpacked byte goes
+\ The move-to-front lists, three entries each: the last three attributes,
+\ tiles and types seen in this room, the most recent first.
+ZA_AUTO 9, mtf
+MTF_ATTR = 0
+MTF_TILE = 3
+MTF_TYPE = 6
+
+\ Read X bits (1-8) as a number in A.
+.getbits
+{
+    ZA_AUTO1 val
+    LDA #0 : STA val
+.loop
+    DEC bleft : BPL have
+    LDY #0 : LDA (bp),Y : STA bbyte
+    INC bp : BNE refilled
+    INC bp+1
+.refilled
+    LDA #7 : STA bleft
+.have
+    ASL bbyte : ROL val
+    DEX : BNE loop
+    LDA val
+    RTS
+}
+
+\ Copy X bits to the unpacked room.
+.emit_bits
+    JSR getbits
+    \ Fall into emit.
+\ Append A to the unpacked room.
+.emit
+{
+    LDY #0 : STA (op),Y
+    INC op : BNE done
+    INC op+1
+.done
+    RTS
+}
+
+\ Row and column, five bits each.
+.emit_place
+    LDX #5 : JSR emit_bits
+    LDX #5 : JMP emit_bits
+
+\ A move-to-front coded value from the list at mtf + X (MTF_ATTR, _TILE or
+\ _TYPE): 0 = the front entry, 10 = the second, 110 = the third, 111 = a
+\ new value in the next 8 bits. Whatever it is moves to the front, and is
+\ emitted.
+.emit_mtf
+{
+    ZA_AUTO1 base
+    ZA_AUTO1 n
+    ZA_AUTO1 v
+    STX base
+    LDA #0 : STA n
+.count
+    LDX #1 : JSR getbits
+    CMP #0 : BEQ hit
+    INC n : LDA n : CMP #3 : BNE count
+    \ A miss: a new value, and the rest shift down.
+    LDX #8 : JSR getbits : STA v
+    LDA base : CLC : ADC #2 : TAX
+    JMP shift
+.hit
+    \ Entry n comes to the front; the ones before it shift down.
+    LDA n : CLC : ADC base : TAX
+    LDA mtf,X
+    ZA_INDEXEDBY 0..8
+    STA v
+.shift
+    CPX base : BEQ front
+    DEX
+    LDA mtf,X
+    ZA_INDEXEDBY 0..7
+    STA mtf+1,X
+    ZA_INDEXEDBY 0..7
+    JMP shift
+.front
+    LDA v : STA mtf,X           ; X = base here
+    ZA_INDEXEDBY 0..6
+    JMP emit
+}
+
+\ Unpack room A (1-120) into room_buffer.
+.unpack_room
+{
+    ZA_AUTO1 ones
+    \ bp = packed_rooms + packed_offsets[room - 1]
+    ASL A : TAX
+    CLC : LDA packed_offsets-2,X : ADC #LO(packed_rooms) : STA bp
+    LDA packed_offsets-1,X : ADC #HI(packed_rooms) : STA bp+1
+    LDA #0 : STA bleft
+    LDA #LO(room_buffer) : STA op
+    LDA #HI(room_buffer) : STA op+1
+    LDX #8 : JSR emit_bits      ; the background
+.record
+    \ The class: count 1s up to five; then, unless that was none or five,
+    \ one more bit picks one of a pair.
+    LDA #0 : STA ones
+.count
+    LDX #1 : JSR getbits
+    CMP #0 : BEQ counted
+    INC ones : LDA ones : CMP #5 : BNE count
+    LDA #0 : JMP emit           ; 11111: the end
+.counted
+    LDA ones : BNE pair
+    JMP run
+.pair
+    LDX #1 : JSR getbits
+    STA unpack_pick
+    LDA ones : ASL A : ORA unpack_pick
+    CMP #2 : JEQ capped
+    CMP #3 : JEQ single
+    CMP #4 : JEQ diag_up
+    CMP #5 : JEQ diag_down
+    CMP #6 : JEQ text
+    CMP #7 : JEQ block
+    CMP #8 : JEQ bend
+    \ hopper: attr row col rows(5) width(6)
+    LDA #7 : JSR emit
+    LDX #MTF_ATTR : JSR emit_mtf
+    JSR emit_place
+    LDX #5 : JSR emit_bits
+    LDX #6 : JSR emit_bits
+    JMP record
+
+\ run: tile attr row col vert len-1 type; capped adds ends(8) before type.
+.run
+    LDA #0 : STA unpack_capped
+    JMP runs
+.capped
+    LDA #1 : STA unpack_capped
+.runs
+    LDX #MTF_TILE : JSR emit_mtf
+    LDX #MTF_ATTR : JSR emit_mtf
+    JSR emit_place
+    LDX #1 : JSR getbits
+    LSR A : ROR A : STA unpack_vert     ; to bit 7
+    LDX #5 : JSR getbits
+    CLC : ADC #1 : ORA unpack_vert : JSR emit
+    LDA unpack_capped : BEQ type_last
+    LDX #8 : JSR emit_bits
+.type_last
+    LDX #MTF_TYPE : JSR emit_mtf
+    JMP record
+
+\ single: attr tile row col type
+.single
+    LDA #10 : JSR emit
+    LDX #MTF_ATTR : JSR emit_mtf
+    LDX #MTF_TILE : JSR emit_mtf
+    JSR emit_place
+    JMP type_last
+
+\ diag: attr row col len type
+.diag_up
+    LDA #8 : JMP diag
+.diag_down
+    LDA #9
+.diag
+    JSR emit
+    LDX #MTF_ATTR : JSR emit_mtf
+    JSR emit_place
+    LDX #5 : JSR emit_bits
+    JMP type_last
+
+\ text: attr row col, then characters (5 bits) until 31
+.text
+    LDA #2 : JSR emit
+    LDX #MTF_ATTR : JSR emit_mtf
+    JSR emit_place
+.char
+    LDX #5 : JSR getbits
+    CMP #31 : BEQ text_end
+    TAX : LDA text_chars,X : JSR emit
+    JMP char
+.text_end
+    LDA #&80 : JSR emit
+    JMP record
+
+\ block: attr row col h w type
+.block
+    LDA #1 : JSR emit
+    LDX #MTF_ATTR : JSR emit_mtf
+    JSR emit_place
+    LDX #5 : JSR emit_bits
+    LDX #5 : JSR emit_bits
+    JMP type_last
+
+\ bend: which(2) attr row col type
+.bend
+    LDX #2 : JSR getbits
+    CLC : ADC #3 : JSR emit
+    LDX #MTF_ATTR : JSR emit_mtf
+    JSR emit_place
+    JMP type_last
+}
+.unpack_pick EQUB 0
+.unpack_capped EQUB 0
+.unpack_vert EQUB 0
+
+\ TEXT_CHARS in tools/packrooms.py.
+.text_chars
+    EQUS " &ABCDEFGHIJKLMNOPQRSTUVWXYZ"

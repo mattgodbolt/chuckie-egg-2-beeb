@@ -24,10 +24,9 @@ ZA_AUTO1 textmode           ; set while drawing text (&A3FF)
     PHA
     JSR set_room_palette
     JSR cls
-    \ rp = roomdata + room_offsets[room]
-    PLA : ASL A : TAX
-    CLC : LDA room_offsets,X : ADC #LO(roomdata) : STA rp
-    LDA room_offsets+1,X : ADC #HI(roomdata) : STA rp+1
+    PLA : JSR unpack_room
+    LDA #LO(room_buffer) : STA rp
+    LDA #HI(room_buffer) : STA rp+1
     \ The background: its paper as both paper and ink.
     JSR fetch : AND #&38 : STA bg
     LSR A : LSR A : LSR A : ORA bg : STA attr

@@ -36,14 +36,19 @@ SECTION Loader, org = &1900, load = &FFFF1900, exec = &FFFF0000 + loader, filena
     INCLUDE "system.6502"
     INCLUDE "screen.6502"
     INCLUDE "rooms.6502"
+    INCLUDE "unpack.6502"
     INCLUDE "viewer.6502"
 
-    \ Data from the original, extracted by tools/mkrooms.py.
+    \ Data from the original: extracted by tools/mkrooms.py, the rooms
+    \ packed by tools/packrooms.py (decision 5).
     INCLUDE "data/rooms.6502"
-.roomdata
-    INCBIN "data/roomdata.bin"
+    INCLUDE "data/packed.6502"
+.packed_rooms
+    INCBIN "data/packed.bin"
 .tiles
     INCBIN "data/tiles.bin"
+.room_buffer
+    SKIP ROOM_BUFFER_SIZE
 
     .code_end
     PRINT "code &", ~start, "-&", ~code_end, " (", screen - code_end, " bytes free)"

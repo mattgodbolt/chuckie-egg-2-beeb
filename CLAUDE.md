@@ -44,7 +44,8 @@ Baron is expected at `../baron/build/src/baron` or on the PATH.
   code: once the game has run, put breakpoints only on game routines
   above `&2800`, and recognise `MENU` by its text in MODE 7's screen
   memory. Not by the build stamp: the OS prints that too, echoing
-  `!BOOT`'s first line.
+  `!BOOT`'s first line. A test typing the same key twice needs a gap
+  between (frontcheck's `type`), or the OS sees one long press.
 
 - `node tools/play.mjs '<script>' shots/prefix_ [--disc build/test.ssd]`:
   the BBC. Steps: a number waits seconds, `f10` frames, `SPACE:tap`,
@@ -109,6 +110,12 @@ handoff, the front end or anything paged.
 - The maps live in `&0400-&0CFF`. The OS's 100Hz interrupt rewrites
   `&080C-&083F` (sound workspace) even when silent; `init_system` stops the
   System VIA timer interrupt that drives it.
+- A soft BREAK reads page 2 beyond the vectors, page 3, `&D0` and
+  `&0D9F-&0DFF` (the last two a Master's): the game keeps out of them
+  (decision 22), and `make front` ends with a BREAK in play.
+- Write the SN76489 with the keyboard on auto-scan (System VIA latch
+  `&0B`): enabled, it drives port A's bit 7 and every byte loses its top
+  bit, so latch bytes land as data in the wrong register.
 
 ## Baron gotchas met so far
 

@@ -26,7 +26,9 @@ is drawn in, then maps to white there. The
 mapping is chosen by brute force to show the most pixels in their own
 colour, under two hard rules: in every cell the room draws, ink and paper
 must stay different; and every colour but the background must differ from
-the background, so anything drawn later in any colour stays visible.
+the background, so anything drawn later in any colour stays visible. The
+bands (decision 15) add a third: no split where an object crossing it would
+change colour.
 Pixel counts come from the oracle (tools/zxrooms.py, build/rooms).
 """
 import argparse
@@ -139,6 +141,36 @@ def row_usage(r, rooms_dir):
     return rows
 
 
+def seam_usage(r, rooms_dir):
+    """For each boundary between playfield rows (row 2 + i - 1 above, row
+    2 + i below, i = 1..21), {colour: pixels}: the pixels of a colour, not
+    the background, with the same colour just across the boundary: an
+    object a split there would cut."""
+    d = open(f"{rooms_dir}/room_{r:03d}.bin", "rb").read()
+    scr, attrs = d[:6144], d[6144:6912]
+
+    def colour(x, y):
+        a = attrs[(y // 8) * 32 + x // 8]
+        b = scr[((y & 0xC0) << 5) + ((y & 7) << 8) + ((y & 0x38) << 2) + x // 8]
+        return a & 7 if b & (0x80 >> (x & 7)) else (a >> 3) & 7
+    seams = [{}]
+    for i in range(1, 22):
+        y = (i + 2) * 8
+        counts = {}
+        for x in range(256):
+            c = colour(x, y)
+            if c == colour(x, y - 1):
+                counts[c] = counts.get(c, 0) + 1
+        seams.append(counts)
+    return seams
+
+
+def cuts(counts, bg, pa, pb):
+    """The pixels just across a split that change colour, from physical
+    colours pa above to pb below (the background never does)."""
+    return sum(n for c, n in counts.items() if c != bg and pa[c] != pb[c])
+
+
 def band_map(colours, weight, pairs, force={}):
     """The cheapest map onto four colours (bg first) under choose_palette's
     rules, or None: each other colour to its nearest slot, then a search
@@ -176,13 +208,14 @@ def exact(colours, weight):
     return sum(weight[c] for c in set(colours))
 
 
-def choose_bands(bg, rows, harry=YELLOW, max_splits=2, gain=0.002):
+def choose_bands(bg, rows, seams, harry=YELLOW, max_splits=2, gain=0.002):
     """Decision 15: up to two splits between playfield rows, below which
     logical colour 2 (and the map) change; logical 0 (the paper), 1 and 3
     (Harry's colour, `harry`) stay. Returns (colour 1, colour 3, [(first
     row, colour 2, cmap)], exact), the first band starting at row 2; a
     split is kept only if it shows `gain` more of the room's pixels in
-    their own colour."""
+    their own colour, and never where an object crossing it would change
+    colour (seams, from seam_usage)."""
     yellow = harry if bg != harry else 7
     # Harry is drawn in Spectrum yellow: when logical 3 isn't yellow, yellow
     # maps to it in every band, and can't be logical 1 or 2 as well (he'd
@@ -191,9 +224,15 @@ def choose_bands(bg, rows, harry=YELLOW, max_splits=2, gain=0.002):
     others = [c for c in range(8) if c not in (bg, yellow, *force)]
     n = len(rows)
     total = sum(sum(w) for w, _ in rows)
+
+    # A split may not cut an object in two colours (Matt: room 1's ladder,
+    # red above a split and blue below, looked like a mistake).
+    def seam(i, pa, pb):
+        return float("inf") if seams[i] and cuts(seams[i], bg, pa, pb) else 0
     best = None
     for a in others:
-        # The cheapest band over rows i..j-1: (cost, exact, b, cmap).
+        # A band over rows i..j-1, for each colour 2 that maps: [(cost,
+        # exact, b, cmap, physical colour of each Spectrum colour)].
         seg = {}
         for i in range(n):
             w = [0] * 8
@@ -203,36 +242,53 @@ def choose_bands(bg, rows, harry=YELLOW, max_splits=2, gain=0.002):
                 w = [x + y for x, y in zip(w, rw)]
                 pairs |= rp
                 weighted = [x + p * (j - i) // n + 1 for x, p in zip(w, PRIOR)]
-                cand = None
+                cands = []
                 for b in others:
                     if b == a:
                         continue
                     colours = [bg, a, b, yellow]
                     m = band_map(colours, weighted, pairs, force)
-                    if m and (cand is None or m[0] < cand[0]):
-                        cand = (m[0], exact(colours, w), b, m[1])
-                seg[i, j] = cand
-        if any(v is None for v in seg.values()):
+                    if m:
+                        cands.append((m[0], exact(colours, w), b, m[1],
+                                      tuple(colours[m[1][c]] for c in range(8))))
+                seg[i, j] = cands
+        if any(not v for v in seg.values()):
             continue
-        # Best for k splits: (cost, exact, [(start, b, cmap)]).
-        plans = [(seg[0, n][0], seg[0, n][1], [(0, seg[0, n][2], seg[0, n][3])])]
-        one = min(((seg[0, i][0] + seg[i, n][0], seg[0, i][1] + seg[i, n][1],
-                    [(0,) + seg[0, i][2:], (i,) + seg[i, n][2:]]) for i in range(1, n)), key=lambda t: t[0])
+
+        def above(i, B):
+            # The cheapest band over rows 0..i-1 above band B, with the seam.
+            return min(((A[0] + seam(i, A[4], B[4]), A) for A in seg[0, i]), key=lambda t: t[0])
+
+        def below(j, B):
+            return min(((C[0] + seam(j, B[4], C[4]), C) for C in seg[j, n]), key=lambda t: t[0])
+        # Best for k splits: (cost, exact, [bands]).
+        A = min(seg[0, n], key=lambda t: t[0])
+        plans = [(A[0], A[1], [(0, A)])]
+        one = None
+        for i in range(1, n):
+            for B in seg[i, n]:
+                c, A = above(i, B)
+                if one is None or c + B[0] < one[0]:
+                    one = (c + B[0], A[1] + B[1], [(0, A), (i, B)])
         plans.append(one)
-        two = min(((seg[0, i][0] + seg[i, j][0] + seg[j, n][0],
-                    seg[0, i][1] + seg[i, j][1] + seg[j, n][1],
-                    [(0,) + seg[0, i][2:], (i,) + seg[i, j][2:], (j,) + seg[j, n][2:]])
-                   for i in range(1, n) for j in range(i + 1, n)), key=lambda t: t[0])
+        two = None
+        for i in range(1, n):
+            for j in range(i + 1, n):
+                for B in seg[i, j]:
+                    ca, A = above(i, B)
+                    cc, C = below(j, B)
+                    if two is None or ca + B[0] + cc < two[0]:
+                        two = (ca + B[0] + cc, A[1] + B[1] + C[1], [(0, A), (i, B), (j, C)])
         plans.append(two)
         k = 0
         for kk in range(1, max_splits + 1):
-            if (plans[kk][1] - plans[k][1]) / total >= gain:
+            if (plans[kk][1] - plans[k][1]) / total >= gain and plans[kk][0] < float("inf"):
                 k = kk
         plan = plans[k]
         if best is None or plan[0] < best[0][0]:
             best = (plan, a)
     plan, a = best
-    return a, yellow, [(start + 2, b, cmap) for start, b, cmap in plan[2]], plan[1] / total
+    return a, yellow, [(start + 2, B[2], B[3]) for start, B in plan[2]], plan[1] / total
 
 
 def main():
@@ -288,9 +344,10 @@ def main():
         weight, pairs = room_usage(r, args.rooms)
         before += exact(choose_palette(bg, weight, pairs)[0], weight) / sum(weight)
         rows = row_usage(r, args.rooms)
-        a, yellow, bands, ex = choose_bands(bg, rows)
+        seams = seam_usage(r, args.rooms)
+        a, yellow, bands, ex = choose_bands(bg, rows, seams)
         if bg != YELLOW:
-            alt = choose_bands(bg, rows, harry=WHITE)
+            alt = choose_bands(bg, rows, seams, harry=WHITE)
             if alt[3] - ex >= WHITE_GAIN:
                 gains.append((alt[3] - ex, r))
                 a, yellow, bands, ex = alt

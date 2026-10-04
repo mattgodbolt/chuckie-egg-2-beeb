@@ -2,11 +2,12 @@
 #
 #   make          assemble build/ce2.ssd, and build/test.ssd for the tools
 #   make run      boot it in jsbeeb and grab a screenshot
-#   make check    every check: make rooms, make passes and make front
+#   make check    every check: make rooms, passes, front and sound
 #                 (MODEL=Master to run them on a Master 128; default B-DFS1.2)
 #   make rooms    check every room the BBC draws against the original's
 #   make passes   replay tests/scenarios.txt on both, compare Harry pass by pass
 #   make front    drive the front end: menu, keys, save, load, high scores
+#   make sound    the bytes the sound chip gets: the tick, the life-lost tune
 #   make fuzz     random walks in random rooms on both (SEED=n COUNT=n)
 #   make wip      rebuild from a clean tree and copy the disc to
 #                 chuckie-egg-2-wip.ssd, which the README links
@@ -30,7 +31,7 @@ WIP      = chuckie-egg-2-wip.ssd
 # commit, with + if the tree (the WIP disc itself aside) had changes.
 BUILD   := $(shell date -u '+%Y-%m-%d %H:%M UTC') $(shell git rev-parse --short HEAD 2>/dev/null || echo NOGIT)$(shell git diff --quiet HEAD -- . ':(exclude)$(WIP)' 2>/dev/null || echo +)
 
-.PHONY: all run check rooms passes front fuzz wip fetch zx disasm venv clean
+.PHONY: all run check rooms passes front sound fuzz wip fetch zx disasm venv clean
 
 all: $(TARGET) $(TEST)
 
@@ -46,10 +47,14 @@ build:
 run: $(TARGET)
 	node tools/play.mjs '6,!run' shots/ --disc $(TARGET)
 
-check: rooms passes front
+check: rooms passes front sound
 
 front: $(TARGET)
 	node tools/frontcheck.mjs
+
+# The bytes the SN76489 gets: the movement tick and the life-lost tune.
+sound: $(TEST)
+	node tools/soundcheck.mjs
 
 SEED  ?= 1
 COUNT ?= 12

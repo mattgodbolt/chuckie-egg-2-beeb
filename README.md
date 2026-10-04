@@ -11,17 +11,22 @@ work-in-progress disc, in [jsbeeb](https://github.com/mattgodbolt/jsbeeb).
 **Status: playable.** Harry, the monsters, the objects (taking, dropping,
 the vats, the toy and egg makers), the truck, the train and the lifts all run
 as the original's code does, checked pass by pass against the original,
-through all 120 rooms. Sound: the movement tick, the train's rumble and the
-life-lost tune. The front end is the original's, in MODE 7: instructions,
-the menu with the high-score table, **P** play, **R** redefine keys, **L**
-load and **S** save (one saved game, `CEGAME`, on the disc), **I** the
-instructions again. Keys in play are the Spectrum's until redefined:
-**O** left, **P** right, **Q** up, **A** down, **SPACE** jump, **1**
-take/drop, **S** save, **0** abort. The menu's bottom line (and `*TYPE
-!BOOT`) shows when the disc was built and from which commit.
+through all 120 rooms, with colour changes down the screen where a room
+needs more than four colours. Sound: the movement tick, the train's rumble
+and the life-lost tune. The front end is the original's, in MODE 7:
+instructions, the menu with the high-score table, **P** play, **R** redefine
+keys, **L** load and **S** save (to disc, under a filename you choose, with
+the disc listed), **I** the instructions again. Keys in play are the
+Spectrum's until redefined: **O** left, **P** right, **Q** up, **A** down,
+**SPACE** jump, **1** take/drop, **S** save, **0** abort; **BREAK** goes
+back to the menu. The menu's bottom line (and `*TYPE !BOOT`) shows when the
+disc was built and from which commit.
 
-It needs a BBC Model B with 16K of sideways RAM, or a Master 128; the
-browser link above provides a Model B.
+Still to come: footsteps that sound like footsteps, the default keys, and
+the rest of [docs/next-steps.md](docs/next-steps.md).
+
+It needs a BBC Model B with 16K of sideways RAM, or a Master 128 (DFS or
+ADFS); the browser link above provides a Model B.
 
 See [docs/journal.md](docs/journal.md) for the story so far,
 [docs/research.md](docs/research.md) for what the original is, and
@@ -39,6 +44,8 @@ make venv       # SkoolKit and Pillow, for the tools that read the original
 make fetch      # download the original from Spectrum Computing
 make            # build/ce2.ssd
 make run        # boot it headless and screenshot it
+make check      # every room, the movement scenarios and the front end,
+                # against the original (MODEL=Master for the Master)
 ```
 
 The original's tape, maps and text are not in this repository; `make fetch`

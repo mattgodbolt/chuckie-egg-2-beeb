@@ -968,3 +968,23 @@ gathers any number of one ingredient (and makes jumps lower).
   the last walking entry was. Both machines agree pass for pass (the new
   `checkpoint-fall` scenario). A load keeps the saved checkpoint, as the
   original's does.
+
+### Splits that cut objects; filenames for saves
+
+- **Room 1's ladder** was red above its split and blue below. The band
+  chooser scored each band alone, so it couldn't see one object cut in
+  two colours. mkrooms.py now counts, at each row boundary, the pixels of
+  a colour with the same colour just across, and won't put a split where
+  any would change (decision 24). A soft penalty first: worth 4 pixels a
+  cut pixel, 26 rooms with cuts became 11, at 16 it was 4; as a hard rule,
+  none, for 99.48% of pixels in their own colour against 99.53%, and 49
+  splits instead of 75. Cheap enough to make it a rule like the others.
+- **Filenames** (decision 23): the save and load screens list the disc and
+  ask for a name, offering the last. Writing the test found two things: a
+  test typing the same key twice with no gap between is one long press to
+  the OS (`type` in frontcheck now leaves 50ms), and DFS's own "Bad name"
+  comes back on the bottom row with the prompt still up, as meant. `make
+  front` now covers ESCAPE from the save key in play, a save under another
+  name, a refused overwrite of MENU, a load of a missing file and of CE2,
+  and the right save loaded; it passes on the Model B and on the Master
+  with DFS and with ADFS.

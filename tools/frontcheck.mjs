@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 // The front end and the way between it and the game (decision 13), on the
-// release disc: the instructions, P to play, S to save in play and carry
-// on, the abort key back to the menu, L to load and carry on, game over
+// release disc: the instructions, P to play, the save key in play (the
+// save screen, ESCAPE and RETURN), the abort key back to the menu, S and L
+// with filenames and refusals (decision 23), L to load and carry on, game over
 // with a new high score and its name, CTRL-BREAK after it, and BREAK in
 // play. Exits non-zero on the first failure.
 //
@@ -97,26 +98,77 @@ try {
     await hold("X", 2);                               // walk right, with X now
     check((await b.peek("h_cell")) > before, "X walks Harry right");
 
-    // The save key (V now) in play: the state saved, the game carried on.
+    // The save key (V now) in play: the save screen (decision 23), the
+    // disc listed and the last name offered. ESCAPE: no save, the game
+    // carries on.
+    const saveScreen = async (what) => {
+        const ok = await waitText(`${what}, ESCAPE GOES BACK`);
+        await b.run(0.3);
+        return ok;
+    };
+    // (A gap after each: the same key twice must be seen let go between.)
+    const type = async (...keys) => {
+        for (const k of keys) {
+            await hold(k, 0.08);
+            await b.run(0.05);
+        }
+    };
+    const rows = async () => (await screen()).match(/.{1,40}/g);
     await b.keyDown("V");
     r = await b.runUntil("handoff", 5);
     check(r.stopped_reason === "breakpoint", "the save key hands the game to MENU");
-    const saved = await state();
+    let saved = await state();
     await b.run(0.2);
     await b.keyUp("V");
+    check(await saveScreen("RETURN SAVES"), "the save screen");
+    let page = await screen();
+    check(page.includes("MENU") && page.includes("CE2DATA"), "... lists the disc");
+    check((await rows())[21].includes("FILENAME:\x07CEGAME"), "... and offers CEGAME");
+    await hold("ESCAPE", 0.1);
     r = await b.runUntil("game_loop", 60);
-    check(r.stopped_reason === "breakpoint" && (await state()) === saved, "the saved game carries on as it was");
+    check(r.stopped_reason === "breakpoint" && (await state()) === saved, "ESCAPE: the game carries on as it was");
+
+    // Again, RETURN: saved, the game carried on.
+    await b.run(1);
+    await b.keyDown("V");
+    r = await b.runUntil("handoff", 5);
+    saved = await state();
+    await b.run(0.2);
+    await b.keyUp("V");
+    await saveScreen("RETURN SAVES");
+    await hold("RETURN", 0.1);
+    r = await b.runUntil("game_loop", 60);
+    check(r.stopped_reason === "breakpoint" && (await state()) === saved, "RETURN: saved, and the game carries on as it was");
 
     // The abort key (Q now): back to the menu, no instructions.
     await hold("Q", 0.5);
     check(await menuReady(), "the abort key returns to the menu");
     check(!(await screen()).includes("INSTRUCTIONS!"), "... without the instructions");
 
-    // L: the save loaded, the game carried on from it.
+    // S in the menu, under another name; then not over a file that isn't
+    // a saved game.
+    await hold("S", 0.1);
+    await saveScreen("RETURN SAVES");
+    await type(..."DELETE ".repeat(6).trim().split(" "), "M", "E", "N", "U", "RETURN");
+    check(await waitText("NOT A SAVED GAME", 10), "S: MENU refused (not a saved game)");
+    await type(..."DELETE ".repeat(4).trim().split(" "), "M", "I", "N", "E", "RETURN");
+    check(await menuReady(), "... MINE saved, back to the menu");
+
+    // L: the disc listed, the last name offered; a missing file, a file
+    // that isn't a save; then CEGAME loaded and carried on.
     await hold("L", 0.1);
+    check(await saveScreen("RETURN LOADS"), "L: the load screen");
+    page = await screen();
+    check(page.includes("CEGAME") && page.includes("MINE"), "... lists both saves");
+    check((await rows())[21].includes("FILENAME:\x07MINE"), "... and offers MINE");
+    await type(..."DELETE ".repeat(4).trim().split(" "), "N", "O", "N", "E", "RETURN");
+    check(await waitText("NOT FOUND", 10), "... NONE not found");
+    await type(..."DELETE ".repeat(4).trim().split(" "), "C", "E", "K2", "RETURN");
+    check(await waitText("NOT A SAVED GAME", 10), "... CE2 refused (not a saved game)");
+    await type(..."DELETE ".repeat(3).trim().split(" "), "C", "E", "G", "A", "M", "E", "RETURN");
     r = await b.runUntil("game_loop", 60);
     const loaded = await state();
-    check(r.stopped_reason === "breakpoint" && loaded === saved, "L loads the saved game as it was");
+    check(r.stopped_reason === "breakpoint" && loaded === saved, "... CEGAME loads the saved game as it was");
     if (loaded !== saved) console.log(`     saved  ${saved}\n     loaded ${loaded}\n     ${r.stopped_reason}\n${await screen()}`);
 
     // Game over with a score that beats the table: the name goes in.

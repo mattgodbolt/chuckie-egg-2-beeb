@@ -15,20 +15,24 @@
     EQUB &01, &37, &45, &BB   \  6: red black white yellow; map 11013232
     EQUB &45, &32, &15, &FA   \  7: magenta blue green yellow; map 11102233
     EQUB &64, &37, &B1, &B5   \  8: blue cyan white yellow; map 10321132
-    EQUB &70, &31, &A8, &77   \  9: black white red yellow; map 02223131
-    EQUB &10, &37, &54, &BB   \ 10: black red white yellow; map 01113232
-    EQUB &40, &31, &A4, &FF   \ 11: black blue red yellow; map 01223333
-    EQUB &20, &37, &B4, &B5   \ 12: black green white yellow; map 01321132
-    EQUB &10, &36, &54, &FA   \ 13: black red cyan yellow; map 01112233
-    EQUB &14, &76, &51, &FA   \ 14: blue red cyan white; map 10112233
-    EQUB &45, &72, &15, &FA   \ 15: magenta blue green white; map 11102233
-    EQUB &24, &31, &A2, &F5   \ 16: blue green red yellow; map 20221133
-    EQUB &24, &37, &B1, &B5   \ 17: blue green white yellow; map 10321132
-    EQUB &14, &32, &51, &FA   \ 18: blue red green yellow; map 10112233
-    EQUB &60, &31, &A8, &F5   \ 19: black cyan red yellow; map 02221133
-    EQUB &10, &72, &54, &FA   \ 20: black red green white; map 01112233
-    EQUB &40, &36, &54, &FA   \ 21: black blue cyan yellow; map 01112233
-    EQUB &40, &71, &A4, &FF   \ 22: black blue red white; map 01223333
-    EQUB &41, &36, &45, &FA   \ 23: red blue cyan yellow; map 11012233
-    EQUB &21, &34, &8A, &F5   \ 24: red green blue yellow; map 22021133
-    EQUB &41, &37, &45, &BB   \ 25: red blue white yellow; map 11013232
+    EQUB &04, &76, &51, &FA   \  9: blue black cyan white; map 10112233
+    EQUB &70, &31, &A8, &77   \ 10: black white red yellow; map 02223131
+    EQUB &10, &37, &54, &BB   \ 11: black red white yellow; map 01113232
+    EQUB &40, &31, &A4, &FF   \ 12: black blue red yellow; map 01223333
+    EQUB &70, &32, &78, &7A   \ 13: black white green yellow; map 02312231
+    EQUB &10, &72, &54, &FA   \ 14: black red green white; map 01112233
+    EQUB &10, &36, &54, &FA   \ 15: black red cyan yellow; map 01112233
+    EQUB &20, &37, &B4, &B5   \ 16: black green white yellow; map 01321132
+    EQUB &45, &72, &15, &FA   \ 17: magenta blue green white; map 11102233
+    EQUB &24, &31, &A2, &F5   \ 18: blue green red yellow; map 20221133
+    EQUB &24, &37, &B1, &B5   \ 19: blue green white yellow; map 10321132
+    EQUB &14, &32, &51, &FA   \ 20: blue red green yellow; map 10112233
+    EQUB &14, &72, &51, &FA   \ 21: blue red green white; map 10112233
+    EQUB &60, &31, &A8, &F5   \ 22: black cyan red yellow; map 02221133
+    EQUB &40, &36, &54, &FA   \ 23: black blue cyan yellow; map 01112233
+    EQUB &40, &76, &54, &FA   \ 24: black blue cyan white; map 01112233
+    EQUB &40, &71, &A4, &FF   \ 25: black blue red white; map 01223333
+    EQUB &10, &76, &54, &FA   \ 26: black red cyan white; map 01112233
+    EQUB &20, &71, &A8, &F5   \ 27: black green red white; map 02221133
+    EQUB &41, &36, &45, &FA   \ 28: red blue cyan yellow; map 11012233
+    EQUB &41, &37, &45, &BB   \ 29: red blue white yellow; map 11013232

@@ -38,6 +38,10 @@ FOR n = 1..10
     EQUB 0, 0, 0, 0, 0
 NEXT
 HS_LEN = P% - mb_table
+\ The last filename saved or loaded (decision 23), ended by a return.
+NAME_MAX = 19
+.mb_name     EQUS "CEGAME", 13
+    SKIP NAME_MAX + 1 - 7
 .mb_os       SKIP OS_KEPT_LEN   ; what a soft BREAK keeps of page 2
 .mailbox_end
 

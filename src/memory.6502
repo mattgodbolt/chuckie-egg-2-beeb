@@ -39,6 +39,8 @@ ENDSECTION
 SECTION LowState, org = &0D00, guard = &0E00
 \ The checkpoint (&A46B): Harry as he entered the room, for a death.
 .checkpoint SKIP 16
+.dbg_room   SKIP 1          ; tests: a room to put Harry in (game.6502),
+.dbg_start  SKIP 6          ; ... and his cell (2), yf, xf, state, face
 \ The RNG (&91B1), big-endian: "9090" when the game is loaded.
 .rng_state  SKIP 4
 \ The monsters (&A490, docs/research/monsters.md 2.2): parallel arrays,

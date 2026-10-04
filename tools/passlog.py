@@ -10,6 +10,11 @@ take. Pass 0 is the first time the main loop (&77B9) is reached after P
 starts a game; keys are set at the top of a pass, before the original reads
 them, so both machines see the same keys on the same pass.
 
+--start room,row,col,yf,xf,state,face puts Harry there before pass 0:
+after one pass in room 1, the original's room set-up (&7913) is called
+with him placed, and his checkpoint taken (the port does the same through
+dbg_room).
+
 Each line of the output: pass, room, cell (row * 32 + col), yf, xf,
 state, face, cnt (jump count), fall (fall counter), the RNG's state, and
 each monster as [cell, yf, sub, dx, dy, tick, speed].
@@ -56,12 +61,48 @@ def harry_state(m, n):
     }
 
 
+def teleport(spec, start):
+    """After one pass in room 1, put Harry in room, row, col, yf, xf with
+    state and facing, call the room set-up (&7913) and take the checkpoint."""
+    from skoolkit.simutils import PC, SP
+    room, row, col, yf, xf, state, face = start
+    m = spec.mem
+    regs = spec.sim.registers
+    for first in (True, False):     # to the top of the second pass
+        if spec.run_tstates(10 * 50 * FRAME, stop=MAIN_LOOP) != MAIN_LOOP:
+            raise SystemExit("never reached the main loop")
+        if first:
+            spec.run_tstates(200)       # off the breakpoint
+    m[0xA3FE] = room
+    attr = 0x5800 + row * 32 + col
+    m[HARRY + 2], m[HARRY + 3] = attr & 0xFF, attr >> 8
+    m[HARRY + 4], m[HARRY + 5] = attr & 0xFF, 0x40 | (row & 0x18) | yf
+    m[HARRY + 0x0A], m[HARRY + 0x0D] = xf, face
+    m[HARRY + 0x0B] = m[HARRY + 0x0C] = 0
+    header = m[0x89FF + 2 * (face + xf)] | m[0x8A00 + 2 * (face + xf)] << 8
+    p = header + 2
+    m[HARRY + 0], m[HARRY + 1] = p & 0xFF, p >> 8
+    m[HARRY + 6], m[HARRY + 7] = m[header], m[header + 1]
+    m[0xA487], m[0xA485], m[0xA486] = state, 0, 0
+    # Call the room set-up, returning to the main loop's top.
+    sp = regs[SP] - 2
+    m[sp], m[sp + 1] = MAIN_LOOP & 0xFF, MAIN_LOOP >> 8
+    regs[SP] = sp
+    regs[PC] = 0x7913
+    if spec.run_tstates(10 * 50 * FRAME, stop=MAIN_LOOP) != MAIN_LOOP:
+        raise SystemExit("room set-up didn't return")
+    m[HARRY + 0x12], m[HARRY + 0x13] = room, state
+    for i in range(26):
+        m[0xA46B + i] = m[HARRY + i]
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("inputs")
     ap.add_argument("passes", type=int)
     ap.add_argument("--snap", default="build/ce2.z80")
     ap.add_argument("--out", default="build/zx_passes.json")
+    ap.add_argument("--start", help="room,row,col,yf,xf,state,face")
     args = ap.parse_args()
     inputs = parse_inputs(args.inputs)
     spec = Spectrum(args.snap)
@@ -75,9 +116,13 @@ def main():
     spec.key("P", True)
     spec.frames(5)
     spec.key("P", False)
+    if args.start:
+        teleport(spec, [int(v) for v in args.start.split(",")])
     log = []
     for n in range(args.passes):
-        if spec.run_tstates(10 * 50 * FRAME, stop=MAIN_LOOP) != MAIN_LOOP:
+        # (After a teleport the set-up has just returned to the loop's top.)
+        if not (n == 0 and args.start) and \
+                spec.run_tstates(10 * 50 * FRAME, stop=MAIN_LOOP) != MAIN_LOOP:
             raise SystemExit(f"pass {n}: never reached the main loop")
         for key, a, b in inputs:
             spec.key(key, a <= n <= b)

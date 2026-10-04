@@ -14,6 +14,8 @@ const KEYS = { up: "Q", down: "A", left: "O", right: "P", jump: "SPACE", take: "
 const args = process.argv.slice(2);
 const outIdx = args.indexOf("--out");
 const out = outIdx >= 0 ? args.splice(outIdx, 2)[1] : "build/bbc_passes.json";
+const startIdx = args.indexOf("--start");
+const start = startIdx >= 0 ? args.splice(startIdx, 2)[1].split(",").map(Number) : null;
 const inputs = (args[0] ?? "").split(",").filter(Boolean).map((part) => {
     const [name, rng] = part.split(":");
     const [a, b] = rng.split("-").map(Number);
@@ -26,6 +28,15 @@ const held = new Set();
 const log = [];
 try {
     await b.breakpoint("game_loop");
+    if (start) {
+        // --start room,row,col,yf,xf,state,face: placed during the first
+        // pass, put in the room at its end (teleport in game.6502).
+        await b.run(10);
+        const [room, row, col, yf, xf, state, face] = start;
+        const cell = row * 32 + col;
+        await b.write("dbg_start", [cell & 0xff, cell >> 8, yf, xf, state, face]);
+        await b.write("dbg_room", [room]);
+    }
     for (let n = 0; n < passes; n++) {
         const r = await b.run(10);
         if (r.stopped_reason === undefined && !String(JSON.stringify(r)).includes("breakpoint"))

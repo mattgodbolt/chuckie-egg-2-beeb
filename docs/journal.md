@@ -436,3 +436,12 @@ gathers any number of one ingredient (and makes jumps lower).
   room 2's dog, die four times (each death back to the checkpoint, the dog
   reset, the RNG in step).
 - Main RAM: 6,210 bytes free.
+- **A teleport for the tests**: `--start room,row,col,yf,xf,state,face` on
+  both pass loggers puts Harry somewhere else before pass 0. On the
+  Spectrum the simulator pokes his record and calls the original's own
+  room set-up (`&7913`); on the BBC a debug hook at the end of the main
+  loop does the same from a block the test fills. Teleported into room 27,
+  Harry falls, is knocked back by the crocodile (a bounce: random momentum
+  from the RNG), lands on a slippery pipe and walks to a wall: 110 passes,
+  identical. Rooms with objects will differ until objects are in: they
+  mark their cells in the type map, and monsters treat those as walls.

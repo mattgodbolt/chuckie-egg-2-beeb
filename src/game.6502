@@ -6,6 +6,7 @@
 \ Once, when the game is loaded.
 .init_game
 {
+    LDA #0 : STA dbg_room
     LDX #3
 .rng
     LDA rng_seed,X : STA rng_state,X
@@ -60,7 +61,32 @@
     JSR draw_monsters
     \ Part 3: collisions.
     JSR collide
+    LDA dbg_room : BEQ next_pass
+    JSR teleport
+.next_pass
     JMP game_loop
+}
+
+\ For the tests (tools/passlog.mjs --start): they set dbg_start (Harry's
+\ cell, yf, xf, state, facing) and dbg_room; at the end of the pass he is
+\ put there, as the original's room set-up would (tools/passlog.py calls
+\ the original's &7913 at the same point).
+.teleport
+{
+    LDA dbg_start : STA h_cell
+    LDA dbg_start+1 : STA h_cell+1
+    LDA dbg_start+2 : STA h_yf
+    LDA dbg_start+3 : STA h_xf
+    LDA dbg_start+4 : STA h_state
+    LDA dbg_start+5 : STA h_face
+    LDA #0 : STA h_dx : STA h_dy
+    LDA dbg_room : STA room
+    LDA #0 : STA dbg_room : STA h_cnt : STA h_fall : STA room_delta
+    LDA h_face : CLC : ADC h_xf : ASL A : TAX
+    LDA harry_frames,X : STA h_frame
+    LDA harry_frames+1,X : STA h_frame+1
+    JSR enter_room
+    JMP save_checkpoint
 }
 
 \ Draw the room and set it up (&7913). Nothing of Harry is on screen.

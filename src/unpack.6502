@@ -70,8 +70,10 @@ MTF_TYPE = 6
     LDX #1 : JSR getbits
     CMP #0 : BEQ hit
     INC n : LDA n : CMP #3 : BNE count
-    \ A miss: a new value, and the rest shift down.
-    LDX #8 : JSR getbits : STA v
+    \ A miss: a value from the field's vocabulary, and the rest shift down.
+    LDY base : LDX vocab_width,Y : JSR getbits
+    LDY base : CLC : ADC vocab_off,Y : TAY
+    LDA vocab,Y : STA v
     LDA base : CLC : ADC #2 : TAX
     JMP shift
 .hit

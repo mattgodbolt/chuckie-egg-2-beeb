@@ -579,3 +579,12 @@ gathers any number of one ingredient (and makes jumps lower).
   beyond Z) and the packed rooms' offset table moved into sideways RAM.
   Main RAM 252 bytes free, sideways 89. The room viewer, which the room
   check builds, had stopped fitting at 17.
+
+### Packing the rooms tighter
+
+- The move-to-front escapes were a quarter of the packed rooms: a value
+  not among the last three of its field cost 3 + 8 bits, and there were
+  1,357 of them. But in the whole game the attributes take only 38 values,
+  the tiles 49 and the cell types 8. An escape is now an index into its
+  field's vocabulary, 6, 6 and 3 bits: 7,770 bytes down to 7,289, plus
+  109 bytes of tables. Sideways RAM: 461 bytes free.

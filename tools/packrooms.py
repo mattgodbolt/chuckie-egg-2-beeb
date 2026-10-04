@@ -34,8 +34,11 @@ of row 11; the original's arithmetic makes that row 12 column 0, so it is
 packed as that, and the round trip is checked against the room with that
 one record normalised (normalise()). Fields marked * are move-to-front coded, one list
 each for attribute, tile and type, kept per room: 0 = "the last one" (1
-bit), 1 = '10', 2 = '110', otherwise '111' and the 8-bit value. Text
-characters index TEXT_CHARS.
+bit), 1 = '10', 2 = '110', otherwise '111' and the value's index in that
+field's vocabulary: every value the field takes in the whole game, sorted,
+in as few bits as hold them (attributes 38 values in 6 bits, tiles 49 in
+6, types 8 in 3; the escapes were a quarter of the stream at 8 bits each).
+Text characters index TEXT_CHARS.
 """
 import argparse
 import os
@@ -131,17 +134,24 @@ class Reader:
 
 
 class MTF:
-    def __init__(self):
+    """One field's move-to-front list. With a vocabulary, a miss is coded as
+    its index in it; without, values are only collected (the first pass)."""
+    def __init__(self, vocab=None, seen=None):
         self.items = []
+        self.vocab = vocab
+        self.seen = seen
+        self.width = max(1, (len(vocab) - 1).bit_length()) if vocab else 8
 
     def encode(self, bits, v):
+        if self.seen is not None:
+            self.seen.add(v)
         if v in self.items[:3]:
             i = self.items.index(v)
             bits.code("1" * i + "0")
             self.items.remove(v)
         else:
             bits.code("111")
-            bits.put(v, 8)
+            bits.put(self.vocab.index(v) if self.vocab else v, self.width)
             if v in self.items:
                 self.items.remove(v)
         self.items.insert(0, v)
@@ -150,7 +160,7 @@ class MTF:
         i = 0
         while i < 3 and rd.get(1):
             i += 1
-        v = rd.get(8) if i == 3 else self.items[i]
+        v = self.vocab[rd.get(self.width)] if i == 3 else self.items[i]
         if v in self.items:
             self.items.remove(v)
         self.items.insert(0, v)
@@ -164,10 +174,15 @@ CLASS_CODES = {
 }
 
 
-def encode_room(room):
+def encode_room(room, vocabs=None, seen=None):
+    """vocabs: (attr, tile, type) vocabularies; seen: three sets to collect
+    them into instead."""
     room = normalise(room)
     b = Bits()
-    attrs, tiles, types = MTF(), MTF(), MTF()
+    if vocabs:
+        attrs, tiles, types = (MTF(v) for v in vocabs)
+    else:
+        attrs, tiles, types = (MTF(seen=x) for x in seen)
     b.put(room[0], 8)
     p = 1
     while True:
@@ -270,9 +285,16 @@ def read_class(rd):
     return names[code]
 
 
-def decode_room(data):
+def make_vocabs(rooms):
+    seen = (set(), set(), set())
+    for room in rooms.values():
+        encode_room(room, seen=seen)
+    return tuple(sorted(x) for x in seen)
+
+
+def decode_room(data, vocabs):
     rd = Reader(data)
-    attrs, tiles, types = MTF(), MTF(), MTF()
+    attrs, tiles, types = (MTF(v) for v in vocabs)
     out = [rd.get(8)]
     while True:
         k = read_class(rd)
@@ -309,10 +331,11 @@ def main():
     ap.add_argument("--out", help="write packed.bin and packed.6502 to this directory")
     args = ap.parse_args()
     rooms = load_rooms()
+    vocabs = make_vocabs(rooms)
     packed = {}
     for r, room in rooms.items():
-        packed[r] = encode_room(room)
-        back = decode_room(packed[r])
+        packed[r] = encode_room(room, vocabs)
+        back = decode_room(packed[r], vocabs)
         if back != normalise(room):
             raise SystemExit(f"room {r}: round trip failed")
     raw = sum(len(x) for x in rooms.values())
@@ -332,6 +355,17 @@ def main():
         for i in range(0, 120, 8):
             lines.append("    EQUW " + ", ".join(f"{o:4d}" for o in offs[i:min(i + 8, 120)]))
         lines.append(f"ROOM_BUFFER_SIZE = {max(len(x) for x in rooms.values())}")
+        # The vocabularies, indexed by the unpacker's list bases (0, 3, 6).
+        widths = [MTF(v).width for v in vocabs]
+        offs = [0, len(vocabs[0]), len(vocabs[0]) + len(vocabs[1])]
+        lines += ["", "\\ The fields' vocabularies (attribute, tile, type) and, by list",
+                  "\\ base (0, 3, 6), each one's index width and offset into vocab.",
+                  f".vocab_width EQUB {widths[0]}, 0, 0, {widths[1]}, 0, 0, {widths[2]}",
+                  f".vocab_off EQUB {offs[0]}, 0, 0, {offs[1]}, 0, 0, {offs[2]}",
+                  ".vocab"]
+        flat = [v for voc in vocabs for v in voc]
+        for i in range(0, len(flat), 16):
+            lines.append("    EQUB " + ", ".join(f"&{v:02X}" for v in flat[i:i + 16]))
         with open(f"{args.out}/packed.6502", "w") as f:
             f.write("\n".join(lines) + "\n")
 

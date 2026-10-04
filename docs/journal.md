@@ -194,3 +194,12 @@ its red and yellow brickwork comes out magenta and yellow.
 - Matt asked for a work-in-progress disc in the repo, linked from the
   README so the current state can be seen in a browser: `make wip`
   copies the build to `chuckie-egg-2-wip.ssd`.
+- **How long a room takes**, by breakpoint pairs on the cycle counter
+  (`read_registers`' `elapsed_cycles`): palette and screen clear 137K cycles
+  (the clear alone is 68 ms: an `STA (p),Y` loop over 12K), unpack 33-76K,
+  draw 105-246K; 275-446K in all, 0.14-0.22 s. The Spectrum's drawer takes
+  96-140 ms for the same rooms (T-states in SkoolKit, uncontended). Fine for
+  flipping screens; an unrolled clear would win back ~37 ms if needed.
+- `docs/memory-map.md` started: with the rooms packed, 5,103 bytes are free
+  under the screen. The original's code is ~14K and its graphics ~8K, so
+  the memory budget is the next problem.

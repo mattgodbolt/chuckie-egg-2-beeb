@@ -485,3 +485,19 @@ gathers any number of one ingredient (and makes jumps lower).
   (+337: 3 hundreds, then 3 tens and 7 units from the RNG) and room 33's
   first-visit bonus. A basket scenario wandered into room 34's lift, which
   isn't in yet: the next layer.
+
+### A RAM pass, first steps
+
+- **The room unpacker streams.** It used to unpack a whole room into a
+  385-byte buffer; now the drawer's `fetch` takes bytes from an 18-byte
+  record buffer and unpacks the next record when it runs dry (the longest
+  record, a text, is 17 bytes). A trace of every byte `fetch` returns for
+  room 70 matched the original's bytecode exactly.
+- **The 256-byte nibble table went**: the top nibble of b spread is just
+  `spread_lo[b >> 4]`, four shifts.
+- Main RAM: 1,430 bytes free, from 839.
+- **And another test-timing trap**: three big rooms "failed" because the
+  room check dumped them a fixed 20 frames after the viewer started
+  drawing, and the shifts made drawing a little slower. It now runs to the
+  viewer's wait loop. Twice now a fixed wait in a test has passed for a bug;
+  `CLAUDE.md` says run to a symbol, and that goes for every wait.

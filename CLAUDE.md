@@ -74,6 +74,13 @@ claimed a check that hadn't run.)
   is committed.
 - Loading takes 4.6s: tools run to a symbol after booting
   (`startBeeb({bootUntil})`, `play.mjs --until`), never a guessed wait.
+  The same for any wait in a test: run to the label that means "done"
+  (`runUntil`). Fixed waits have twice let a test report a bug that wasn't.
+- `tools/lint_labels.py` runs with every build and fails on a local label
+  that shadows a global (one made egg_init rewrite its own code).
+- Long-lived state goes in the fixed zero page or `LowState`
+  (`memory.6502`), never in baron's pool: the death path resets the stack
+  and jumps back into the main loop.
 
 ## OS workspace
 

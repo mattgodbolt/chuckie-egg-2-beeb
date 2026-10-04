@@ -22,13 +22,10 @@ try {
     writeFileSync("build/mosfont.bin", Buffer.from(await b.read("text_font", 0x300)));
     for (let r = first; r <= last; r++) {
         await b.write("room", [r]);
-        let ok = false;
-        for (let i = 0; i < 50 && !ok; i++) {
-            await b.frames(2);
-            ok = (await b.peek("shown")) === r;
-        }
-        // shown is set before drawing starts: give the drawer time to finish.
-        await b.frames(20);
+        // Run until the viewer is back in its wait loop: the room is drawn.
+        // (A fixed wait was once too short for the biggest rooms.)
+        await b.runUntil("viewer.wait", 10);
+        const ok = (await b.peek("shown")) === r;
         const maps = await b.read("attr_map", 768 * 3);
         const scr = await b.read(0x5000, 0x3000);
         writeFileSync(`build/bbcrooms/room_${String(r).padStart(3, "0")}.bin`, Buffer.from([...maps, ...scr]));

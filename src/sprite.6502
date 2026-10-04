@@ -46,7 +46,8 @@ ZA_AUTO1 sp_colour          ; a byte of four pixels in the sprite's colour
 .byte
     LDY bcol : LDA (src),Y : BEQ next_byte
     TAX
-    LDA spread_hi,X : STA mask  ; the left four pixels
+    LSR A : LSR A : LSR A : LSR A : TAY
+    LDA spread_lo,Y : STA mask  ; the left four pixels
     LDY soff
     LDA (scr),Y : STA under
     EOR sp_colour : AND mask : EOR under : STA (scr),Y
@@ -117,9 +118,10 @@ ZA_AUTO1 sp_colour          ; a byte of four pixels in the sprite's colour
     JSR cell_looks
     LDA yf : AND #7 : TAY
     LDA (glyph),Y : STA tb
-    LDX img
-    LDA spread_hi,X : STA mask
-    LDX tb : LDA spread_hi,X : AND diff : EOR paper
+    LDA img : LSR A : LSR A : LSR A : LSR A : TAX
+    LDA spread_lo,X : STA mask
+    LDA tb : LSR A : LSR A : LSR A : LSR A : TAX
+    LDA spread_lo,X : AND diff : EOR paper
     LDY soff
     EOR (scr),Y : AND mask : EOR (scr),Y : STA (scr),Y
     LDA img : AND #15 : TAX

@@ -122,28 +122,26 @@ ZA_AUTO1 diff               ; ink pixels EOR paper pixels
     CLC : ADC #HI(screen) : STA scr+1 : STA scr8+1
     LDY #7
 .line
-    LDA (glyph),Y : TAX
-    LDA spread_hi,X             ; the left four pixels, in both nibbles
+    LDA (glyph),Y : STA gbyte
+    LSR A : LSR A : LSR A : LSR A : TAX
+    LDA spread_lo,X             ; the left four pixels, in both nibbles
     AND diff : EOR paper : STA (scr),Y
-    TXA : AND #15 : TAX
+    LDA gbyte : AND #15 : TAX
     LDA spread_lo,X             ; the right four
     AND diff : EOR paper : STA (scr8),Y
     DEY : BPL line
     RTS
 }
+.gbyte EQUB 0
 
 \ A byte of four pixels in logical colour 0-3.
 .colour_bytes
     EQUB cbyte(0), cbyte(1), cbyte(2), cbyte(3)
 
 \ A Spectrum nibble (its leftmost pixel in bit 3) spread into both halves
-\ of a MODE 1 byte, where a pixel's colour bits are 4 apart.
+\ of a MODE 1 byte, where a pixel's colour bits are 4 apart. (The top
+\ nibble of a byte b is spread_lo[b >> 4].)
 .spread_lo
 FOR n = 0..15
     EQUB n * &11
-NEXT
-\ The same for the top nibble of a whole byte.
-.spread_hi
-FOR n = 0..255
-    EQUB (n AND &F0) + (n DIV 16)
 NEXT

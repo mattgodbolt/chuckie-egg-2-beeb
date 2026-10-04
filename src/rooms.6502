@@ -10,7 +10,6 @@
 \ against the original's own output by tools/roomcheck.mjs).
 \ ***************************************************************************
 
-ZA_AUTO2 rp                 ; the room data pointer (&7F88)
 ZA_AUTO2 cell               ; the attribute/screen pointer (&7F84), a cell
 ZA_AUTO2 tcell              ; the cell-type pointer (&7F86), a cell
 ZA_AUTO1 attr               ; the current attribute (ATTR_P, &5C8D)
@@ -28,8 +27,6 @@ ZA_AUTO1 textmode           ; set while drawing text (&A3FF)
     JSR cls
     JSR draw_status_bar
     PLA : JSR unpack_room
-    LDA #LO(room_buffer) : STA rp
-    LDA #HI(room_buffer) : STA rp+1
     \ The background: its paper as both paper and ink.
     JSR fetch : AND #&38 : STA bg
     LSR A : LSR A : LSR A : ORA bg : STA attr
@@ -76,16 +73,6 @@ ZA_AUTO1 textmode           ; set while drawing text (&A3FF)
     CMP #10 : BNE not10 : JMP cmd_single
 .not10
     JMP cmd_bend                ; 3-6
-}
-
-\ The next byte of room data.
-.fetch
-{
-    LDY #0 : LDA (rp),Y
-    INC rp : BNE done
-    INC rp+1
-.done
-    RTS
 }
 
 \ Read attribute, row and column, and put both pointers on that cell.

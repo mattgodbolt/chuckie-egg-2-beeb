@@ -123,8 +123,6 @@ ENDIF
     INCBIN "data/objgfx.bin"
 .tiles
     INCBIN "data/tiles.bin"
-.room_buffer
-    SKIP ROOM_BUFFER_SIZE
 
     .code_end
     PRINT "code &", ~start, "-&", ~code_end, " (", screen - code_end, " bytes free)"

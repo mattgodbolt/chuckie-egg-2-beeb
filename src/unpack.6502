@@ -2,16 +2,16 @@
 \ Unpack a room into the original's bytecode (decision 5).
 \
 \ The rooms are stored as bit streams (tools/packrooms.py describes the
-\ format and checks the round trip); unpack_room turns one back into the
-\ original's command bytes in room_buffer, which the room drawer then reads
-\ as the original read its own data. The packed fields come in the
-\ bytecode's own order, so each is emitted as it is decoded.
+\ format and checks the round trip). They unpack back into the original's
+\ command bytes a record at a time: the room drawer's fetch takes the next
+\ byte from rec_buf, and when that runs dry unpack_record decodes the next
+\ record into it. The packed fields come in the bytecode's own order, so
+\ each is emitted as it is decoded.
 \ ***************************************************************************
 
 ZA_AUTO2 bp                 ; the next byte of the bit stream
 ZA_AUTO1 bbyte              ; the byte being read, used bits shifted out
 ZA_AUTO1 bleft              ; bits left in bbyte
-ZA_AUTO2 op                 ; where the next unpacked byte goes
 \ The move-to-front lists, three entries each: the last three attributes,
 \ tiles and types seen in this room, the most recent first.
 ZA_AUTO 9, mtf
@@ -42,13 +42,11 @@ MTF_TYPE = 6
 .emit_bits
     JSR getbits
     \ Fall into emit.
-\ Append A to the unpacked room.
+\ Append A to the record being unpacked.
 .emit
 {
-    LDY #0 : STA (op),Y
-    INC op : BNE done
-    INC op+1
-.done
+    LDY rec_len : STA rec_buf,Y
+    INC rec_len
     RTS
 }
 
@@ -96,19 +94,40 @@ MTF_TYPE = 6
     JMP emit
 }
 
-\ Unpack room A (1-120) into room_buffer.
+\ Start unpacking room A (1-120): its first record is the background.
 .unpack_room
 {
-    ZA_AUTO1 ones
     \ bp = packed_rooms + packed_offsets[room - 1]
     ASL A : TAX
     CLC : LDA packed_offsets-2,X : ADC #LO(packed_rooms) : STA bp
     LDA packed_offsets-1,X : ADC #HI(packed_rooms) : STA bp+1
-    LDA #0 : STA bleft
-    LDA #LO(room_buffer) : STA op
-    LDA #HI(room_buffer) : STA op+1
-    LDX #8 : JSR emit_bits      ; the background
-.record
+    LDA #0 : STA bleft : STA rec_len : STA rec_pos
+    \ (The lists start empty; clearing them lets the allocator see that.)
+    LDX #8
+.clear
+    STA mtf,X
+    ZA_INDEXEDBY 0..8
+    DEX : BPL clear
+    LDX #8 : JMP emit_bits      ; the background
+}
+
+\ The next byte of the room's bytecode (the drawer's fetch).
+.fetch
+{
+    LDY rec_pos : CPY rec_len : BCC have
+    LDA #0 : STA rec_len : STA rec_pos
+    JSR unpack_record
+    LDY #0
+.have
+    LDA rec_buf,Y
+    INY : STY rec_pos
+    RTS
+}
+
+\ Unpack the next record into rec_buf.
+.unpack_record
+{
+    ZA_AUTO1 ones
     \ The class: count 1s up to five; then, unless that was none or five,
     \ one more bit picks one of a pair.
     LDA #0 : STA ones
@@ -136,8 +155,7 @@ MTF_TYPE = 6
     LDX #MTF_ATTR : JSR emit_mtf
     JSR emit_place
     LDX #5 : JSR emit_bits
-    LDX #6 : JSR emit_bits
-    JMP record
+    LDX #6 : JMP emit_bits
 
 \ run: tile attr row col vert len-1 type; capped adds ends(8) before type.
 .run
@@ -156,8 +174,7 @@ MTF_TYPE = 6
     LDA unpack_capped : BEQ type_last
     LDX #8 : JSR emit_bits
 .type_last
-    LDX #MTF_TYPE : JSR emit_mtf
-    JMP record
+    LDX #MTF_TYPE : JMP emit_mtf
 
 \ single: attr tile row col type
 .single
@@ -190,8 +207,7 @@ MTF_TYPE = 6
     TAX : LDA text_chars,X : JSR emit
     JMP char
 .text_end
-    LDA #&80 : JSR emit
-    JMP record
+    LDA #&80 : JMP emit
 
 \ block: attr row col h w type
 .block
@@ -211,6 +227,9 @@ MTF_TYPE = 6
     JMP type_last
 }
 .unpack_pick EQUB 0
+.rec_len EQUB 0
+.rec_pos EQUB 0
+.rec_buf SKIP 18                ; the longest record is 17 bytes, a text
 .unpack_capped EQUB 0
 .unpack_vert EQUB 0
 

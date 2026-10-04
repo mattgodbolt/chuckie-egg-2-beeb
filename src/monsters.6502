@@ -338,7 +338,14 @@ ZA_AUTO2 mframe
     LDA #MF_STATIC : STA m_flags,X
     LDA mon_room : AND #&7F : STA mon_room
     LDA mon_room+1 : ORA #&80 : STA mon_room+1
-    \ (The original also removes the bone here, wherever it is: objects.)
+    \ And the bone is gone, wherever it is: its footprint toggled in this
+    \ room's map at its row and column (a stray &40 if it's elsewhere, as
+    \ in the original) and its image erased here.
+    LDX #&24 : JSR thing_cells
+    LDA #0 : STA t_room+&24
+    JSR erase_object
+    LDA #0 : STA o_sel
+    LDX m_cur
 .stop
     LDA #0 : STA m_dx,X : STA m_sub,X
     JMP m_move_nosave

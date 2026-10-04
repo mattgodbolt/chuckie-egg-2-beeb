@@ -11,7 +11,8 @@ import json
 import sys
 
 FIELDS = ["room", "cell", "yf", "xf", "state", "face", "cnt", "fall", "rng", "monsters",
-          "score", "lives", "carried", "factory", "rr", "sel", "falling", "train"]
+          "score", "lives", "carried", "factory", "rr", "sel", "falling", "train",
+          "things"]
 
 
 def load(path):
@@ -26,7 +27,7 @@ def show(e):
             f"state {e['state']} face {e['face']} cnt {e['cnt']:2d} fall {e['fall']:2d} "
             f"rng {e.get('rng', '')} {mons} score {e.get('score')} lives {e.get('lives')} "
             f"carry {e.get('carried')} fac {e.get('factory')} rr {e.get('rr')} sel {e.get('sel')} "
-            f"fall {e.get('falling')} train {e.get('train')}")
+            f"fall {e.get('falling')} train {e.get('train')} things {e.get('things')}")
 
 
 def main():

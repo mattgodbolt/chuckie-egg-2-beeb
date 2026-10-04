@@ -62,6 +62,7 @@ def harry_state(m, n):
         "carried": m[0xA560], "factory": m[0xA48C], "rr": m[0xA400],
         "sel": 1 if m[0xA405] else 0, "falling": m[0xA54E],
         "train": [m[0xA48D], m[0xA48E]],
+        "things": "".join(f"{m[0x6600 + i]:02x}" for i in range(0x29)),
     }
 
 

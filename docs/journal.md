@@ -546,3 +546,18 @@ gathers any number of one ingredient (and makes jumps lower).
   the port drew it there. Now it doesn't.
 - `make check`: 120 of 120 rooms, 15 scenarios (new: lift-ride,
   high-frames, train-still, train-runs, lift-rises).
+
+### The dog takes the bone
+
+- When room 2's dog is first blocked it sits for good, and the original
+  deletes the bone wherever it is (`&8D4D`): its footprint toggled in the
+  *current* room's map at the bone's row and column (a stray `&40` in room
+  2 when the bone is elsewhere, kept), its image erased. Now in.
+- So the way past the dog, which Matt couldn't find in the objects-less
+  build: the dog runs left from the middle of room 2 and sits at the first
+  block, an edge or the bone dropped in its path. Waiting at the room's
+  right-hand end works too.
+- The pass logs now carry every portable thing's room (things `&00-&28`),
+  so a thing taken, dropped or deleted is compared each pass. dog-sits:
+  Harry waits at column 28, the dog sits at column 0 and the bone goes at
+  pass 151 on both.

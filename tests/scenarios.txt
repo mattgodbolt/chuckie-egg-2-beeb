@@ -19,3 +19,4 @@ high-frames | right:10-30                              | 100 | 13,7,6,0,0,1,0
 train-still |                                          | 40  | 74,21,10,0,0,1,0
 train-runs  |                                          | 200 | 74,12,4,0,0,3,8 | --power
 lift-rises  |                                          | 120 | 26,4,10,0,0,1,0 | --power
+dog-sits    |                                          | 220 | 2,21,28,0,0,1,0

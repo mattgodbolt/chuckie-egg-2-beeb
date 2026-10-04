@@ -76,6 +76,7 @@ try {
             factory: await b.peek("factory"), rr: await b.peek("o_index"),
             sel: (await b.peek("o_sel")) ? 1 : 0, falling: await b.peek("f_thing"),
             train: [await b.peek("train_room"), await b.peek("train_pos")],
+            things: (await b.read("t_room", 0x29)).map((x) => x.toString(16).padStart(2, "0")).join(""),
         });
         if (peeks.length) {
             const extra = {};

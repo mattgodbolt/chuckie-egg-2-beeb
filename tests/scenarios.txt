@@ -1,0 +1,9 @@
+# Harry scenarios: name | keys held over main-loop passes | passes.
+# make passes replays each on the original (tools/passlog.py) and the port
+# (tools/passlog.mjs) and compares them pass by pass (tools/passcmp.py).
+idle        |                                          | 60
+walk-right  | right:20-140                             | 150
+jump-turn   | right:20-60,jump:40,left:70-90,jump:80   | 160
+ladder-down | right:20-62,down:63-120                  | 160
+walk-left   | left:20-120                              | 160
+jump-hold   | right:20-140,jump:100-140                | 160

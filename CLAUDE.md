@@ -59,12 +59,21 @@ clear `&3000-&7FFF`.
 
 ## Checks
 
+**`make check` before every commit, and read its output.** (Once, a commit
+claimed a check that hadn't run.)
+
 - `.venv/bin/python tools/zxrooms.py` draws every room with the original's
   code (the oracle, `build/rooms`); `node tools/roomcheck.mjs` dumps the
   BBC's; `python3 tools/roomcmp.py` compares maps and pixels. Run all three
   after touching the room drawer, the palettes or the tile drawing.
-- `tools/mkrooms.py` regenerates `src/data/` from the original. The build
-  never runs it; its output is committed.
+- `make passes` replays `tests/scenarios.txt` (keys held over main-loop
+  passes) on the original and the port and compares Harry's state every
+  pass. Add a scenario for any movement or game logic that lands.
+- `tools/mkrooms.py`, `tools/packrooms.py` and `tools/mkgfx.py` regenerate
+  `src/data/` from the original. The build never runs them; their output
+  is committed.
+- Loading takes 4.6s: tools run to a symbol after booting
+  (`startBeeb({bootUntil})`, `play.mjs --until`), never a guessed wait.
 
 ## OS workspace
 

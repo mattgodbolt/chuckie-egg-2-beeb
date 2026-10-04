@@ -2,7 +2,9 @@
 #
 #   make          assemble build/ce2.ssd
 #   make run      boot it in jsbeeb and grab a screenshot
+#   make check    every check: make rooms and make passes
 #   make rooms    check every room the BBC draws against the original's
+#   make passes   replay tests/scenarios.txt on both, compare Harry pass by pass
 #   make wip      rebuild from a clean tree and copy the disc to
 #                 chuckie-egg-2-wip.ssd, which the README links
 #   make fetch    download the Spectrum original into original/
@@ -21,7 +23,7 @@ WIP      = chuckie-egg-2-wip.ssd
 # commit, with + if the tree (the WIP disc itself aside) had changes.
 BUILD   := $(shell date -u '+%Y-%m-%d %H:%M UTC') $(shell git rev-parse --short HEAD 2>/dev/null || echo NOGIT)$(shell git diff --quiet HEAD -- . ':(exclude)$(WIP)' 2>/dev/null || echo +)
 
-.PHONY: all run rooms wip fetch zx disasm venv clean
+.PHONY: all run check rooms passes wip fetch zx disasm venv clean
 
 all: $(TARGET)
 
@@ -35,6 +37,11 @@ build:
 
 run: $(TARGET)
 	node tools/play.mjs '3,!run' shots/ --disc $(TARGET)
+
+check: rooms passes
+
+passes: $(TARGET) build/ce2.z80
+	tools/passcheck.sh
 
 # The room viewer: the same program with -D VIEWER=1, which steps through
 # the rooms instead of playing.

@@ -226,3 +226,30 @@ its red and yellow brickwork comes out magenta and yellow.
   checking on a second emulator (b2) and on hardware; noted for later.
 - With the OS's interrupt gone, OSBYTE 129's negative INKEY still reads
   the keys in the viewer: it scans the matrix itself.
+
+### Research: the front end, controls and sound
+
+Four research agents were set going on the disassembly at once (Harry;
+objects and game logic; monsters, sprites and graphics; front end and
+sound), each writing its own `docs/research/*.md` and a SkoolKit control
+file in `disasm/`. The front-end one came back first
+(`docs/research/frontend.md`). What changes the plan:
+
+- **Three sounds in the whole game**: Harry's movement click, the train's
+  noise and the life-lost tune. Menus, pick-ups, eggs: silent. Easy work
+  for the SN76489.
+- **The main loop runs in 3-frame passes.**
+- **No pause key**; the eight keys are abort, take/drop, save, the four
+  directions and jump.
+- **Saving writes the whole game state** (1,320 bytes, XORed with the
+  random number generator) to tape, at any time, from play or the menu.
+- **There is no ending**: delivering an egg shows "EGGS DELIVERED:- n" and
+  starts the next with more monsters. No competition code anywhere.
+- **Sizes**: 1,511 bytes run once at start-up (the instructions), about
+  1,560 between games (menu, redefine, high scores, save/load), 810 in
+  play. The start-up and between-games code can live outside the
+  resident game on the BBC.
+- A hidden cheat: a byte at `&FFFF`, outside the tape image and normally
+  0, of the form `%101xxxxx` gives a starting egg, a room skip and
+  infinite lives; anything else non-zero prints PLEASE TRY AGAIN and
+  resets the Spectrum.

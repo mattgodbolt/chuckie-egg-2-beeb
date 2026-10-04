@@ -14,8 +14,11 @@ Writes, all committed (the build never runs this):
 
 The palette (decision 2): MODE 1 shows four colours, so each room gets the
 four that cover most of its pixels, with the room's background paper as
-logical colour 0, yellow as logical 3 (decision 6: Harry is yellow), and
-every Spectrum colour mapped to one of the four. The
+logical colour 0, Harry's colour as logical 3, and every Spectrum colour
+mapped to one of the four. Harry's colour is yellow (decision 6: he is
+yellow on the Spectrum), or white in a room where white shows WHITE_GAIN
+more of the room's pixels in their own colour: Spectrum yellow, which he
+is drawn in, then maps to white there. The
 mapping is chosen by brute force to show the most pixels in their own
 colour, under two hard rules: in every cell the room draws, ink and paper
 must stay different; and every colour but the background must differ from
@@ -76,6 +79,10 @@ def room_usage(r, rooms_dir):
 
 
 YELLOW = 6
+WHITE = 7
+# Harry is white in a room only if that shows this much more of its pixels
+# in their own colour than yellow does.
+WHITE_GAIN = 0.02
 
 
 def choose_palette(bg, weight, pairs):
@@ -128,12 +135,12 @@ def row_usage(r, rooms_dir):
     return rows
 
 
-def band_map(colours, weight, pairs):
+def band_map(colours, weight, pairs, force={}):
     """The cheapest map onto four colours (bg first) under choose_palette's
     rules, or None: each other colour to its nearest slot, then a search
-    only if that splits a pair badly."""
-    bg = colours[0]
-    rest = [c for c in range(8) if c not in colours]
+    only if that splits a pair badly. `force` pins colours to a logical
+    colour (yellow to Harry's, when he isn't yellow)."""
+    rest = [c for c in range(8) if c not in colours and c not in force]
 
     def cost_of(cmap):
         return sum(weight[c] * dist(c, colours[cmap[c]]) for c in range(8))
@@ -144,6 +151,8 @@ def band_map(colours, weight, pairs):
     cmap = [0] * 8
     for i, c in enumerate(colours):
         cmap[c] = i
+    for c, l in force.items():
+        cmap[c] = l
     for c in rest:
         cmap[c] = min(range(1, 4), key=lambda l: dist(c, colours[l]))
     if ok(cmap):
@@ -163,14 +172,19 @@ def exact(colours, weight):
     return sum(weight[c] for c in set(colours))
 
 
-def choose_bands(bg, rows, max_splits=2, gain=0.002):
+def choose_bands(bg, rows, harry=YELLOW, max_splits=2, gain=0.002):
     """Decision 15: up to two splits between playfield rows, below which
     logical colour 2 (and the map) change; logical 0 (the paper), 1 and 3
-    (yellow) stay. Returns (colour 1, [(first row, colour 2, cmap)]), the
-    first band starting at row 2; a split is kept only if it shows `gain`
-    more of the room's pixels in their own colour."""
-    yellow = YELLOW if bg != YELLOW else 7
-    others = [c for c in range(8) if c not in (bg, yellow)]
+    (Harry's colour, `harry`) stay. Returns (colour 1, colour 3, [(first
+    row, colour 2, cmap)], exact), the first band starting at row 2; a
+    split is kept only if it shows `gain` more of the room's pixels in
+    their own colour."""
+    yellow = harry if bg != harry else 7
+    # Harry is drawn in Spectrum yellow: when logical 3 isn't yellow, yellow
+    # maps to it in every band, and can't be logical 1 or 2 as well (he'd
+    # take that colour, and change colour at a split).
+    force = {YELLOW: 3} if yellow != YELLOW and bg != YELLOW else {}
+    others = [c for c in range(8) if c not in (bg, yellow, *force)]
     n = len(rows)
     total = sum(sum(w) for w, _ in rows)
     best = None
@@ -190,7 +204,7 @@ def choose_bands(bg, rows, max_splits=2, gain=0.002):
                     if b == a:
                         continue
                     colours = [bg, a, b, yellow]
-                    m = band_map(colours, weighted, pairs)
+                    m = band_map(colours, weighted, pairs, force)
                     if m and (cand is None or m[0] < cand[0]):
                         cand = (m[0], exact(colours, w), b, m[1])
                 seg[i, j] = cand
@@ -261,11 +275,18 @@ def main():
         ".room_bands",
     ]
     before = 0
+    gains = []
     for r in range(1, 121):
         bg = (m[DATA_START + offsets[r]] >> 3) & 7
         weight, pairs = room_usage(r, args.rooms)
         before += exact(choose_palette(bg, weight, pairs)[0], weight) / sum(weight)
-        a, yellow, bands, ex = choose_bands(bg, row_usage(r, args.rooms))
+        rows = row_usage(r, args.rooms)
+        a, yellow, bands, ex = choose_bands(bg, rows)
+        if bg != YELLOW:
+            alt = choose_bands(bg, rows, harry=WHITE)
+            if alt[3] - ex >= WHITE_GAIN:
+                gains.append((alt[3] - ex, r))
+                a, yellow, bands, ex = alt
         _, b, cmap = bands[0]
         colours = [bg, a, b, yellow]
         phys = [ZX_TO_BBC[c] for c in colours]
@@ -294,6 +315,9 @@ def main():
     for e, r, colours, cmap in report[:5]:
         subs = ", ".join(f"{NAMES[c]}->{NAMES[colours[cmap[c]]]}" for c in range(8) if c not in colours)
         print(f"  room {r:3d} {100 * e:5.1f}%  [{' '.join(NAMES[c] for c in colours)}]  {subs}")
+    gains.sort(reverse=True)
+    print(f"Harry white in {len(gains)} rooms: "
+          + ", ".join(f"{r} (+{100 * g:.1f})" for g, r in gains))
 
 
 if __name__ == "__main__":

@@ -747,3 +747,17 @@ gathers any number of one ingredient (and makes jumps lower).
   (data representations; code size in two halves; memory layout), one on
   speed (no pass over 3 frames anywhere), and one exploring the yellow tax
   with screenshots of rooms where white for Harry might be better.
+
+### Harry white, sparingly
+
+- The yellow-tax agent compared schemes with mkrooms's own measure and
+  with screenshots that include Harry and the sprites as the original
+  draws them (it set up every room on the Spectrum to record the sprites'
+  colours, which the room pictures lack). White always: worse (97.9%).
+  Any colour: 99.8%, but Harry comes out black, blue or green, the colour
+  of ladders and monsters. White where it gains: no room loses, and the
+  sprites' cost is that yellow things go white with him.
+- Matt took the agent's call (decision 18): white in the 13 rooms where it
+  gains at least 2 points. 99.03% of pixels in their own colour becomes
+  99.53%; fewer splits are needed (75 for 93), so sideways RAM goes from
+  28 to 105 bytes free. Rooms, scenarios and the front end all pass.

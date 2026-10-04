@@ -7,10 +7,6 @@
 .room_bands
     EQUB 1, 18 * 8 + 1, &A4, &FF   \   1 from row 18: red; map 01223333
     EQUB 1, 22 * 8 + 2, &54, &FA   \   1 from row 22: green; map 01112233
-    EQUB 4, 3 * 8 + 6, &54, &FA   \   4 from row 3: cyan; map 01112233
-    EQUB 4, 23 * 8 + 7, &54, &BB   \   4 from row 23: white; map 01113232
-    EQUB 5, 4 * 8 + 2, &54, &FA   \   5 from row 4: green; map 01112233
-    EQUB 5, 23 * 8 + 7, &54, &BB   \   5 from row 23: white; map 01113232
     EQUB 11, 3 * 8 + 5, &98, &FF   \  11 from row 3: magenta; map 02123333
     EQUB 24, 22 * 8 + 0, &A2, &F5   \  24 from row 22: black; map 20221133
     EQUB 24, 23 * 8 + 7, &B1, &B5   \  24 from row 23: white; map 10321132
@@ -20,13 +16,9 @@
     EQUB 33, 23 * 8 + 7, &B1, &B5   \  33 from row 23: white; map 10321132
     EQUB 37, 18 * 8 + 1, &A8, &F5   \  37 from row 18: red; map 02221133
     EQUB 39, 16 * 8 + 1, &A8, &F5   \  39 from row 16: red; map 02221133
-    EQUB 43, 3 * 8 + 6, &51, &FA   \  43 from row 3: cyan; map 10112233
-    EQUB 43, 23 * 8 + 7, &51, &BB   \  43 from row 23: white; map 10113232
     EQUB 47, 7 * 8 + 2, &78, &7A   \  47 from row 7: green; map 02312231
     EQUB 48, 16 * 8 + 4, &58, &FF   \  48 from row 16: blue; map 02113333
     EQUB 48, 23 * 8 + 1, &64, &FF   \  48 from row 23: red; map 01213333
-    EQUB 51, 14 * 8 + 7, &15, &BB   \  51 from row 14: white; map 11103232
-    EQUB 51, 18 * 8 + 2, &15, &FA   \  51 from row 18: green; map 11102233
     EQUB 53, 20 * 8 + 7, &15, &BB   \  53 from row 20: white; map 11103232
     EQUB 53, 21 * 8 + 2, &15, &FA   \  53 from row 21: green; map 11102233
     EQUB 56, 15 * 8 + 7, &B1, &B5   \  56 from row 15: white; map 10321132
@@ -59,31 +51,21 @@
     EQUB 80, 8 * 8 + 6, &54, &FA   \  80 from row 8: cyan; map 01112233
     EQUB 80, 23 * 8 + 7, &54, &BB   \  80 from row 23: white; map 01113232
     EQUB 81, 17 * 8 + 0, &52, &FF   \  81 from row 17: black; map 20113333
-    EQUB 82, 6 * 8 + 2, &54, &FA   \  82 from row 6: green; map 01112233
-    EQUB 82, 23 * 8 + 7, &54, &BB   \  82 from row 23: white; map 01113232
-    EQUB 83, 6 * 8 + 2, &54, &FA   \  83 from row 6: green; map 01112233
-    EQUB 83, 23 * 8 + 7, &54, &BB   \  83 from row 23: white; map 01113232
     EQUB 85, 21 * 8 + 6, &54, &FA   \  85 from row 21: cyan; map 01112233
     EQUB 86, 12 * 8 + 6, &54, &FA   \  86 from row 12: cyan; map 01112233
     EQUB 87, 11 * 8 + 6, &54, &FA   \  87 from row 11: cyan; map 01112233
     EQUB 88, 15 * 8 + 6, &54, &FA   \  88 from row 15: cyan; map 01112233
     EQUB 89, 17 * 8 + 6, &54, &FA   \  89 from row 17: cyan; map 01112233
     EQUB 91, 8 * 8 + 0, &A2, &F5   \  91 from row 8: black; map 20221133
-    EQUB 92, 3 * 8 + 2, &54, &FA   \  92 from row 3: green; map 01112233
-    EQUB 92, 23 * 8 + 7, &54, &BB   \  92 from row 23: white; map 01113232
-    EQUB 93, 3 * 8 + 2, &54, &FA   \  93 from row 3: green; map 01112233
-    EQUB 93, 18 * 8 + 7, &54, &BB   \  93 from row 18: white; map 01113232
-    EQUB 94, 17 * 8 + 7, &54, &BB   \  94 from row 17: white; map 01113232
     EQUB 95, 3 * 8 + 6, &54, &FA   \  95 from row 3: cyan; map 01112233
     EQUB 95, 23 * 8 + 7, &54, &BB   \  95 from row 23: white; map 01113232
     EQUB 96, 18 * 8 + 4, &A8, &77   \  96 from row 18: blue; map 02223131
     EQUB 98, 16 * 8 + 6, &54, &FA   \  98 from row 16: cyan; map 01112233
-    EQUB 100, 8 * 8 + 4, &A8, &F5   \ 100 from row 8: blue; map 02221133
-    EQUB 100, 9 * 8 + 1, &A8, &F5   \ 100 from row 9: red; map 02221133
+    EQUB 100, 8 * 8 + 4, &58, &FF   \ 100 from row 8: blue; map 02113333
+    EQUB 100, 9 * 8 + 2, &54, &FA   \ 100 from row 9: green; map 01112233
     EQUB 101, 6 * 8 + 7, &51, &BB   \ 101 from row 6: white; map 10113232
     EQUB 101, 21 * 8 + 0, &52, &FF   \ 101 from row 21: black; map 20113333
     EQUB 103, 22 * 8 + 0, &A2, &F5   \ 103 from row 22: black; map 20221133
-    EQUB 104, 3 * 8 + 2, &54, &FA   \ 104 from row 3: green; map 01112233
     EQUB 104, 16 * 8 + 6, &54, &FA   \ 104 from row 16: cyan; map 01112233
     EQUB 105, 3 * 8 + 2, &54, &FA   \ 105 from row 3: green; map 01112233
     EQUB 105, 20 * 8 + 4, &58, &FF   \ 105 from row 20: blue; map 02113333

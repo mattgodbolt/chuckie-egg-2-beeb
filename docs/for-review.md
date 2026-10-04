@@ -13,11 +13,10 @@ things parked for discussion. The reasoning for each is in
    more is needed against 4.5K free. The game wants a B with 16K of
    sideways RAM, a B+128 or a Master. jsbeeb's default B has RAM in banks
    0-7, so the browser link still works.
-3. **Yellow in every room** (decision 6), so Harry is always yellow; it
-   costs some scenery colour (white often shows as yellow: room 5's
-   lattice, room 48's pipes). Matt: "we may wish to accept white in some
-   rooms if that would be better"; being explored, with screenshots,
-   before any change.
+3. **Harry's colour** (decisions 6 and 18): yellow, except white in the 13
+   rooms where white shows at least 2 points more of the room in its own
+   colour; yellow things there turn white with him. The cut-off is
+   `WHITE_GAIN` in tools/mkrooms.py (0.5 points: 24 rooms, 99.64%).
 4. **Colour substitutions** (decision 2): rooms with more than four colours
    lose some. The worst: room 5 83%, room 48 88%, rooms 70, 51 and 24 about
    92% of pixels in their own colour. **Planned**: Rich Talbot-Watkins

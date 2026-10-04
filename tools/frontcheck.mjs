@@ -2,7 +2,8 @@
 // The front end and the way between it and the game (decision 13), on the
 // release disc: the instructions, P to play, S to save in play and carry
 // on, the abort key back to the menu, L to load and carry on, game over
-// with a new high score and its name, and BREAK in play. Exits non-zero on the first failure.
+// with a new high score and its name, CTRL-BREAK after it, and BREAK in
+// play. Exits non-zero on the first failure.
 //
 //   node tools/frontcheck.mjs [--disc build/ce2.ssd] [--model B-DFS1.2]
 //
@@ -74,7 +75,11 @@ try {
     await hold("R", 0.1);
     check(await waitText("PRESS UP KEY"), "R: redefine the keys");
     await b.run(0.5);
-    for (const k of ["K", "M", "Z", "X", "X", "SPACE", "T", "Q", "V"]) await hold(k, 0.3);
+    // Quick presses (4 frames), as typed, each after the 14-frame pause.
+    for (const k of ["K", "M", "Z", "X", "X", "SPACE", "T", "Q", "V"]) {
+        await b.run(0.4);
+        await hold(k, 0.08);
+    }
     const back = await menuReady();
     check(back, "... and back to the menu (a second X refused)");
     if (!back) console.log((await screen()).match(/.{1,40}/g).join("\n"));
@@ -127,6 +132,25 @@ try {
     const named = await waitText(`MAT.........${final}`, 10);
     check(named, "the name and score top the table");
     if (!named) console.log((await screen()).match(/.{1,40}/g).join("\n"));
+
+    // CTRL-BREAK, then SHIFT-BREAK: a first boot again (the instructions),
+    // not the same name asked for again; the new high score kept.
+    await b.keyDown("CTRL");
+    await b.call("reset", { session_id: b.session_id, hard: false });
+    await b.run(0.5);
+    await b.keyUp("CTRL");
+    await b.run(1);
+    await b.call("reset", { session_id: b.session_id, hard: false, autoboot: true });
+    check(await waitText("INSTRUCTIONS!"), "CTRL-BREAK then SHIFT-BREAK: the instructions");
+    check(!(await screen()).includes("ENTER NAME"), "... and no name asked for again");
+    for (const page of ["Harry has to make", "Henhouse Harry"]) {
+        await b.run(0.5);
+        await hold("SPACE", 0.2);
+        await waitText(page);
+    }
+    await b.run(0.5);
+    await hold("SPACE", 0.2);
+    check(await waitText(`MAT.........${final}`, 10), "... and the high score kept");
 
     // BREAK in play (decision 22): a soft reset comes back to the menu,
     // without the instructions, with the start-up option put back, and

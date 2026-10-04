@@ -9,6 +9,10 @@
 \ Write A to the sound chip, through the System VIA's slow bus. X is kept.
 .sound_write
 {
+    \ The keyboard off the bus first: key_down leaves it enabled, and then
+    \ it drives port A's bit 7 (the addressed key's state), which would
+    \ replace the byte's top bit; the OS only writes with it on auto-scan.
+    LDY #&0B : STY sysvia_orb
     LDY #&FF : STY sysvia_ddra
     STA sysvia_ora_nh
     LDY #0 : STY sysvia_orb         ; write enable low

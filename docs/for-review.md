@@ -69,3 +69,9 @@ things parked for discussion. The reasoning for each is in
    to 2,900 cycles in each of the first two stretches while Harry moves);
    ending the tone from the interrupt would free that, if the
    interrupt's sound write can be kept from breaking into the game's.
+
+13. **Checkpoints.** The original takes one only when Harry enters a room
+    walking or on a ladder, so a room entered by a jump or a fall (room 4
+    from room 3, for one) sends him back further on a death. The port
+    keeps that. Changing it would be a numbered decision; say if you want
+    it.

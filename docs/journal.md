@@ -941,3 +941,30 @@ gathers any number of one ingredient (and makes jumps lower).
   false` is a soft BREAK; `make front` now ends with one, and passes on the
   Model B and on the Master with DFS and with ADFS. Main RAM 3,015 bytes
   free.
+
+### Matt's first play: notes and fixes
+
+- **Sound was broken everywhere.** jsbeeb's sound capture showed every
+  byte reaching the SN76489 with bit 7 clear: the keyboard, left enabled
+  by the key reading, drives port A's bit 7, so latch bytes became data
+  bytes for whatever register was last latched (the tick rewrote channel
+  0's pitch; the death tune never set its notes properly). sound_write now
+  puts the keyboard on auto-scan first, as the OS does before writing.
+- **Redefining keys missed presses.** It waited 14 frames and then looked
+  once, so a quick press was caught about one time in three. The
+  original's SCAN_KEY (&9FC5) loops until a key is down after the wait;
+  so does the port now. `make front` types the keys with 4-frame presses
+  (it fails without the fix).
+- **The name asked for again after CTRL-BREAK.** MENU cleared "game over"
+  in its main-RAM copy of the mailbox and wrote the copy back to sideways
+  RAM only when starting a game, so a CTRL-BREAK after the name brought
+  the name entry back (and would have lost the new table and new keys).
+  The mailbox goes back whenever the menu is up; `make front` now does a
+  CTRL-BREAK after the name (it fails without the fix).
+- **Dying sent Harry back several rooms.** This is the original's rule:
+  the checkpoint is taken on entering a room only walking or on a ladder
+  (research/harry.md 9). Walking right off room 3 drops Harry a step into
+  room 4, falling, so a death there goes back to room 3, or to wherever
+  the last walking entry was. Both machines agree pass for pass (the new
+  `checkpoint-fall` scenario). A load keeps the saved checkpoint, as the
+  original's does.

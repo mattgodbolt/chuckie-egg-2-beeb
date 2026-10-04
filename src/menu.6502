@@ -77,6 +77,10 @@ ENDIF
 .main_menu
 {
     LDX menu_sp : TXS
+    \ The mailbox back in sideways RAM whenever the menu is up: the reason
+    \ dealt with, a new high score, new keys, all kept by a CTRL-BREAK
+    \ (which would otherwise ask for the same name again).
+    JSR put_mailbox
     JSR draw_menu
 .key
     JSR get_key
@@ -471,13 +475,16 @@ ENDIF
     LDA mz_r : ASL A : TAX
     LDY redefine_prompt+1,X : LDA redefine_prompt,X : TAX
     JSR print_lines
-    \ Wait 14 frames, then for a key that isn't taken (CAPTURE_KEY, &9FEB).
+    \ Wait 14 frames, then for a key that isn't taken (CAPTURE_KEY, &9FEB):
+    \ after the wait, scan until a key is down, as SCAN_KEY (&9FC5) does, so
+    \ a quick press isn't missed.
 .capture
     LDX #14
 .frames
     TXA : PHA : LDA #19 : JSR osbyte : PLA : TAX
     DEX : BNE frames
-    JSR scan_key : BMI capture
+.scan
+    JSR scan_key : BMI scan
     LDY #7
 .taken
     CMP M_KEYS,Y : BEQ capture

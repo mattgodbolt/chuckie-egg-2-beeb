@@ -22,6 +22,15 @@ ELSE
     SPLIT_ADJ = 96              ; the middle of 84-108, the window that works
 ENDIF
 SPLIT_T1 = 83 * SL - 2 + SPLIT_ADJ
+\ A band's split (bands.6502) fires this much later in its row than the
+\ status bar's (microseconds; -D BAND_SWEEP=n to measure). Measured on
+\ jsbeeb in room 48: clean from -20 to 4, a line early at -24 and late at 8
+\ (docs/journal.md); -8 sits in the middle.
+IF DEFINED(BAND_SWEEP)
+    BAND_ADJ = BAND_SWEEP
+ELSE
+    BAND_ADJ = -8
+ENDIF
 STATUS_PAPER = 0            ; black (1, red, shows where the split lands)
 
 \ The build stamp comes from the Makefile (-D BUILD="date time sha"), so a
@@ -50,6 +59,8 @@ SECTION Data, org = &8000, load = &FFFF3000, filename = "CE2DATA", guard = &C000
 .data_magic
     EQUS DATA_MAGIC, build_stamp    ; MENU loads it again if the build differs
     INCLUDE "state.6502"
+    INCLUDE "bands.6502"
+    INCLUDE "data/bands.6502"
     \ The rooms, packed by tools/packrooms.py (decision 5).
 .packed_rooms
     INCBIN "data/packed.bin"

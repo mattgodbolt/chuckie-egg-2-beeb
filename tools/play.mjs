@@ -31,7 +31,7 @@ const opt = (name, dflt) => {
 // The tests' disc goes straight into a game; build/ce2.ssd has the front
 // end (MENU) first. Each disc's symbols are beside it.
 const disc = opt("disc", "build/test.ssd");
-const symbols = disc.endsWith("test.ssd") ? "build/test.json" : disc.endsWith("viewer.ssd") ? "build/viewer.json" : "build/symbols.json";
+const symbols = disc.endsWith("test.ssd") ? "build/test.json" : disc.endsWith("viewer.ssd") ? "build/viewer.json" : disc.endsWith("sweep.ssd") ? "build/sweep.json" : "build/symbols.json";
 const bootSecs = parseFloat(opt("boot", "0"));
 // Run to this symbol after booting: the program is running from there on.
 const bootUntil = opt("until", "start");

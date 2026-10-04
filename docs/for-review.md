@@ -28,6 +28,8 @@ things parked for discussion. The reasoning for each is in
    as a colour layer once the game plays. Rich TW again: raster colours a
    few times down the screen would also change non-character colours and
    look more authentic; baron's `examples/colours/` shows the technique.
+   Done as decision 15 (one colour per band, up to two splits a room);
+   more colours per split would need more blank time than there is.
 5. **Text in the MOS font** (decision 4), not the Spectrum ROM's.
 6. **A MODE 7 instructions loader** (Matt's idea). The original loaded
    from tape, so its instructions were part of the game: shown once at
@@ -53,6 +55,7 @@ things parked for discussion. The reasoning for each is in
    tables then, so the reset that follows may misbehave. CTRL-BREAK, then
    SHIFT-BREAK, gets back to the menu. Making BREAK return to the menu
    cleanly would mean keeping `&0258` and `&027F-&029B` free of tables.
-11. **The Master** isn't a target (decision 14): its MOS keeps the font
-   elsewhere, and its reset doesn't come back to `MENU`. Bringing it back
-   means 512 bytes for a font copy and a Master-specific way back.
+11. **The Master is wanted after all** (Matt: "Master support is important
+   as I only have a physical Master to test on"): decision 14 is to be
+   revisited. What it takes is being explored (the font, perhaps patched in
+   at start-up; the reset back to `MENU` on MOS 3.20).

@@ -1,0 +1,80 @@
+\ ***************************************************************************
+\ Palette bands (decision 15), in the sideways bank: below up to two splits
+\ between playfield rows, logical colour 2 shows another physical colour
+\ and the Spectrum colours map onto the four afresh. The interrupt
+\ (irq.6502) changes logical 2's four ULA entries in the horizontal blank
+\ before each split row; the drawing looks colours up by the cell's row.
+\ ***************************************************************************
+
+\ This room's bands, set by setup_bands when the room is drawn.
+.band_cmaps SKIP 24             ; band k's colour map at 8k (band 0 = the room's)
+.band_off   SKIP 32             ; for each screen row (and a little beyond), 8 * its band
+.band_ula   SKIP 8              ; bands 1 and 2: logical 2's four &FE21 values
+.band_rows  SKIP 2              ; bands 1 and 2: the first row of each
+.band_count SKIP 1              ; how many splits, 0-2
+\ T1's latch values (irq.6502): from the status bar's split to band 1, and
+\ from band 1 to band 2; &FFFF (past the next VSync) where there's no band.
+.band_t1    SKIP 4
+
+\ The bands of room A (set_room_palette has filled band_cmaps' band 0).
+.setup_bands
+{
+    STA sb_room
+    LDA #0 : STA band_count
+    LDX #31
+.clear
+    STA band_off,X
+    DEX : BPL clear
+    LDA #LO(room_bands) : STA sb_p
+    LDA #HI(room_bands) : STA sb_p+1
+.record
+    LDY #0 : LDA (sb_p),Y : BEQ done
+    CMP sb_room : BNE next
+    \ A split: band k = band_count + 1 from its row down.
+    LDX band_count
+    INY : LDA (sb_p),Y : LSR A : LSR A : LSR A : STA band_rows,X : TAY
+    INX : TXA : ASL A : ASL A : ASL A           ; 8k
+.rows
+    STA band_off,Y
+    INY : CPY #32 : BNE rows
+    \ Logical 2's entries: &80, &90, &D0, &C0 with the colour (EOR 7).
+    LDA band_count : ASL A : ASL A : TAX
+    LDY #1 : LDA (sb_p),Y : AND #7 : EOR #7
+    ORA #&80 : STA band_ula,X
+    ORA #&10 : STA band_ula+1,X
+    ORA #&40 : STA band_ula+2,X
+    AND #&EF : STA band_ula+3,X
+    \ The map, two bits a colour.
+    INC band_count
+    LDA band_count : ASL A : ASL A : ASL A : TAX     ; 8k
+    LDY #2 : JSR sb_map
+    LDY #3 : JSR sb_map
+.next
+    CLC : LDA sb_p : ADC #4 : STA sb_p
+    BCC record
+    INC sb_p+1 : JMP record
+.done
+    \ T1's periods (N + 2 microseconds, free-running): 512 a character row.
+    \ Band 1's interrupt runs its four writes BAND_ADJ later than the status
+    \ bar's last four, so it fires that much later.
+    LDA #&FF : STA band_t1 : STA band_t1+1 : STA band_t1+2 : STA band_t1+3
+    LDA band_count : BEQ timed
+    LDA #LO(BAND_ADJ - 2) : STA band_t1
+    LDA band_rows : SEC : SBC #2 : ASL A
+    CLC : ADC #HI(BAND_ADJ - 2) : STA band_t1+1     ; (BAND_ADJ may be negative)
+    LDA band_count : CMP #2 : BNE timed
+    LDA #&FE : STA band_t1+2
+    LDA band_rows+1 : SEC : SBC band_rows : ASL A : SEC : SBC #1 : STA band_t1+3
+.timed
+    RTS
+\ Four colours' logical numbers from byte Y of the record into band_cmaps,X.
+.sb_map
+    LDA (sb_p),Y
+    LDY #4
+.colour
+    PHA : AND #3 : STA band_cmaps,X : PLA
+    LSR A : LSR A : INX
+    DEY : BNE colour
+    RTS
+}
+.sb_room EQUB 0

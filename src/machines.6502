@@ -38,10 +38,12 @@
     \ The paper from the attribute map; the ink is the strip's.
     LDA cell : STA ds_p
     CLC : LDA cell+1 : ADC #HI(attr_map) : STA ds_p+1
+    JSR cell_band : STX dg_band
     LDY #0 : LDA (ds_p),Y
-    LSR A : LSR A : LSR A : AND #7 : TAX
-    LDA cmap,X : TAX : LDA colour_bytes,X : STA paper
-    LDX ds_ink : LDA cmap,X : TAX : LDA colour_bytes,X
+    LSR A : LSR A : LSR A : AND #7 : ORA dg_band : TAX
+    LDA band_cmaps,X : TAX : LDA colour_bytes,X : STA paper
+    LDA ds_ink : ORA dg_band : TAX
+    LDA band_cmaps,X : TAX : LDA colour_bytes,X
     EOR paper : STA diff
     JSR draw_glyph_pd
     CLC : LDA glyph : ADC #8 : STA glyph
@@ -352,7 +354,7 @@ ZA_AUTO2 lf
     LDA l_yf : STA sp_yf
     LDA l_frame : STA sp_frame
     LDA l_frame+1 : STA sp_frame+1
-    LDX cmap+6 : LDA colour_bytes,X : STA sp_colour
+    LDA #6 : STA sp_ink             ; yellow
     JMP draw_sprite
 }
 ZA_AUTO2 lp

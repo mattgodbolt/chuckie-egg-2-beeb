@@ -35,7 +35,6 @@ SECTION ZeroPage, org = ZP_FIXED, guard = &90
 .d_frame    SKIP 2
 \ The room's colour map (screen.6502): long-lived, so out of the
 \ allocator's pool with the rest.
-.cmap       SKIP 8
 ENDSECTION
 
 \ The game's other state, in the DFS's NMI page (free once the disc is done).
@@ -142,6 +141,10 @@ SECTION Scratch, org = &90, guard = &FC
 \ (irq.6502)
 .room_ula      SKIP 16
 \ (screen.6502)
+.dg_band       SKIP 1          ; draw_glyph's band offset
+.sp_row        SKIP 1          ; draw_sprite's screen row
+.sb_p          SKIP 2          ; setup_bands' pointer (bands.6502: no allocator there)
+.irq_split     SKIP 1          ; the next T1 split: 0 the status bar's, then bands 1, 2
 .set_logical_t SKIP 1
 .gbyte         SKIP 1
 \ (rooms.6502)

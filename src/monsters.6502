@@ -429,9 +429,7 @@ ZA_AUTO2 mframe
     LDA m_yf,X : STA sp_yf
     LDA m_frame_lo,X : STA sp_frame
     LDA m_frame_hi,X : STA sp_frame+1
-    LDA m_ink,X : TAX
-    LDA cmap,X
-    TAX : LDA colour_bytes,X : STA sp_colour
+    LDA m_ink,X : STA sp_ink
     JSR draw_sprite
     LDY dl_i : LDX draw_list,Y
     LDA #1 : STA m_vis,X

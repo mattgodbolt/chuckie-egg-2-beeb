@@ -6,7 +6,8 @@ the original's (build/rooms, from tools/zxrooms.py).
 
 The three maps must match byte for byte. The screen (rows 2-23; the status
 bar isn't drawn yet) must show every Spectrum pixel in the logical colour
-the room's palette maps its colour to (src/data/rooms.6502). Text cells
+the room's palette maps its colour to (src/data/rooms.6502), or the map of
+the band the row is in (src/data/bands.6502, decision 15). Text cells
 (tile map bit 7) are expected in the MOS font instead (decision 4).
 """
 import re
@@ -23,6 +24,16 @@ def palettes():
     return out
 
 
+def bands():
+    """{room: [(first row, cmap)]} from src/data/bands.6502 (decision 15)."""
+    out = {}
+    for m in re.finditer(r"EQUB (\d+), (\d+) \* 8 \+ (\d+), &(..), &(..)", open("src/data/bands.6502").read()):
+        lo, hi = int(m.group(4), 16), int(m.group(5), 16)
+        cmap = [(lo >> (2 * i)) & 3 for i in range(4)] + [(hi >> (2 * i)) & 3 for i in range(4)]
+        out.setdefault(int(m.group(1)), []).append((int(m.group(2)), cmap))
+    return out
+
+
 def bbc_pixel(scr, row, line, x):
     cell = row * 32 + x // 8
     byte = scr[cell * 16 + (8 if x & 4 else 0) + line]
@@ -32,6 +43,7 @@ def bbc_pixel(scr, row, line, x):
 
 def main():
     pals = palettes()
+    room_bands = bands()
     mos = open("build/mosfont.bin", "rb").read()
     rooms = [int(a) for a in sys.argv[1:]] or range(1, 121)
     bad = 0
@@ -47,10 +59,13 @@ def main():
             if diffs:
                 c = diffs[0]
                 problems.append(f"{name} map: {len(diffs)} cells differ, first ({c // 32},{c % 32}) zx {a[c]:02X} bbc {b[c]:02X}")
-        cmap = pals[r]
         pix = 0
         first = None
         for row in range(2, 24):
+            cmap = pals[r]
+            for start, band_map in room_bands.get(r, []):
+                if row >= start:
+                    cmap = band_map
             for line in range(8):
                 y = row * 8 + line
                 zrow = ((y & 0xC0) << 5) + ((y & 7) << 8) + ((y & 0x38) << 2)

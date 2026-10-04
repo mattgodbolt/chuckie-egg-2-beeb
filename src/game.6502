@@ -325,7 +325,7 @@ CHECKPOINT_VARS = h_frame + 2 - h_cell    ; h_cell .. h_frame
     LDA h_yf : STA sp_yf : STA d_yf
     LDA h_frame : STA sp_frame : STA d_frame
     LDA h_frame+1 : STA sp_frame+1 : STA d_frame+1
-    LDX cmap+6 : LDA colour_bytes,X : STA sp_colour
+    LDA #6 : STA sp_ink             ; yellow
     JSR draw_sprite
     LDA #&80 : STA drawn
     RTS

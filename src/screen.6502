@@ -6,14 +6,15 @@
 \ cells is 512 bytes, so cell n is at screen + 16n: one 16-bit shift.
 \ ***************************************************************************
 
-\ The room's colour map, cmap (memory.6502): the logical colour of each
-\ Spectrum colour 0-7 (decision 2).
+\ The room's colour maps (bands.6502): the logical colour of each Spectrum
+\ colour 0-7 (decision 2), for each band of rows (decision 15).
 
-\ Set the palette and colour map for room A (1-120).
+\ Set the palette and colour maps for room A (1-120).
 .set_room_palette
 {
     ZA_AUTO2 pal
     ZA_AUTO1 bits
+    STA srp_room
     \ room_palettes + 4 * (A - 1)
     SEC : SBC #1
     STA pal : LDA #0 : STA pal+1
@@ -37,8 +38,20 @@
     LSR A : LSR A
     JMP shift
 .got
-    AND #3 : STA cmap,X
+    AND #3 : STA band_cmaps,X
     INX : CPX #8 : BNE byte
+    LDA srp_room : JMP setup_bands
+}
+.srp_room EQUB 0
+
+\ X = 8 * the band of `cell`'s row: the offset of its colour map in
+\ band_cmaps.
+.cell_band
+{
+    ZA_AUTO1 hi
+    LDA cell+1 : ASL A : ASL A : ASL A : STA hi
+    LDA cell : LSR A : LSR A : LSR A : LSR A : LSR A : ORA hi : TAX
+    LDA band_off,X : TAX
     RTS
 }
 
@@ -99,11 +112,13 @@ ZA_AUTO1 diff               ; ink pixels EOR paper pixels
 .draw_glyph
 {
     PHA
-    LSR A : LSR A : LSR A : AND #7 : TAX
-    LDA cmap,X
+    JSR cell_band : STX dg_band
+    PLA : PHA
+    LSR A : LSR A : LSR A : AND #7 : ORA dg_band : TAX
+    LDA band_cmaps,X
     TAX : LDA colour_bytes,X : STA paper
-    PLA : AND #7 : TAX
-    LDA cmap,X
+    PLA : AND #7 : ORA dg_band : TAX
+    LDA band_cmaps,X
     TAX : LDA colour_bytes,X : EOR paper : STA diff
     \ Fall into draw_glyph_pd.
 }

@@ -4,7 +4,10 @@
 \ keyboard interrupt stop, and its sound workspace at &0800 stays still.
 \
 \ Two sources: VSync (System VIA CA1) and the User VIA's T1, which splits
-\ the palette between the status bar (rows 0-1) and the room (rows 2-23).
+\ the palette between the status bar (rows 0-1) and the room (rows 2-23),
+\ and then at each of the room's band splits (decision 15). T1 runs free:
+\ VSync starts it and sets its latch to the period after, and each split
+\ sets the one after that, so only VSync's latency moves the splits.
 \
 \ In MODE 1 a palette entry is picked by more than the pixel's own colour.
 \ The ULA forms the entry number from bits 7, 5, 3 and 1 of a shift
@@ -44,9 +47,23 @@ FUNCTION ula_entry(l, n, phys) = ((l AND 2) * 4 + (n AND 2) * 2 + (l AND 1) * 2 
     TXA : PHA
     LDA usrvia_ifr : AND #&40 : BEQ not_t1
     LDA usrvia_t1cl             ; acknowledge
+    LDX irq_split : BNE band
+    \ The status bar's split, and the latch for the period after next.
     FOR i = 10..15
         LDA room_ula + i : STA ula_pal
     NEXT
+    LDA band_t1+2 : STA usrvia_t1ll
+    LDA band_t1+3 : STA usrvia_t1lh
+    INC irq_split
+    JMP done
+.band
+    \ A band's split (decision 15): logical 2's four entries for band X.
+    TXA : ASL A : ASL A : TAX
+    FOR i = 0..3
+        LDA band_ula - 4 + i,X : STA ula_pal
+    NEXT
+    LDA #&FF : STA usrvia_t1ll : STA usrvia_t1lh
+    INC irq_split
     JMP done
 .not_t1
     LDA sysvia_ifr : AND #2 : BEQ done
@@ -54,6 +71,9 @@ FUNCTION ula_entry(l, n, phys) = ((l AND 2) * 4 + (n AND 2) * 2 + (l AND 1) * 2 
     INC vsyncs
     LDA #LO(SPLIT_T1) : STA usrvia_t1cl
     LDA #HI(SPLIT_T1) : STA usrvia_t1ch     ; starts the count
+    LDA band_t1 : STA usrvia_t1ll           ; ... then from the status bar's
+    LDA band_t1+1 : STA usrvia_t1lh         ; split to band 1's
+    LDA #0 : STA irq_split
     LDX #9
 .room_entries
     LDA room_ula,X : STA ula_pal
@@ -68,7 +88,7 @@ FUNCTION ula_entry(l, n, phys) = ((l AND 2) * 4 + (n AND 2) * 2 + (l AND 1) * 2 
     RTI
 }
 
-\ Put irq_handler on IRQ1V: VSync and User VIA T1 (one-shot) only.
+\ Put irq_handler on IRQ1V: VSync and User VIA T1 only.
 .install_irq
 {
     SEI
@@ -76,7 +96,8 @@ FUNCTION ula_entry(l, n, phys) = ((l AND 2) * 4 + (n AND 2) * 2 + (l AND 1) * 2 
                                                 ; would hold IRQ asserted
     LDA #LO(irq_handler) : STA irq1v
     LDA #HI(irq_handler) : STA irq1v+1
-    LDA usrvia_acr : AND #&1F : STA usrvia_acr  ; T1 and T2 one-shot
+    LDA usrvia_acr : AND #&1F : ORA #&40        ; T1 free-running, T2 one-shot
+    STA usrvia_acr
     LDA #&82 : STA sysvia_ier                   ; CA1: VSync
     LDA #&C0 : STA usrvia_ier                   ; T1
     CLI

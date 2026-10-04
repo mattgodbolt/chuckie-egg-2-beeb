@@ -127,8 +127,7 @@ ZA_AUTO2 o_frame_zp
     LDA #0 : STA sp_yf
     LDA o_frame : STA sp_frame
     LDA o_frame+1 : STA sp_frame+1
-    LDX o_ink : LDA cmap,X
-    TAX : LDA colour_bytes,X : STA sp_colour
+    LDA o_ink : STA sp_ink
     JSR draw_sprite
     LDX o_thing : JSR thing_bit
     ORA on_screen,Y : STA on_screen,Y
@@ -457,8 +456,7 @@ ZA_AUTO2 f_frame_zp
     LDA f_yf : STA sp_yf
     LDA f_frame : STA sp_frame
     LDA f_frame+1 : STA sp_frame+1
-    LDX f_ink : LDA cmap,X
-    TAX : LDA colour_bytes,X : STA sp_colour
+    LDA f_ink : STA sp_ink
     JMP draw_sprite
 
 \ Deliver (&97FA) thing A into its hopper.

@@ -15,9 +15,11 @@
 ZA_AUTO2 sp_frame           ; the frame's header
 ZA_AUTO2 sp_cell            ; the top-left cell
 ZA_AUTO1 sp_yf              ; the pixel line in that cell, 0-7
-ZA_AUTO1 sp_colour          ; a byte of four pixels in the sprite's colour
+ZA_AUTO1 sp_ink             ; the sprite's Spectrum colour, 0-7
+ZA_AUTO1 sp_colour          ; that colour in this row's band: a byte of four pixels
 
-\ Draw the frame at sp_frame, sp_cell, sp_yf in sp_colour.
+\ Draw the frame at sp_frame, sp_cell, sp_yf in Spectrum colour sp_ink,
+\ looked up afresh in each row's band (decision 15).
 .draw_sprite
 {
     ZA_AUTO2 src
@@ -41,6 +43,10 @@ ZA_AUTO1 sp_colour          ; a byte of four pixels in the sprite's colour
     LSR scr+1 : ROR A : LSR scr+1 : ROR A : LSR scr+1 : ROR A : LSR scr+1 : ROR A
     CLC : ADC #HI(screen) : STA scr+1
     LDA sp_yf : STA yf
+    \ Its first row, and its colour there.
+    LDA sp_cell+1 : ASL A : ASL A : ASL A : STA sp_row
+    LDA sp_cell : LSR A : LSR A : LSR A : LSR A : LSR A : ORA sp_row : STA sp_row
+    JSR sprite_colour
 .row
     LDA #0 : STA bcol : STA soff
 .byte
@@ -70,10 +76,17 @@ ZA_AUTO1 sp_colour          ; a byte of four pixels in the sprite's colour
 .next_cell
     CLC : LDA scr : ADC #LO(ROW_BYTES - 7) : STA scr
     LDA scr+1 : ADC #HI(ROW_BYTES - 7) : STA scr+1
+    INC sp_row : JSR sprite_colour
 .more
     DEC lines : BNE row
     RTS
 }
+
+\ sp_colour = sp_ink in row sp_row's band.
+.sprite_colour
+    LDX sp_row : LDA band_off,X : ORA sp_ink : TAX
+    LDA band_cmaps,X : TAX : LDA colour_bytes,X : STA sp_colour
+    RTS
 
 \ Erase the frame at sp_frame, sp_cell, sp_yf the original's way (&7FC9):
 \ under each set pixel of the image, put back the room's pixel (the tile
@@ -107,6 +120,10 @@ ZA_AUTO1 sp_colour          ; a byte of four pixels in the sprite's colour
     LSR scr+1 : ROR A : LSR scr+1 : ROR A : LSR scr+1 : ROR A : LSR scr+1 : ROR A
     CLC : ADC #HI(screen) : STA scr+1
     LDA sp_yf : STA yf
+    \ Its first row, and its colour there.
+    LDA sp_cell+1 : ASL A : ASL A : ASL A : STA sp_row
+    LDA sp_cell : LSR A : LSR A : LSR A : LSR A : LSR A : ORA sp_row : STA sp_row
+    JSR sprite_colour
 .row
     LDA #0 : STA bcol : STA soff
 .byte
@@ -191,11 +208,13 @@ ZA_AUTO1 sp_colour          ; a byte of four pixels in the sprite's colour
     LDY #0 : LDA (mp),Y
     \ paper and diff, as draw_glyph works them out.
     PHA
-    LSR A : LSR A : LSR A : AND #7 : TAX
-    LDA cmap,X
+    JSR cell_band : STX dg_band
+    PLA : PHA
+    LSR A : LSR A : LSR A : AND #7 : ORA dg_band : TAX
+    LDA band_cmaps,X
     TAX : LDA colour_bytes,X : STA paper
-    PLA : AND #7 : TAX
-    LDA cmap,X
+    PLA : AND #7 : ORA dg_band : TAX
+    LDA band_cmaps,X
     TAX : LDA colour_bytes,X : EOR paper : STA diff
     RTS
 }

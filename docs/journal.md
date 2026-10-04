@@ -659,3 +659,31 @@ gathers any number of one ingredient (and makes jumps lower).
   target was a Beeb first. Decision 14: a Model B, text straight from OS
   1.20's ROM at `&C000`. Sideways RAM: 689 bytes free; main RAM 322 (the
   copy routine went too). Rooms, scenarios and the front end all pass.
+
+### Palette bands
+
+- Rich TW asked twice for raster colours, and room 48 shows why: its four
+  colours (black, magenta, blue and the yellow forced in for Harry) turn
+  the white and cyan pipes, the red bricks and the green dots into yellow
+  and magenta. Decision 15: up to two splits a room between playfield
+  rows; below each, logical colour 2 shows another colour and the
+  Spectrum's colours map onto the four afresh.
+- Measured first: one free colour per band with two splits gets 99.4% of
+  the pixels in their own colour against 99.5% for two free, and needs 4
+  ULA writes (16us) per split instead of 8, which wouldn't fit the 32us
+  horizontal blank with jitter. `tools/mkrooms.py` chooses the splits,
+  keeping one only for a 0.2% gain: 93 splits, 97.8% becoming 99.0%.
+- The drawing looks the colour map up by the cell's row (tiles, cell
+  colours for erasing and collisions, the truck and train strips); sprites
+  take a Spectrum ink and resolve it each character row, so a monster
+  crossing a split changes colour as its cells would.
+- The interrupt: T1 now runs free, VSync starting it and latching the
+  period to the first band, each split latching the one after next, so
+  every split carries only VSync's latency. `tools/bandsweep.py` measured
+  the window in room 48 (whose splits have colour at both edges): clean
+  from -20 to +4us, set at -8. The first sweep's negative values came out a
+  whole row late: my latch arithmetic didn't borrow into the high byte.
+- RAM: the band records are 4 bytes (row and colour share one) and live in
+  sideways RAM with the band tables; main RAM 130 bytes free, sideways 36.
+  This used the 512 bytes the font copy freed (decision 14), which Matt now
+  wants back for the Master: being looked into.

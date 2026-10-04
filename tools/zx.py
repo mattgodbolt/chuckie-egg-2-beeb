@@ -195,7 +195,7 @@ def main():
     if args.map:
         with open(args.map, "w") as f:
             for a in sorted(exec_map):
-                f.write(f"{a:04X}\n")
+                f.write(f"${a:04X}\n")  # trace.py's format, which sna2ctl reads
         print("MAP", args.map, len(exec_map))
 
 

@@ -103,3 +103,23 @@ crop: by the arithmetic it is centred exactly as MODE 1 is.
 
 Baron 0.4.2 has `ASSERT` built in: the port kit's `MACRO ASSERT` shim is
 now a "Reserved macro name" error.
+
+### The room format, and an oracle for it
+
+- The room drawer is `&7920`. Rooms are a small bytecode: a background
+  attribute, then commands — runs of one tile, capped runs (pipes), pipe
+  bends, diagonals, hoppers, blocks, text, single tiles — until `&00`.
+  Every tile placed also goes into three 768-byte maps (attribute, tile,
+  cell type) that the rest of the game reads. Details in
+  `docs/research.md`.
+- `tools/zxrooms.py` calls the original's drawer for each room in turn
+  (restore a snapshot, poke the room number, push a sentinel return
+  address, run to it) and keeps the screen and the three maps: 120 rooms
+  in two seconds. Stitched together they are the published map, minus
+  the sprites. That is the oracle: whatever the BBC draws for a room gets
+  compared against it.
+- All 120 rooms parse: 13,633 bytes, average 114 a room. As one block it
+  packs to 7,156 bytes with zlib and 6,256 with lzma; but the game needs
+  one room at a time, so the packing has to allow that.
+- Matt, mid-session: *"At a push, we could go 'Beeb with sideways RAM' or
+  BBC Master. but try to fit this in a beeb first."* Decision 3.

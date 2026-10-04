@@ -1,0 +1,130 @@
+\ ***************************************************************************
+\ Sound: the original's three (docs/research/frontend.md, section 7) on the
+\ SN76489, written directly (decision 11: no OS calls). Channel 0 plays the
+\ life-lost tune, channel 1 the movement tick, and the noise channel,
+\ clocked by channel 2 at about 150 shifts a second, stands in for the
+\ train's random beeper.
+\ ***************************************************************************
+
+\ Write A to the sound chip, through the System VIA's slow bus.
+.sound_write
+{
+    LDX #&FF : STX sysvia_ddra
+    STA sysvia_ora_nh
+    LDX #0 : STX sysvia_orb         ; write enable low
+    LDX #3                          ; ... for 8us
+.hold
+    DEX : BNE hold
+    LDX #8 : STX sysvia_orb
+    RTS
+}
+
+\ Everything silent, the noise set up and channel 2 clocking it, silent.
+.sound_init
+{
+    LDX #sound_init_end - sound_init_bytes - 1
+.loop
+    STX si_x
+    LDA sound_init_bytes,X : JSR sound_write
+    LDX si_x : DEX : BPL loop
+    RTS
+}
+.si_x EQUB 0
+.sound_init_bytes                   ; (written last first)
+    EQUB &FF, &E7                   ; noise: silent; white, clocked by channel 2
+    EQUB &34, &C1                   ; channel 2: N = 833, about 150Hz
+    EQUB &DF, &BF, &9F              ; channels 0-2 silent
+.sound_init_end
+
+\ Wait Y * 256 + X microseconds on the User VIA's timer 2 (one-shot).
+.wait_us
+    STX usrvia_t2cl : STY usrvia_t2ch       ; starts it; clears its flag
+.wait_t2
+    LDA usrvia_ifr : AND #&20 : BEQ wait_t2
+    RTS
+
+\ The life-lost tune (&A2EB): 16 notes, 2.16s, everything else frozen.
+.death_tune
+{
+    LDA #&90 : JSR sound_write      ; channel 0 loud
+    LDX #0
+.note
+    STX dt_i
+    LDA death_notes,X : JSR sound_write
+    LDX dt_i : LDA death_notes+1,X : JSR sound_write
+    LDX dt_i : LDA death_notes+2,X : STA dt_n
+.hold
+    LDX #LO(4000) : LDY #HI(4000) : JSR wait_us
+    DEC dt_n : BNE hold
+    LDX dt_i : INX : INX : INX : CPX #death_notes_end - death_notes : BNE note
+    LDA #&9F : JMP sound_write
+}
+.dt_i EQUB 0
+.dt_n EQUB 0
+\ Each note: the SN76489's N (125000 / f, at its 4MHz clock), and its length
+\ in 4ms steps (measured from the original: frontend.md 7.3).
+MACRO NOTE n, ms
+    EQUB &80 OR (n AND 15), n DIV 16, (ms + 2) DIV 4
+ENDMACRO
+.death_notes
+    NOTE 638, 202 : NOTE 569, 102 : NOTE 638, 202 : NOTE 715, 100
+    NOTE 757, 203 : NOTE 951, 103 : NOTE 848, 200 : NOTE 1007, 101
+    NOTE 951, 598
+    NOTE 641, 33 : NOTE 848, 51 : NOTE 757, 52 : NOTE 715, 54
+    NOTE 638, 54 : NOTE 508, 51 : NOTE 480, 52
+.death_notes_end
+
+\ MOVE_SOUND (&92F4): while Harry moves, a tick of two square-wave cycles
+\ whose pitch follows his state. The original's tone is
+\ f = 3546900 / (8 L0 + 228): N = 125000 / f is about L0 / 4 + L0 / 32 + 8.
+.move_sound
+{
+    LDA h_dx : ORA h_dy : BNE moving
+    RTS
+.moving
+    LDA h_state : CMP #7 : BNE not_jump
+    LDA h_cnt : ASL A : ADC #42             ; (cnt < 128: carry clear)
+    LDX h_cnt : CPX #10 : BCS l0
+    EOR #&FF : ADC #1                       ; low for the first 9 steps
+    JMP l0
+.not_jump
+    CMP #0 : BNE other
+    LDA h_fall : ASL A : ADC #50
+    JMP l0
+.other
+    CLC : ADC #1 : LSR A : CMP #2 : BNE n_ok
+    LDA #6
+.n_ok
+    ASL A : ASL A : ASL A : ASL A
+    EOR #&FF : CLC : ADC #1                 ; -16n
+.l0
+    CLC : ADC #1 : STA ms_l0                ; L0
+    LSR A : LSR A : LSR A : LSR A : LSR A : STA ms_n
+    LDA ms_l0 : CLC : ADC #3 : LSR A : LSR A
+    CLC : ADC ms_n : ADC #8 : STA ms_n      ; N, under 80
+    AND #15 : ORA #&A0 : JSR sound_write
+    LDA ms_n : LSR A : LSR A : LSR A : LSR A : JSR sound_write
+    LDA #&B2 : JSR sound_write              ; on
+    \ Two cycles: 16N microseconds.
+    LDA ms_n : LSR A : LSR A : LSR A : LSR A : TAY
+    LDA ms_n : ASL A : ASL A : ASL A : ASL A : TAX
+    JSR wait_us
+    LDA #&BF : JMP sound_write              ; off
+}
+.ms_l0 EQUB 0
+.ms_n EQUB 0
+
+\ The train's noise: on while the noise flag is (machines.6502 sets it
+\ once a pass), off when it isn't.
+.noise_sound
+{
+    LDA noise_flag : CMP noise_on : BEQ same
+    STA noise_on
+    TAX : BEQ off
+    LDA #&F3 : JMP sound_write
+.off
+    LDA #&FF : JMP sound_write
+.same
+    RTS
+}
+.noise_on EQUB 0

@@ -561,3 +561,21 @@ gathers any number of one ingredient (and makes jumps lower).
   so a thing taken, dropped or deleted is compared each pass. dog-sits:
   Harry waits at column 28, the dog sits at column 0 and the bone goes at
   pass 151 on both.
+
+### Sound, and deaths you can see
+
+- Matt: "no fall death yet". It was there, but instant: the original
+  plays its life-lost tune first (2.16 s, interrupts off, everything
+  frozen), and without it a death was a blink. `src/sound.6502` (decision
+  12) plays the tune on the SN76489 through the System VIA's slow bus,
+  timed on the User VIA's timer 2 so the palette split carries on. A run
+  into room 2's dog: 34 chip writes (volume, 16 notes, off) and 2.19 s from
+  the death to the room's redraw.
+- The movement tick: two cycles at the original's pitch, which follows
+  Harry's state (walking is N = 76, measured in the emulator), twice a
+  pass while he moves. The train's rumble: white noise at the original's
+  sample rate while the train is drawn with the power on.
+- RAM again: the font copy is trimmed to characters 32-95 (nothing prints
+  beyond Z) and the packed rooms' offset table moved into sideways RAM.
+  Main RAM 252 bytes free, sideways 89. The room viewer, which the room
+  check builds, had stopped fitting at 17.

@@ -77,7 +77,7 @@ FUNCTION ula_entry(l, n, phys) = ((l AND 2) * 4 + (n AND 2) * 2 + (l AND 1) * 2 
                                                 ; would hold IRQ asserted
     LDA #LO(irq_handler) : STA irq1v
     LDA #HI(irq_handler) : STA irq1v+1
-    LDA usrvia_acr : AND #&3F : STA usrvia_acr  ; T1 one-shot
+    LDA usrvia_acr : AND #&1F : STA usrvia_acr  ; T1 and T2 one-shot
     LDA #&82 : STA sysvia_ier                   ; CA1: VSync
     LDA #&C0 : STA usrvia_ier                   ; T1
     CLI

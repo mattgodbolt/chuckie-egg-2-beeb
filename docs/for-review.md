@@ -33,3 +33,8 @@ things parked for discussion. The reasoning for each is in
    `docs/research/frontend.md` section 9). On the BBC they can be a
    separate MODE 7 program that shows the instructions and loads the game,
    saving that memory in the game itself. Planned for the loader layer.
+7. **The train's rumble** (decision 12). The original toggles the beeper
+   from its RNG nine times a pass; the port plays the SN76489's white
+   noise, shifted about 150 times a second, while the train is noisy. The
+   RNG calls stay where they were, so the game's random sequence matches.
+   The character is close; is it close enough?

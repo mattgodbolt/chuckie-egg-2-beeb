@@ -56,13 +56,15 @@ SECTION Data, org = &8000, load = &FFFF3000, filename = "CE2DATA", guard = &C000
     \ The rooms, packed by tools/packrooms.py (decision 5).
 .packed_rooms
     INCBIN "data/packed.bin"
+    INCLUDE "data/packed.6502"
     \ The original's sprites: Harry, monsters, truck, train, lifts.
 .sprites
     INCBIN "data/sprites.bin"
-    \ The OS's font, characters 32-127, copied in at start-up (decision 4):
-    \ read through OSWORD 10, so it is the machine's own on a B or a Master.
+    \ The OS's font, characters 32-95 (nothing prints beyond Z), copied in
+    \ at start-up (decision 4): read through OSWORD 10, so it is the
+    \ machine's own on a B or a Master.
 .text_font
-    SKIP 96 * 8
+    SKIP 64 * 8
 .data_end
     PRINT "sideways data &8000-&", ~data_end, " (", &C000 - data_end, " bytes free)"
 ENDSECTION
@@ -80,6 +82,7 @@ SECTION Loader, org = &1900, load = &FFFF1900, exec = &FFFF0000 + loader, filena
     JSR copy_font
     JSR init_system
     JSR copy_os_pages
+    JSR sound_init
 IF DEFINED(VIEWER)
     JMP viewer                  ; the room viewer, for tools/roomcheck.mjs
 ELSE
@@ -100,6 +103,7 @@ ENDIF
     INCLUDE "collide.6502"
     INCLUDE "objects.6502"
     INCLUDE "machines.6502"
+    INCLUDE "sound.6502"
     INCLUDE "game.6502"
 IF DEFINED(VIEWER)
     INCLUDE "viewer.6502"
@@ -108,7 +112,6 @@ ENDIF
     \ Data from the original: extracted by tools/mkrooms.py, the rooms
     \ packed by tools/packrooms.py (decision 5).
     INCLUDE "data/rooms.6502"
-    INCLUDE "data/packed.6502"
     INCLUDE "data/gfx.6502"
 .monster_table
     INCBIN "data/monsters.bin"

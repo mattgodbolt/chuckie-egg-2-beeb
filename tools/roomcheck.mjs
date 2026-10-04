@@ -5,7 +5,7 @@
 //   node tools/roomcheck.mjs [first=1] [last=120]
 //
 // Writes build/bbcrooms/room_NNN.bin: the attribute, tile and type maps
-// (768 bytes each), then the 12K screen; and build/mosfont.bin.
+// (768 bytes each), then the 12K screen; and build/mosfont.bin (characters 32-95).
 import { mkdirSync, writeFileSync } from "fs";
 import { startBeeb } from "./beeb.mjs";
 
@@ -19,7 +19,7 @@ try {
     // Text is drawn from the OS's font, copied into text_font at start-up
     // (decision 4): the comparison needs it. (The data bank stays paged in,
     // so reading &8000-&BFFF reads it.)
-    writeFileSync("build/mosfont.bin", Buffer.from(await b.read("text_font", 0x300)));
+    writeFileSync("build/mosfont.bin", Buffer.from(await b.read("text_font", 0x200)));   // characters 32-95
     for (let r = first; r <= last; r++) {
         await b.write("room", [r]);
         // Run until the viewer is back in its wait loop: the room is drawn.

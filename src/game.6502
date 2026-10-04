@@ -66,14 +66,17 @@
     LDA room_delta : BEQ same_room
     JSR change_room
 .same_room
+    JSR move_sound
     LDA #0 : STA o_sel          ; no object redrawn this frame (&7864)
     JSR noise
     JSR wait_vsync
     JSR draw_harry
     \ Part 1: the train or the truck, the lift, the next thing, monster
     \ tick A.
+    JSR move_sound
     JSR noise
     JSR machines
+    JSR noise_sound
     JSR run_lift
     JSR next_object
     JSR noise
@@ -198,6 +201,7 @@ CHECKPOINT_VARS = h_frame + 2 - h_cell    ; h_cell .. h_frame
 \ jump from wherever the test was, as in the original; the stack is reset.
 .harry_died
 {
+    JSR death_tune
     LDX #&FF : TXS
     LDX #CHECKPOINT_VARS - 1
 .copy

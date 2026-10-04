@@ -8,12 +8,15 @@ the BBC Micro, in 6502 assembly.
 That link boots [`chuckie-egg-2-wip.ssd`](chuckie-egg-2-wip.ssd), the latest
 work-in-progress disc, in [jsbeeb](https://github.com/mattgodbolt/jsbeeb).
 
-**Status: early.** Harry is in: he walks, jumps, falls, climbs and changes
-rooms exactly as the original's code does (checked pass by pass against
-the original), through all 120 rooms of the factory. No monsters, objects
-or machines yet. Keys are the Spectrum's for now: **O** left, **P** right,
-**Q** up, **A** down, **SPACE** jump. `*TYPE !BOOT` on the disc shows when
-it was built and from which commit.
+**Status: playable, no front end yet.** Harry, the monsters, the objects
+(taking, dropping, the vats, the toy and egg makers), the truck, the train
+and the lifts all run as the original's code does, checked pass by pass
+against the original, through all 120 rooms. Sound: the movement tick, the
+train's rumble and the life-lost tune. A new game starts at once and
+restarts after the last life; there's no menu, high-score table or game
+over screen yet. Keys are the Spectrum's for now: **O** left, **P** right,
+**Q** up, **A** down, **SPACE** jump, **1** take/drop. `*TYPE !BOOT` on the
+disc shows when it was built and from which commit.
 
 It needs a BBC Model B with 16K of sideways RAM (or a B+128 or a Master);
 the browser link above provides one.

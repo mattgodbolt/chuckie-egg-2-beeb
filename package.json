@@ -1,0 +1,10 @@
+{
+  "name": "chuckie-egg-2-beeb",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "description": "Test harness for the BBC Micro port of Chuckie Egg 2, driving jsbeeb over MCP",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.0"
+  }
+}

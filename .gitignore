@@ -1,0 +1,11 @@
+build/
+shots/
+node_modules/
+.venv/
+.claude/
+__pycache__/
+# The original's files are fetched by `make fetch` (tools/fetch_original.sh),
+# not committed: they are not ours to redistribute.
+original/*
+!original/README.md
+!original/SHA256SUMS

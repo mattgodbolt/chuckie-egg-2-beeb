@@ -1,0 +1,156 @@
+\ ***************************************************************************
+\ CHUCKIE EGG 2 for the BBC Micro - build file
+\
+\ Step one: a geometry test. !BOOT selects MODE 1, CE2 narrows the CRTC to
+\ the Spectrum's 256x192 at &5000 and draws a frame round the edge plus a
+\ cell pattern, so a screenshot shows whether every pixel is on screen and
+\ the picture is centred.
+\ ***************************************************************************
+
+INCLUDE "defs.6502"
+
+SECTION Boot, filename = "!BOOT", exec = &FFFFFFFF
+    EQUS "*| CHUCKIE EGG 2", 13
+    EQUS "MODE 1", 13
+    EQUS "*RUN CE2", 13
+ENDSECTION
+
+SECTION Code, org = &1900, load = &FFFF1900, exec = &FFFF0000 + start, filename = "CE2", guard = screen
+    ZA_POOL &70..&8F
+
+ZA_AUTO2 ptr
+ZA_AUTO1 row
+
+.start
+{
+    ZA_ENTRY
+    \ Cursor off.
+    LDA #23 : JSR oswrch
+    LDA #1 : JSR oswrch
+    LDX #8
+.zeros
+    LDA #0 : JSR oswrch
+    DEX : BNE zeros
+    \ The narrowed screen.
+    LDX #crtc_end - crtc_regs - 2
+.crtc
+    LDA crtc_regs,X : STA crtc_reg
+    LDA crtc_regs+1,X : STA crtc_data
+    DEX : DEX : BPL crtc
+    JSR cls
+    JSR pattern
+    JSR frame
+.forever
+    JMP forever
+}
+
+\ Register, value pairs.
+.crtc_regs
+    EQUB 1, SCREEN_COLS * 2         ; displayed CRTC columns
+    EQUB 2, 98 - (80 - SCREEN_COLS * 2) / 2     ; hsync moved to centre it
+    EQUB 6, SCREEN_ROWS             ; displayed character rows
+    EQUB 7, 34 - (32 - SCREEN_ROWS) / 2         ; vsync moved to centre it
+    EQUB 12, HI(screen / 8)
+    EQUB 13, LO(screen / 8)
+.crtc_end
+
+\ Zero the whole screen.
+.cls
+{
+    LDA #LO(screen) : STA ptr
+    LDA #HI(screen) : STA ptr+1
+    LDY #0 : TYA
+.loop
+    STA (ptr),Y
+    INY : BNE loop
+    INC ptr+1 : BPL loop
+    RTS
+}
+
+\ Each cell a solid block in colour (column + row) MOD 4, but only its
+\ middle four rows, so the cells stay distinct.
+.pattern
+{
+    LDA #LO(screen) : STA ptr
+    LDA #HI(screen) : STA ptr+1
+    LDA #0 : STA row
+.rows
+    LDY #0
+.cell
+    TYA : LSR A : LSR A : LSR A : LSR A     ; cell column
+    CLC : ADC row : AND #3 : TAX
+    LDA colour_bytes,X
+    INY : INY
+    STA (ptr),Y : INY : STA (ptr),Y : INY : STA (ptr),Y : INY : STA (ptr),Y
+    INY : INY : INY : INY : INY
+    STA (ptr),Y : INY : STA (ptr),Y : INY : STA (ptr),Y : INY : STA (ptr),Y
+    INY : INY : INY
+    BNE cell
+    INC ptr+1
+    LDY #0
+.cell2
+    TYA : LSR A : LSR A : LSR A : LSR A
+    CLC : ADC #16 : ADC row : AND #3 : TAX
+    LDA colour_bytes,X
+    INY : INY
+    STA (ptr),Y : INY : STA (ptr),Y : INY : STA (ptr),Y : INY : STA (ptr),Y
+    INY : INY : INY : INY : INY
+    STA (ptr),Y : INY : STA (ptr),Y : INY : STA (ptr),Y : INY : STA (ptr),Y
+    INY : INY : INY
+    BNE cell2
+    INC ptr+1
+    INC row
+    LDA row : CMP #SCREEN_ROWS : BNE rows
+    RTS
+}
+
+.colour_bytes
+    EQUB cbyte(0), cbyte(1), cbyte(2), cbyte(3)
+
+\ A one-pixel white frame on the outermost pixels: the top line of row 0,
+\ the bottom line of the last row, the leftmost pixel of column 0 and the
+\ rightmost of column 31.
+.frame
+{
+    \ Top and bottom lines: every byte of the row's first and last scanline.
+    LDA #LO(screen) : STA ptr
+    LDA #HI(screen) : STA ptr+1
+    LDY #0
+.top
+    LDA #&FF : STA (ptr),Y
+    TYA : CLC : ADC #8 : TAY : BNE top
+    INC ptr+1
+.top2
+    LDA #&FF : STA (ptr),Y
+    TYA : CLC : ADC #8 : TAY : BNE top2
+    LDA #LO(&8000 - ROW_BYTES + 7) : STA ptr
+    LDA #HI(&8000 - ROW_BYTES + 7) : STA ptr+1
+    LDY #0
+.bottom
+    LDA #&FF : STA (ptr),Y
+    TYA : CLC : ADC #8 : TAY : BNE bottom
+    INC ptr+1
+.bottom2
+    LDA #&FF : STA (ptr),Y
+    TYA : CLC : ADC #8 : TAY : CPY #&F8 : BNE bottom2
+    LDA #&FF : STA (ptr),Y
+    \ Sides: OR the edge pixel into every scanline of every row.
+    LDA #LO(screen) : STA ptr
+    LDA #HI(screen) : STA ptr+1
+.sides
+    LDY #7
+.side
+    LDA (ptr),Y : ORA #&88 : STA (ptr),Y    ; leftmost pixel: bits 7 and 3
+    DEY : BPL side
+    INC ptr+1
+    LDY #&F8 + 7
+.side2
+    LDA (ptr),Y : ORA #&11 : STA (ptr),Y    ; rightmost pixel: bits 4 and 0
+    DEY : CPY #&F8 - 1 : BNE side2
+    INC ptr+1 : BPL sides
+    RTS
+}
+
+    .code_end
+    PRINT "code &", ~start, "-&", ~code_end, " (", screen - code_end, " bytes free)"
+ENDSECTION

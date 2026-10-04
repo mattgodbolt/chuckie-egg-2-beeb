@@ -1,0 +1,32 @@
+\ ***************************************************************************
+\ CHUCKIE EGG 2 for the BBC Micro - shared constants
+\ ***************************************************************************
+
+\ --- OS entry points -----------------------------------------------------
+
+osasci  = &FFE3
+oswrch  = &FFEE
+osword  = &FFF1
+osbyte  = &FFF4
+oscli   = &FFF7
+
+\ --- Hardware ------------------------------------------------------------
+
+crtc_reg   = &FE00
+crtc_data  = &FE01
+ula_pal    = &FE21
+
+\ --- The screen -----------------------------------------------------------
+\ MODE 1's pixels (2 bits each, four to a byte), with the CRTC narrowed to
+\ the Spectrum's 256x192: 64 CRTC columns (32 Spectrum cells of 8 pixels,
+\ two bytes each) by 24 character rows. A character row is 64*8 = 512
+\ bytes, so the whole screen is 12K at &5000-&7FFF and row r starts at
+\ screen + r*&200: the high byte of a row's address is just 2r more.
+SCREEN_COLS = 32                    ; Spectrum character cells across
+SCREEN_ROWS = 24                    ; ... and down
+ROW_BYTES   = SCREEN_COLS * 16      ; 512
+screen      = &8000 - SCREEN_ROWS * ROW_BYTES
+
+\ A byte with all four pixels in logical colour c: MODE 1 keeps a pixel's
+\ high bit in the top nibble and its low bit in the bottom one.
+FUNCTION cbyte(c) = (c AND 2) * &78 + (c AND 1) * &0F

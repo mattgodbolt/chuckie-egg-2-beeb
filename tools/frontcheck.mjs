@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 // The front end and the way between it and the game (decision 13), on the
 // release disc: the instructions, P to play, S to save in play and carry
-// on, the abort key back to the menu, L to load and carry on, and game over
-// with a new high score and its name. Exits non-zero on the first failure.
+// on, the abort key back to the menu, L to load and carry on, game over
+// with a new high score and its name, and BREAK in play. Exits non-zero on the first failure.
 //
 //   node tools/frontcheck.mjs [--disc build/ce2.ssd] [--model B-DFS1.2]
 //
@@ -127,6 +127,23 @@ try {
     const named = await waitText(`MAT.........${final}`, 10);
     check(named, "the name and score top the table");
     if (!named) console.log((await screen()).match(/.{1,40}/g).join("\n"));
+
+    // BREAK in play (decision 22): a soft reset comes back to the menu,
+    // without the instructions, with the start-up option put back, and
+    // the game plays again.
+    const options = await b.peek(0x28f);
+    check(await menuReady(), "the menu after the name");
+    await hold("P", 0.1);
+    r = await b.runUntil("game_loop", 60);
+    check(r.stopped_reason === "breakpoint", "P starts another game");
+    await b.run(3);
+    await b.call("reset", { session_id: b.session_id, hard: false });
+    check(await menuReady(), "BREAK in play comes back to the menu");
+    check(!(await screen()).includes("INSTRUCTIONS!"), "... without the instructions");
+    check((await b.peek(0x28f)) === options, `... with the start-up options put back (&${(await b.peek(0x28f)).toString(16)})`);
+    await hold("P", 0.1);
+    r = await b.runUntil("game_loop", 60);
+    check(r.stopped_reason === "breakpoint", "... and a game starts again");
 } finally {
     await b.close();
 }

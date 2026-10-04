@@ -113,6 +113,36 @@ ENDIF
     INCBIN "data/things.bin"
 .visits
     INCBIN "data/visits.bin"
+.thing_types                    ; (changed by each egg's toy: egg_init)
+    INCBIN "data/thingtypes.bin"
+.mon_types
+    INCBIN "data/montypes.bin"
+\ The life-lost tune (sound.6502). Each note: the SN76489's N (125000 / f,
+\ at its 4MHz clock), and its length in 4ms steps (measured from the
+\ original: frontend.md 7.3).
+MACRO NOTE n, ms
+    EQUB &80 OR (n AND 15), n DIV 16, (ms + 2) DIV 4
+ENDMACRO
+.death_notes
+    NOTE 638, 202 : NOTE 569, 102 : NOTE 638, 202 : NOTE 715, 100
+    NOTE 757, 203 : NOTE 951, 103 : NOTE 848, 200 : NOTE 1007, 101
+    NOTE 951, 598
+    NOTE 641, 33 : NOTE 848, 51 : NOTE 757, 52 : NOTE 715, 54
+    NOTE 638, 54 : NOTE 508, 51 : NOTE 480, 52
+.death_notes_end
+\ This room's palette bands (bands.6502), set when the room is drawn. Out
+\ of LowState so that &0D9F-&0DEF, a Master's extended vectors, survive a
+\ BREAK (decision 22).
+.band_cmaps SKIP 24             ; band k's colour map at 8k (band 0 = the room's)
+.band_off   SKIP 32             ; for each screen row (and a little beyond), 8 * its band
+.band_ula   SKIP 8              ; bands 1 and 2: logical 2's four &FE21 values
+\ T1's latch values (irq.6502): from the status bar's split to band 1, and
+\ from band 1 to band 2; &FFFF (past the next VSync) where there's no band.
+.band_t1    SKIP 4
+.sb_room    SKIP 1              ; setup_bands' room
+\ The interrupt reads band_ula - 4 + i,X for X = 4 or 8: within one page,
+\ so no read takes the extra cycle that would move the splits.
+    ASSERT HI(band_ula - 4) = HI(band_ula + 7)
 .objgfx
     INCBIN "data/objgfx.bin"
 

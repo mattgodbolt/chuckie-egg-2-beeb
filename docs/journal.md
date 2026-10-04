@@ -930,3 +930,14 @@ gathers any number of one ingredient (and makes jumps lower).
   the front end); palettes and bands for all 120 rooms and the screens
   after every third pass of 30 in 95 rooms the same as before;
   tools/perf.mjs the same in every room.
+
+### BREAK in play
+
+- BREAK during a game used to leave the machine in a state that needed
+  CTRL-BREAK, then SHIFT-BREAK. With room to spare now, the game keeps out
+  of everything a soft BREAK reads on either machine (decision 22), and
+  flips the "BREAK boots" start-up option as soon as it starts: BREAK in
+  play comes back to MENU's menu. jsbeeb's MCP `reset` tool with `hard:
+  false` is a soft BREAK; `make front` now ends with one, and passes on the
+  Model B and on the Master with DFS and with ADFS. Main RAM 3,015 bytes
+  free.

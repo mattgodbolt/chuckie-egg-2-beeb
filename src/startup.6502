@@ -32,8 +32,8 @@ ENDIF
     LDA DATA_BANK_ZP : STA romshad : STA romsel
     RTS                         ; interrupts stay off until install_irq
 
-\ Note what a soft BREAK keeps, before the game's tables overwrite page 2
-\ (handoff.6502 puts it back).
+\ Note what a soft BREAK keeps of page 2, for MENU to put back and the
+\ handoff to restore (handoff.6502).
 .keep_os
 {
     LDX #OS_KEPT_LEN - 1
@@ -42,6 +42,12 @@ ENDIF
     DEX : BPL copy
     LDA #MB_PLAYING : STA mb_reason
     LDA #0 : STA mb_game        ; (what's at STATE is stale from now)
+    \ BREAK in play boots MENU too (decision 22): the start-up option
+    \ flipped now, as the handoff does for its own reset, and no memory
+    \ clear; MENU puts the option back from mb_os.
+    STA &0258                   ; *FX 200 0
+    LDA &028F : EOR #8 : STA &028F
+    LDA #1 : STA mb_flipped
     RTS
 }
 
@@ -112,10 +118,6 @@ ENDIF
 .p2
     LDA page2_load,X : STA page2,X
     DEX : CPX #&FF : BNE p2
-    LDX #page3_end - page3 - 1
-.p3
-    LDA page3_load,X : STA page3,X
-    DEX : CPX #&FF : BNE p3
     RTS
 }
 

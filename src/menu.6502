@@ -17,6 +17,7 @@
 \ The mailbox, copied into MENU's memory while it runs.
 MAILBOX_LEN = mailbox_end - mailbox
 M_FLIPPED   = mbox + (mb_flipped - mailbox)
+M_OS        = mbox + (mb_os - mailbox)
 M_REASON    = mbox + (mb_reason - mailbox)
 M_START     = mbox + (mb_start - mailbox)
 M_GAME      = mbox + (mb_game - mailbox)
@@ -50,10 +51,12 @@ mz_r    = &78               ; redefine's prompt (print_lines uses mz_i)
     JSR mode7
     JSR find_bank
     JSR get_mailbox
-    \ Put back the BREAK option the game flipped for its reset.
+    \ Put back the BREAK option the game flipped (decision 22): the value
+    \ it saved, not a flip back, in case a CTRL-BREAK has since read the
+    \ keyboard links afresh.
     LDA M_FLIPPED : BEQ unflipped
     LDA #0 : STA M_FLIPPED
-    LDA &028F : EOR #8 : STA &028F
+    LDA M_OS + (&028F - OS_KEPT) : STA &028F
 .unflipped
     LDA M_REASON : LDX #MB_BOOT : STX M_REASON
 IF DEFINED(DIRECT) OR DEFINED(VIEWER)

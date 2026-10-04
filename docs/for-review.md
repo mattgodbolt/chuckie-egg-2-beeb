@@ -53,10 +53,8 @@ things parked for discussion. The reasoning for each is in
    menu's last line shows the build; the original's row 23 said JOYSTICK
    COMPATIBLE and now offers the instructions again. A name can be typed
    in lower case (the original took lower case unless CAPS was held).
-10. **BREAK during play** isn't caught: the OS's page 2 holds the game's
-   tables then, so the reset that follows may misbehave. CTRL-BREAK, then
-   SHIFT-BREAK, gets back to the menu. Making BREAK return to the menu
-   cleanly would mean keeping `&0258` and `&027F-&029B` free of tables.
+10. **BREAK during play** comes back to the menu (decision 22). Matt: not
+   a big deal, as lots of games didn't; it was cheap by then.
 11. **The Master** is supported again (decision 16), checked only in
    jsbeeb: worth a run on Matt's real Master. If a ROM on it claims HAZEL
    `&D000-&D6FF`, the reset snapshot will need to move (to shadow RAM,

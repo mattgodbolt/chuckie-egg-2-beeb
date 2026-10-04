@@ -92,7 +92,9 @@ SECTION ZeroPage, org = ZP_FIXED, guard = DATA_BANK_ZP
 ENDSECTION
 
 \ The game's other state, in the DFS's NMI page (free once the disc is done).
-SECTION LowState, org = &0D00, guard = &0E00
+\ (Up to &0D9F only: a Master's extended vectors, which its soft BREAK
+\ trusts, follow; decision 22.)
+SECTION LowState, org = &0D00, guard = &0D9F
 \ The checkpoint (&A46B): Harry as he entered the room, for a death.
 .checkpoint SKIP 16
 \ The monsters (&A490, docs/research/monsters.md 2.2): parallel arrays,
@@ -119,21 +121,7 @@ SECTION LowState, org = &0D00, guard = &0E00
 .score      SKIP 10         ; the score's digits, most significant first (&A445)
 .lives      SKIP 1          ; (&A3FA)
 .carrying_name SKIP 1       ; the carried thing's name in the status bar
-\ This room's palette bands (bands.6502), set when the room is drawn: not
-\ a game's state, but free here, where they were sideways RAM. (band_count
-\ and band_rows are in the scratch zero page.)
-.band_cmaps SKIP 24         ; band k's colour map at 8k (band 0 = the room's)
-.band_off   SKIP 32         ; for each screen row (and a little beyond), 8 * its band
-.band_ula   SKIP 8          ; bands 1 and 2: logical 2's four &FE21 values
-\ T1's latch values (irq.6502): from the status bar's split to band 1, and
-\ from band 1 to band 2; &FFFF (past the next VSync) where there's no band.
-.band_t1    SKIP 4
-.sb_room    SKIP 1          ; setup_bands' room
 ENDSECTION
-\ The interrupt reads band_ula - 4 + i,X for X = 4 or 8: within one page,
-\ so no read takes the extra cycle that would move the splits.
-ASSERT HI(band_ula - 4) = HI(band_ula + 7)
-
 \ The three 32 x 24 maps the room drawer fills, one byte a cell, indexed by
 \ cell = row * 32 + column, as the original's at &5D00, &6000 and &6300.
 \ They sit in OS workspace the game doesn't use once it is running: the
@@ -189,6 +177,10 @@ SECTION Scratch, org = &90, guard = &FC
 .tl_kind       SKIP 1
 .bonus_n       SKIP 1
 .drop_x        SKIP 1
+\ &D0 is the Master's VDU status, which its soft BREAK reads (decision 22).
+    ASSERT P% <= &D0
+    SKIP &D0 - P%
+.vdu_status    SKIP 1          ; (not the game's)
 .drop_row      SKIP 1
 .drop_col      SKIP 1
 .drop_g        SKIP 1

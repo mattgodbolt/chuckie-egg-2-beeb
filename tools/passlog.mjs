@@ -17,6 +17,8 @@ const args = process.argv.slice(2);
 const outIdx = args.indexOf("--out");
 const out = outIdx >= 0 ? args.splice(outIdx, 2)[1] : "build/bbc_passes.json";
 // --peek sym:len,...: extra memory to log each pass (for debugging; not compared).
+// --cheat n: the developers' cheat byte (decision 27), set before the first pass;
+// the key role "shift" is SHIFT (CAPS SHIFT on the Spectrum).
 const peekIdx = args.indexOf("--peek");
 const peeks = peekIdx >= 0 ? args.splice(peekIdx, 2)[1].split(",").map((p) => p.split(":")) : [];
 const startIdx = args.indexOf("--start");
@@ -26,10 +28,11 @@ const power = powerIdx >= 0 && args.splice(powerIdx, 1).length > 0;
 const option = (name) => { const i = args.indexOf(name); return i >= 0 ? Number(args.splice(i, 2)[1]) : null; };
 const factory = option("--factory");
 const carry = option("--carry");
+const cheat = option("--cheat");
 const inputs = (args[0] ?? "").split(",").filter(Boolean).map((part) => {
     const [name, rng] = part.split(":");
     const [a, b] = rng.split("-").map(Number);
-    return { key: KEYS[name], a, b: b ?? a };
+    return { key: name === "shift" ? "SHIFT" : KEYS[name], a, b: b ?? a };
 });
 const passes = parseInt(args[1] ?? "100");
 
@@ -62,12 +65,19 @@ try {
         }
         await b.breakpoint("game_loop");    // (runUntil cleared it)
     }
+    // The developers' cheat byte, before the first pass reads the keys.
+    let cheatSet = cheat === null;
     for (let n = 0; n < passes; n++) {
         const r = await b.run(n === 0 ? 30 : 10);
         if (r.stopped_reason === undefined && !String(JSON.stringify(r)).includes("breakpoint"))
             throw new Error(`pass ${n}: never reached game_loop: ${JSON.stringify(r)}`);
-        for (const { key, a, b: last } of inputs) {
-            const want = a <= n && n <= last;
+        if (!cheatSet) {
+            await b.write("cheat", [cheat]);
+            cheatSet = true;
+        }
+        // A key is down if any of its ranges holds this pass.
+        for (const key of new Set(inputs.map((i) => i.key))) {
+            const want = inputs.some((i) => i.key === key && i.a <= n && n <= i.b);
             if (want && !held.has(key)) { await b.keyDown(key); held.add(key); }
             if (!want && held.has(key)) { await b.keyUp(key); held.delete(key); }
         }

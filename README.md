@@ -41,6 +41,10 @@ game, **S** saves (the high-score table, and the game if one was in
 progress), **I** shows the instructions again. Saving and loading list the
 disc and ask for a filename, offering the last one used.
 
+The original's hidden developers' cheats are here too: **f0** on the menu
+turns them on (SHIFT with left or right changes room, and lives never run
+out), and **f1**-**f8** then choose the starting egg.
+
 <img src="docs/images/menu.png" alt="The menu, with the high-score table" width="462">
 
 ## What it runs on

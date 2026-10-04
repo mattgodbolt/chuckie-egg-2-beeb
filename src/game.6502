@@ -186,6 +186,9 @@ CHECKPOINT_VARS = h_frame + 2 - h_cell    ; h_cell .. h_frame
     LDA #&FF : STA carried
 .kept
     JSR girder_home
+    \ The developers' infinite lives (&8A7D NOPped by the cheat byte's bit
+    \ 4, which also leaves the game-over test's flags never zero).
+    LDA cheat : AND #&10 : BNE alive
     DEC lives : BNE alive
     LDA #MB_OVER : JMP handoff      ; game over: the front end checks the score
 .alive
@@ -271,6 +274,29 @@ CHECKPOINT_VARS = h_frame + 2 - h_cell    ; h_cell .. h_frame
     LDX mb_keys,Y : JSR key_down    ; (which keeps Y)
     ASL A : ROL ctrl                ; its bit 7 in; eight shift out the last
     DEY : BPL key
+    \ The developers' room skip (&78D5, decision 27): with the cheat
+    \ byte's bit 3, SHIFT (the Spectrum's CAPS SHIFT) and left or right
+    \ change room by -1 or +1 (-3 with both), wrapping 1-120, entered
+    \ as if walked into, Harry where he was; the pass goes on from there.
+    LDA cheat : AND #8 : BEQ actions
+    LDX #0 : JSR key_down : BEQ actions        ; SHIFT
+    LDA ctrl : AND #6 : BEQ actions            ; left (4), right (2)
+    SEC : SBC #3 : EOR #&FF : CLC : ADC #1     ; -1, +1 or -3
+    CLC : ADC room : BNE not0
+    LDA #120
+.not0
+    CMP #121 : BNE not121
+    LDA #1
+.not121
+    \ (-3 from rooms 1 and 2 makes 254 and 255, past the last room, which
+    \ the Spectrum would try to draw: they wrap to 118 and 119.)
+    CMP #254 : BCC skip
+    ADC #120 - 1                               ; (carry set)
+.skip
+    LDX #&FF : TXS
+    JSR change_room.set
+    JMP game_loop.same_room
+.actions
     \ Abort and save go to the front end at once (&7902). A save needs a
     \ fresh press: the key may still be down when the game carries on.
     BIT ctrl : BPL no_abort

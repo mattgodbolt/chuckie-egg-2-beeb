@@ -28,7 +28,7 @@ sys.path.insert(0, os.path.dirname(__file__))
 from zx import FRAME, Spectrum  # noqa: E402
 
 MAIN_LOOP = 0x77B9
-KEYS = {"up": "Q", "down": "A", "left": "O", "right": "P", "jump": "SYM", "take": "1"}
+KEYS = {"up": "Q", "down": "A", "left": "O", "right": "P", "jump": "SYM", "take": "1", "shift": "CAPS"}
 HARRY = 0xA451
 
 
@@ -124,6 +124,7 @@ def main():
     ap.add_argument("--power", action="store_true", help="with --start: the power on")
     ap.add_argument("--factory", type=lambda v: int(v, 0), help="with --start: the factory flags (&A48C)")
     ap.add_argument("--carry", type=lambda v: int(v, 0), help="with --start: Harry carrying this thing")
+    ap.add_argument("--cheat", type=lambda v: int(v, 0), help="the developers' cheat byte (&A3FC)")
     args = ap.parse_args()
     inputs = parse_inputs(args.inputs)
     spec = Spectrum(args.snap)
@@ -139,14 +140,24 @@ def main():
     spec.key("P", False)
     if args.start:
         teleport(spec, [int(v) for v in args.start.split(",")], args.power, args.factory, args.carry)
+    if args.cheat:
+        # What APPLY_CHEATS (&76AB) does with the byte: the room skip's JP
+        # and the lives' DEC made NOPs (the starting egg is past).
+        spec.mem[0xA3FC] = args.cheat
+        if args.cheat & 8:
+            for a in range(0x78D5, 0x78D8):
+                spec.mem[a] = 0
+        if args.cheat & 16:
+            spec.mem[0x8A7D] = 0
     log = []
     for n in range(args.passes):
         # (After a teleport the set-up has just returned to the loop's top.)
         if not (n == 0 and args.start) and \
                 spec.run_tstates(10 * 50 * FRAME, stop=MAIN_LOOP) != MAIN_LOOP:
             raise SystemExit(f"pass {n}: never reached the main loop")
-        for key, a, b in inputs:
-            spec.key(key, a <= n <= b)
+        # A key is down if any of its ranges holds this pass.
+        for key in {k for k, _, _ in inputs}:
+            spec.key(key, any(a <= n <= b for k, a, b in inputs if k == key))
         log.append(harry_state(spec.mem, n))
         # Step off the breakpoint so the next run finds the next pass.
         spec.run_tstates(200)

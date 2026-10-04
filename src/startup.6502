@@ -142,7 +142,10 @@ ENDIF
 \ Start a game (&7743).
 .new_game
 {
-    LDA #0 : STA egg
+    \ The cheats MENU set (APPLY_CHEATS, &76AB): a starting egg, the rest
+    \ tested where the original patched its code.
+    LDA mb_cheat : STA cheat
+    AND #7 : STA egg
     LDA #5 : STA lives
     LDX #9
     LDA #0
@@ -160,6 +163,9 @@ ENDIF
 .resume
 {
     SEC : JSR copy_state
+    \ The saved game's cheats, and MENU's: on the Spectrum a load applies
+    \ the saved byte's over any already applied, never undoing one.
+    LDA cheat : ORA mb_cheat : STA cheat
     LDX #3
 .seed_rng
     LDA resumed_rng,X : STA rng_state,X

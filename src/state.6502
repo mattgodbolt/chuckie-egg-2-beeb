@@ -22,6 +22,10 @@
 .mb_reason   EQUB MB_BOOT       ; why the game stopped (MB_ below)
 .mb_start    EQUB 0             ; 0: a new game; 1: resume from STATE
 .mb_game     EQUB 0             ; STATE holds a game with lives left
+\ The original's developers' cheat byte (&A3FC, decision 27): 0, or
+\ %101 then bit 4 infinite lives, bit 3 the room skip, bits 0-2 the
+\ starting egg - 1. MENU's f0 and f1-f8 set it.
+.mb_cheat    EQUB 0
 .mb_score    SKIP 10            ; the score, when a game ended
 .mb_rng      EQUS "9090"        ; the RNG between games (the tape's seed)
 \ The keys, internal key numbers in the order of the game's control bits:

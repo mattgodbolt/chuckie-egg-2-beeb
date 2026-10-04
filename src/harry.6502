@@ -659,13 +659,16 @@ die = column_blocked.die
 {
     LDA h_xf : CLC : ADC h_dx : TAX
     AND #3 : STA h_xf
+    \ A cell right or left: the low byte only, as the original's INC and
+    \ DEC (IY+2) step its screen address's (&8EA9, &8EAF). Past column 0
+    \ or 31 at the top or bottom of a third of the screen it wraps within
+    \ the third (row 16's column 0 to row 23's column 31).
     TXA : BMI left
     CMP #4 : BCC vertical
-    LDA #1 : BNE across         ; a cell right
+    INC h_cell
+    JMP vertical
 .left
-    LDA #&FF                    ; ... or left
-.across
-    JSR add_cell
+    DEC h_cell
 .vertical
     LDA h_yf : SEC : SBC h_dy : TAX
     AND #7 : STA h_yf

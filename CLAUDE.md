@@ -134,3 +134,8 @@ handoff, the front end or anything paged.
 
 - Z80 handlers that `PUSH AF`/`PUSH DE` and pop in the other order swap
   registers: read the pops, not the names. (A run's tile is its command byte.)
+- An `INC`, `DEC` or 8-bit `ADD` on a screen address's low byte (`L`,
+  `(IY+2)`) wraps within a third of the screen, without carrying into the
+  high byte. `h_cell`'s low byte is the same row-in-third and column, so
+  port those as 8-bit too (wall_check, apply_delta): twice now a 16-bit
+  port moved Harry somewhere the original doesn't.

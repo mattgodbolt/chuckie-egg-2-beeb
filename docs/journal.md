@@ -1067,3 +1067,25 @@ gathers any number of one ingredient (and makes jumps lower).
   the table's label (the same shape as the long-standing `harry.6502:61`
   one). A dummy table in the same place didn't. Moved, it went; the game
   builds never warned.
+
+### The developers' cheats, and a test-tool bug that hid a real one
+
+- The original has a developers' cheat byte, read from `&FFFF` where the
+  tape image doesn't reach: a room skip on CAPS SHIFT with left or right,
+  infinite lives and a starting egg. Matt wanted it back, behind a hidden
+  key: f0 on the menu, f1-f8 for the egg, a flashing banner (decision 27).
+  The disassembly settled the details: the skip joins the room-change path
+  at `&77FE`, so the room is entered as if walked into; blanking the lives'
+  `DEC` leaves `INC H`'s flags for the game-over test, which is then never
+  taken.
+- Writing the room-skip scenario showed both pass loggers holding a key
+  only in its *last* range: `shift:10-14,...,shift:30` held SHIFT at pass
+  30 alone. Three scenarios (`jump-turn`, `lift-ride`, `wall-wrap`) and
+  most fuzz cases name a key twice, so they tested less than they said.
+  Fixed in both loggers (a key is down in any of its ranges), `wall-wrap`
+  then differed at pass 32: jumping left from column 0 of row 16, the
+  original's Harry lands in row 22, the port's in row 14. The original
+  steps sideways with `INC`/`DEC (IY+2)`, the low byte of a screen
+  address, which wraps within a third of the screen; the port carried into
+  the high byte. apply_delta now steps the low byte of `h_cell` only (its
+  low byte is the same row-in-third and column), and `wall-wrap` matches.

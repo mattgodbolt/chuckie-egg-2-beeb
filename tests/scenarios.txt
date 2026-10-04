@@ -2,7 +2,9 @@
 # [| flags]]. start (room,row,col,yf,xf,state,face) puts Harry in another
 # room first (tools/passlog.py --start); flags go to both loggers (--power:
 # the lever's power on; --factory n, the factory flags; --carry n, Harry
-# carrying thing n).
+# carrying thing n; --cheat n, the developers' cheat byte, decision 27).
+# A key may have several ranges; it is down in any of them. Keys: up,
+# down, left, right, jump, take, and shift (CAPS SHIFT on the Spectrum).
 # make passes replays each on the original (tools/passlog.py) and the port
 # (tools/passlog.mjs) and compares them pass by pass (tools/passcmp.py).
 idle        |                                          | 60
@@ -25,3 +27,5 @@ toy-egg     | take:10-12                               | 60  | 48,14,18,0,0,1,0 
 wall-wrap   | left:5-11,left:19-40,jump:31,left:46-62,jump:65-71,take:72-102,left:110-136 | 150 | 80,16,0,0,0,1,0
 checkpoint-fall | right:5-134                            | 135 | 3,21,20,0,0,1,0
 egg-delivery | left:5-40,jump:60-64                      | 120 | 111,19,12,0,0,1,0 | --carry 0x28
+cheat-skip  | shift:10-14,right:10-14,shift:20,left:20,shift:30,left:30,right:30,right:40-60 | 80 | 1,21,20,0,0,1,0 | --cheat 0xB8
+cheat-lives | right:20-300,jump:75                     | 260 |  | --cheat 0xB0

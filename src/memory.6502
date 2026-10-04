@@ -121,6 +121,7 @@ SECTION LowState, org = &0D00, guard = &0D9F
 .score      SKIP 10         ; the score's digits, most significant first (&A445)
 .lives      SKIP 1          ; (&A3FA)
 .carrying_name SKIP 1       ; the carried thing's name in the status bar
+.cheat      SKIP 1          ; the developers' cheat byte (&A3FC, decision 27)
 ENDSECTION
 \ The three 32 x 24 maps the room drawer fills, one byte a cell, indexed by
 \ cell = row * 32 + column, as the original's at &5D00, &6000 and &6300.

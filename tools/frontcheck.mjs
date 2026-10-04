@@ -3,8 +3,8 @@
 // release disc: the instructions, P to play, the save key in play (the
 // save screen, ESCAPE and RETURN), the abort key back to the menu, S and L
 // with filenames and refusals (decision 23), L to load and carry on, game over
-// with a new high score and its name, CTRL-BREAK after it, and BREAK in
-// play. Exits non-zero on the first failure.
+// with a new high score and its name, CTRL-BREAK after it, BREAK in play,
+// and the developers' cheats. Exits non-zero on the first failure.
 //
 //   node tools/frontcheck.mjs [--disc build/ce2.ssd] [--model B-DFS1.2]
 //
@@ -220,6 +220,30 @@ try {
     await hold("P", 0.1);
     r = await b.runUntil("game_loop", 60);
     check(r.stopped_reason === "breakpoint", "... and a game starts again");
+
+    // The developers' cheats (decision 27): f0 on the menu, f3 for egg 3;
+    // the game starts there with the room skip and infinite lives.
+    await b.call("reset", { session_id: b.session_id, hard: false });
+    check(await menuReady(), "BREAK again: the menu");
+    check(!(await screen()).includes("CHEATS"), "... no cheats' banner");
+    await hold("F0", 0.1);
+    check(await waitText("CHEATS", 10), "f0: the cheats' banner");
+    await b.run(0.5);
+    await hold("F3", 0.1);
+    check(await waitText("EGG 3", 10), "... f3: starting egg 3");
+    await b.run(0.5);
+    await hold("P", 0.1);
+    r = await b.runUntil("game_loop", 60);
+    const [egg, cheat] = [await b.peek("egg"), await b.peek("cheat")];
+    check(r.stopped_reason === "breakpoint" && egg === 3 && cheat === 0xba,
+        `... the game: egg ${egg}, cheat byte &${cheat.toString(16)}`);
+    await b.run(3);                                   // the truck backs in
+    await b.keyDown("SHIFT");
+    await hold("X", 0.15);
+    await b.keyUp("SHIFT");
+    await b.run(0.5);
+    const room = await b.peek("room");
+    check(room > 1, `... SHIFT and right skip rooms (room ${room})`);
 } finally {
     await b.close();
 }

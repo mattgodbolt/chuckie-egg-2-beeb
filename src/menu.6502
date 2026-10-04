@@ -26,6 +26,7 @@ M_RNG       = mbox + (mb_rng - mailbox)
 M_KEYS      = mbox + (mb_keys - mailbox)
 M_TABLE     = mbox + (mb_table - mailbox)
 M_NAME      = mbox + (mb_name - mailbox)
+M_CHEAT     = mbox + (mb_cheat - mailbox)
 
 \ Where a game's lives are in the state block: its regions start with the
 \ fixed zero page, then LowState (state.6502).
@@ -49,6 +50,7 @@ mz_r    = &78               ; redefine's prompt (print_lines uses mz_i)
     \ read finds its end and closes it then, losing a key pressed meanwhile.
     LDX #LO(close_exec) : LDY #HI(close_exec) : JSR oscli
     LDA #229 : LDX #1 : LDY #0 : JSR osbyte    ; ESCAPE is an ordinary key
+    LDA #225 : LDX #&80 : LDY #0 : JSR osbyte  ; f0-f9 read as &80-&89
     JSR mode7
     JSR find_bank
     JSR get_mailbox
@@ -97,9 +99,30 @@ ENDIF
     LDX #LO(main_menu) : LDY #HI(main_menu)
     JMP save_game
 .not_s
-    CMP #'I' : BNE key
+    CMP #'I' : BNE not_i
     JSR instructions : JMP main_menu
+.not_i
+    \ The original's developers' cheats (decision 27), behind keys the menu
+    \ doesn't mention: f0 turns them on or off, and while they're on, f1-f8
+    \ choose the starting egg.
+    CMP #&80 : BNE not_f0
+    LDA M_CHEAT : BEQ on
+    LDA #0 : BEQ set_cheat          ; (always)
+.on
+    LDA #CHEATS
+.set_cheat
+    STA M_CHEAT
+    JMP main_menu
+.not_f0
+    CMP #&81 : BCC key
+    CMP #&89 : BCS key
+    LDX M_CHEAT : BEQ key
+    SBC #&80                        ; (carry clear) egg - 1
+    ORA #CHEATS : STA M_CHEAT
+    JMP main_menu
 }
+\ The cheat byte with the room skip and infinite lives, starting egg 1.
+CHEATS = %10111000
 .play
     LDA #0 : STA M_START
     BEQ run_game                ; (always)
@@ -335,10 +358,23 @@ ENDIF
 \ --- The menu (&9BDC) and the high scores (&9F37) -----------------------------
 
 .draw_menu
+{
     JSR m_cls
     JSR draw_hiscores
     LDX #LO(menu_text) : LDY #HI(menu_text) : JSR print_lines
-    LDX #LO(menu_extra) : LDY #HI(menu_extra) : JMP print_lines
+    LDX #LO(menu_extra) : LDY #HI(menu_extra) : JSR print_lines
+    \ The cheats' banner, on the row between the table and the menu.
+    LDA M_CHEAT : BEQ done
+    AND #7 : CLC : ADC #'1' : STA cheat_egg
+    LDX #LO(cheat_banner) : LDY #HI(cheat_banner) : JMP print_lines
+.done
+    RTS
+}
+.cheat_banner
+    EQUB 14, 0, 2, 0 : EQUS 136, "CHEATS", 137, 135, " SHIFT+LEFT/RIGHT  EGG "
+.cheat_egg
+    EQUS "1" : EQUB 0
+    EQUB &FF
 \ The original's row 23 says JOYSTICK COMPATIBLE; this one hasn't a joystick
 \ yet, but it has the instructions again, and its build.
 .menu_extra

@@ -8,7 +8,7 @@
 // docs/journal.md.) Exits non-zero on a failure.
 //
 //   node tools/soundcheck.mjs [--disc build/test.ssd] [--model B-DFS1.2]
-import { startBeeb } from "./beeb.mjs";
+import { startBeeb, KEYS } from "./beeb.mjs";
 
 const args = process.argv.slice(2);
 const opt = (name, def) => (args.indexOf(name) >= 0 ? args[args.indexOf(name) + 1] : def);
@@ -35,11 +35,10 @@ const hex = (bytes) => bytes.map((x) => x.toString(16).padStart(2, "0")).join(" 
 
 try {
     await b.run(3);                                   // the truck backs in
-    // P walks right (the Spectrum's keys).
     const tick = await capture(async () => {
-        await b.keyDown("P");
+        await b.keyDown(KEYS.right);
         await b.run(1);
-        await b.keyUp("P");
+        await b.keyUp(KEYS.right);
         await b.run(0.1);
     });
     let groups = 0, bad = null;
@@ -55,7 +54,7 @@ try {
         `walking: ${groups} ticks, each channel 1's tone, on, off${bad ? ` (${bad})` : ""}`);
 
     // Into the dog: the tune, from the moment he dies.
-    await b.keyDown("P");
+    await b.keyDown(KEYS.right);
     const r = await b.runUntil("harry_died", 30);
     check(r.stopped_reason === "breakpoint", "walking into the dog: a life lost");
     const notes = await b.read("death_notes", (await b.addr("death_notes_end")) - (await b.addr("death_notes")));
@@ -64,7 +63,7 @@ try {
     want.push(0x9f);
     const tune = await capture(async () => {
         await b.run(3);
-        await b.keyUp("P");
+        await b.keyUp(KEYS.right);
     });
     check(JSON.stringify(tune.slice(0, want.length)) === JSON.stringify(want),
         `the life-lost tune: ${(want.length - 2) / 2} notes on channel 0, then off`

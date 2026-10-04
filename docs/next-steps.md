@@ -13,17 +13,15 @@ Main RAM has about 3K free, sideways RAM about 190 bytes.
 
 ## Waiting on Matt
 
-1. **Default keys** (decision 7, for-review 1): the Spectrum's for now,
-   until Matt has played enough to choose BBC ones.
-2. **Footsteps** (for-review 8): the Spectrum's two-cycle click doesn't
+1. **Footsteps** (for-review 8): the Spectrum's two-cycle click doesn't
    carry on the SN76489. A next step that needs no decision: find how the
    BBC *Chuckie Egg* makes its footfall (its disc, jsbeeb's sound capture
    while Harry walks), then offer it and a couple of variants by ear.
-3. **Checkpoints** (for-review 13): the original's rule (a checkpoint
+2. **Checkpoints** (for-review 13): the original's rule (a checkpoint
    only on entering walking or on a ladder) is kept; a change would be a
    decision.
-4. **A run on a real Master** (for-review 11).
-5. **The train's rumble** (for-review 7): close enough?
+3. **A run on a real Master** (for-review 11).
+4. **The train's rumble** (for-review 7): close enough?
 
 ## In hand
 
@@ -53,6 +51,9 @@ Main RAM has about 3K free, sideways RAM about 190 bytes.
 
 ## Done this round
 
+- BBC keys by default (decision 25): Z X : /, RETURN, TAB, R, S.
+- The README has screenshots, how to play and a licence; the disc is
+  `chuckie-egg-2.ssd` (`make disc`).
 - BREAK in play comes back to the menu (decision 22).
 - Sound fixed: the keyboard was clearing bit 7 of every byte the chip got;
   `make sound` now checks the bytes.

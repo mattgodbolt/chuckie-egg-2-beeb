@@ -19,7 +19,7 @@
 // wait (the end of the last pass) to the first, 2 from the first to the
 // second, 3 from the second to the third.
 import { readFileSync, existsSync } from "fs";
-import { startBeeb } from "./beeb.mjs";
+import { startBeeb, KEYS } from "./beeb.mjs";
 
 const FRAME = 40000;
 const args = process.argv.slice(2);
@@ -49,7 +49,7 @@ function spots(room, n) {
 
 // Held keys for each pass of --move, a phase every 8 passes: right, a jump
 // right, left, a jump left, up, down.
-const PHASES = [["P"], ["P", "SPACE"], ["O"], ["O", "SPACE"], ["Q"], ["A"]];
+const PHASES = [[KEYS.right], [KEYS.right, KEYS.jump], [KEYS.left], [KEYS.left, KEYS.jump], [KEYS.up], [KEYS.down]];
 const keysFor = (pass) => PHASES[Math.floor(pass / 8) % PHASES.length];
 
 const b = await startBeeb({ disc, symbols: disc.replace(/\.ssd$/, ".json"), bootUntil: "game_loop" });

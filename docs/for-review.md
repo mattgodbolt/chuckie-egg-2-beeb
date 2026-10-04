@@ -4,11 +4,8 @@ Calls made while working autonomously that Matt may want to change, and
 things parked for discussion. The reasoning for each is in
 `docs/decisions.md`.
 
-1. **BBC-appropriate keys** (decision 7). The Spectrum's keys are in for
-   now (Q/A/O/P, SPACE for SYMBOL SHIFT's jump, 1 take/drop, 0 abort, S
-   save), and the menu can redefine them. To discuss once Matt has played
-   it a bit (his call to wait): BBC-style defaults (Z/X and :/?, RETURN or
-   SPACE to jump?).
+1. **Keys** (decision 25): Matt's BBC layout by default: Z X : /,
+   RETURN jump, TAB take/drop, R abort, S save.
 2. **Sideways RAM** (decision 8). A stock Model B can't hold it: the
    data is a 16K bank, and main RAM has about 3K free beside the game.
    The game wants a B with 16K of sideways RAM, a B+128 or a Master.

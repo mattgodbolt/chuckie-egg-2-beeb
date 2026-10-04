@@ -9,8 +9,8 @@
 #   make front    drive the front end: menu, keys, save, load, high scores
 #   make sound    the bytes the sound chip gets: the tick, the life-lost tune
 #   make fuzz     random walks in random rooms on both (SEED=n COUNT=n)
-#   make wip      rebuild from a clean tree and copy the disc to
-#                 chuckie-egg-2-wip.ssd, which the README links
+#   make disc     rebuild from a clean tree and copy the disc to
+#                 chuckie-egg-2.ssd, which the README links
 #   make fetch    download the Spectrum original into original/
 #   make zx       load the original's tape into build/ce2.z80 (SkoolKit)
 #   make disasm   the original's disassembly with the research's labels,
@@ -26,12 +26,12 @@ TARGET   = build/ce2.ssd
 TEST     = build/test.ssd
 SYMBOLS  = build/symbols.json
 SOURCES  = $(wildcard src/*.6502 src/data/*)
-WIP      = chuckie-egg-2-wip.ssd
+DISC     = chuckie-egg-2.ssd
 # Stamped into !BOOT, so a disc says what it is: UTC build time and the
-# commit, with + if the tree (the WIP disc itself aside) had changes.
-BUILD   := $(shell date -u '+%Y-%m-%d %H:%M UTC') $(shell git rev-parse --short HEAD 2>/dev/null || echo NOGIT)$(shell git diff --quiet HEAD -- . ':(exclude)$(WIP)' 2>/dev/null || echo +)
+# commit, with + if the tree (the disc itself aside) had changes.
+BUILD   := $(shell date -u '+%Y-%m-%d %H:%M UTC') $(shell git rev-parse --short HEAD 2>/dev/null || echo NOGIT)$(shell git diff --quiet HEAD -- . ':(exclude)$(DISC)' 2>/dev/null || echo +)
 
-.PHONY: all run check rooms passes front sound fuzz wip fetch zx disasm venv clean
+.PHONY: all run check rooms passes front sound fuzz disc fetch zx disasm venv clean
 
 all: $(TARGET) $(TEST)
 
@@ -88,11 +88,11 @@ build/zx_start.z80: build/ce2.z80
 	$(PYTHON) tools/zx.py '3,SPACE:tap,1,SPACE:tap,1,SPACE:tap,1,P:tap,3,>start' build/zx_ --snap build/ce2.z80
 
 # Always from a clean tree, so the stamp names the commit the disc holds.
-wip:
-	@git diff --quiet HEAD -- . ':(exclude)$(WIP)' || { echo "commit first: the stamp would say +"; exit 1; }
+disc:
+	@git diff --quiet HEAD -- . ':(exclude)$(DISC)' || { echo "commit first: the stamp would say +"; exit 1; }
 	rm -f $(TARGET)
 	$(MAKE) $(TARGET)
-	cp $(TARGET) $(WIP)
+	cp $(TARGET) $(DISC)
 
 fetch:
 	tools/fetch_original.sh

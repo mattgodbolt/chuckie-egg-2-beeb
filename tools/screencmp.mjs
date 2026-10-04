@@ -11,7 +11,7 @@
 import { readFileSync, existsSync, mkdtempSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
-import { startBeeb } from "./beeb.mjs";
+import { startBeeb, KEYS } from "./beeb.mjs";
 
 const args = process.argv.slice(2);
 const flag = (name) => { const i = args.indexOf(`--${name}`); if (i < 0) return false; args.splice(i, 1); return true; };
@@ -33,7 +33,7 @@ function spot(room) {
         }
     return spots.length ? spots[spots.length >> 1] : null;
 }
-const PHASES = [["P"], ["P", "SPACE"], ["O"], ["O", "SPACE"], ["Q"], ["A"]];
+const PHASES = [[KEYS.right], [KEYS.right, KEYS.jump], [KEYS.left], [KEYS.left, KEYS.jump], [KEYS.up], [KEYS.down]];
 const keysFor = (pass) => (idle ? [] : PHASES[Math.floor(pass / 4) % PHASES.length]);
 
 const dir = mkdtempSync(join(tmpdir(), "screencmp-"));

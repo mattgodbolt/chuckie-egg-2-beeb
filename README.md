@@ -1,36 +1,75 @@
 # Chuckie Egg 2 for the BBC Micro
 
 A port of A&F Software's *Chuckie Egg 2* (1985) from the 48K ZX Spectrum to
-the BBC Micro, in 6502 assembly.
+the BBC Micro, in 6502 assembly: the original's own rooms, graphics, rules
+and timing, carried across one routine at a time and checked against the
+original as it runs.
 
-### ▶ [**Try the work in progress in your browser**](https://bbc.xania.org/?disc=https://raw.githubusercontent.com/mattgodbolt/chuckie-egg-2-beeb/main/chuckie-egg-2-wip.ssd&autoboot)
+### ▶ [**Play it in your browser**](https://bbc.xania.org/?disc=https://raw.githubusercontent.com/mattgodbolt/chuckie-egg-2-beeb/main/chuckie-egg-2.ssd&autoboot)
 
-That link boots [`chuckie-egg-2-wip.ssd`](chuckie-egg-2-wip.ssd), the latest
-work-in-progress disc, in [jsbeeb](https://github.com/mattgodbolt/jsbeeb).
+That link boots [`chuckie-egg-2.ssd`](chuckie-egg-2.ssd) in
+[jsbeeb](https://github.com/mattgodbolt/jsbeeb).
 
-**Status: playable.** Harry, the monsters, the objects (taking, dropping,
-the vats, the toy and egg makers), the truck, the train and the lifts all run
-as the original's code does, checked pass by pass against the original,
-through all 120 rooms, with colour changes down the screen where a room
-needs more than four colours. Sound: the movement tick, the train's rumble
-and the life-lost tune. The front end is the original's, in MODE 7:
-instructions, the menu with the high-score table, **P** play, **R** redefine
-keys, **L** load and **S** save (to disc, under a filename you choose, with
-the disc listed), **I** the instructions again. Keys in play are the
-Spectrum's until redefined: **O** left, **P** right, **Q** up, **A** down,
-**SPACE** jump, **1** take/drop, **S** save, **0** abort; **BREAK** goes
-back to the menu. The menu's bottom line (and `*TYPE !BOOT`) shows when the
-disc was built and from which commit.
+| | |
+|---|---|
+| ![Room 1: the start, with the truck and the dog's sign](docs/images/room-001.png) | ![Room 5: the maze](docs/images/room-005.png) |
+| ![Room 33: the milk vat](docs/images/room-033.png) | ![Room 48: the egg maker](docs/images/room-048.png) |
+| ![Room 74: the train](docs/images/room-074.png) | ![Room 115: the generator](docs/images/room-115.png) |
 
-Still to come: footsteps that sound like footsteps, the default keys, and
-the rest of [docs/next-steps.md](docs/next-steps.md).
+## How to play
 
-It needs a BBC Model B with 16K of sideways RAM, or a Master 128 (DFS or
-ADFS); the browser link above provides a Model B.
+Henhouse Harry works in a chocolate egg factory of 120 rooms. To make an
+egg he must find eight each of milk, cocoa and sugar around the factory
+and drop them into the right vats, and the eight cyan parts of a toy kit
+for the toy maker. Then the egg goes to dispatch, and the next egg starts,
+with more monsters about. A few hints from the original: most factories
+need power to work; Harry only has two hands for carrying things,
+unless...; some pipes are more slippery than others.
 
-See [docs/journal.md](docs/journal.md) for the story so far,
-[docs/research.md](docs/research.md) for what the original is, and
-[docs/decisions.md](docs/decisions.md) for the calls the port makes.
+| Key | In play |
+|---|---|
+| **Z** / **X** | left / right |
+| **:** / **/** | up / down (the keys right of **;** and **.**; in jsbeeb on a PC keyboard, **'** and **/**) |
+| **RETURN** | jump |
+| **TAB** | take or drop |
+| **S** | save the game (to disc) and carry on |
+| **R** | abort, back to the menu |
+| **BREAK** | back to the menu |
+
+From the menu: **P** plays, **R** redefines the keys, **L** loads a saved
+game, **S** saves (the high-score table, and the game if one was in
+progress), **I** shows the instructions again. Saving and loading list the
+disc and ask for a filename, offering the last one used.
+
+<img src="docs/images/menu.png" alt="The menu, with the high-score table" width="462">
+
+## What it runs on
+
+A BBC Model B with 16K of sideways RAM, or a Master 128 (from DFS or
+ADFS). The game's data fills a sideways RAM bank; the front end finds
+a free one. On real hardware, write `chuckie-egg-2.ssd` to a disc (or put
+it on a Gotek or an MMFS card) and SHIFT-BREAK.
+
+## How close is it?
+
+The original is the specification. Every room is drawn by a transcription
+of the original's room drawer from the original's data, and compared pixel
+for pixel with the Spectrum's own drawing of it (all 120 match). Harry's
+movement, the monsters, the objects, the factory, the truck, the train and
+the lifts are the original's code in 6502, and scripted play is compared
+pass by pass with the original running in SkoolKit's Z80 simulator: 20
+scenarios and random walks, identical. The game keeps the original's
+three frames a pass everywhere.
+
+What the BBC changes is written down, with the reasons, in
+[docs/decisions.md](docs/decisions.md). The biggest: MODE 1's four colours
+per band, with up to two palette changes down the screen in a room that
+needs more (99.5% of pixels in the original's colour); the sound chip in
+place of the beeper; a MODE 7 front end that saves to disc; and BBC keys.
+
+[docs/journal.md](docs/journal.md) is the story of the port;
+[docs/research.md](docs/research.md) is how the original works; and
+[docs/next-steps.md](docs/next-steps.md) is what's left.
 
 ## Building
 
@@ -44,14 +83,23 @@ make venv       # SkoolKit and Pillow, for the tools that read the original
 make fetch      # download the original from Spectrum Computing
 make            # build/ce2.ssd
 make run        # boot it headless and screenshot it
-make check      # every room, the movement scenarios and the front end,
-                # against the original (MODEL=Master for the Master)
+make check      # every room, the play scenarios, the front end and the
+                # sound, against the original (MODEL=Master for the Master)
 ```
 
-The original's tape, maps and text are not in this repository; `make fetch`
-downloads them and checks their hashes.
+`make fetch` downloads the original's tape and checks its hash; the tools
+in `tools/` extract the rooms, graphics and text from it into `src/data/`
+(committed, so a build needs only baron).
+
+## Licence
+
+The port's own work, its source code, tools and documentation, is under the
+[MIT licence](LICENSE). *Chuckie Egg 2* itself is © 1985 A&F Software: the
+game's design, rooms, graphics, text and sounds, which `src/data/` and the
+disc image carry, are theirs and not covered by that licence.
 
 ## Credits
 
-*Chuckie Egg 2* is © 1985 A&F Software. This port is by Matt Godbolt and
-Claude.
+*Chuckie Egg 2* is by A&F Software ("by the A&F R&D team", as its menu
+says). This port is by Matt Godbolt and Claude, with suggestions from Rich
+Talbot-Watkins.

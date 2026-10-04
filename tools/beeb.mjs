@@ -31,6 +31,14 @@ export function loadSymbols(path = "build/symbols.json") {
 // bootUntil names a symbol to run to after booting (up to 30s): the way to
 // know the program is running, since loading takes a while (4.6s measured,
 // with the sideways RAM image).
+// The game's default keys (src/state.6502's mb_keys, decision 25), by
+// jsbeeb's names for the BBC keys: up is the :* key and down the /? key
+// (on a PC keyboard in jsbeeb, ' and /).
+export const KEYS = {
+    up: "COLON_STAR", down: "SLASH", left: "Z", right: "X",
+    jump: "RETURN", take: "TAB", abort: "R", save: "S",
+};
+
 export async function startBeeb({ disc, model = process.env.CE2_MODEL || "B-DFS1.2", bootSecs = 0, bootUntil, symbols = "build/symbols.json" } = {}) {
     const transport = new StdioClientTransport(MCP);
     const client = new Client({ name: "ce2-harness", version: "1.0.0" });

@@ -25,9 +25,9 @@
 .mb_score    SKIP 10            ; the score, when a game ended
 .mb_rng      EQUS "9090"        ; the RNG between games (the tape's seed)
 \ The keys, internal key numbers in the order of the game's control bits:
-\ jump, right, left, down, up, save, take/drop, abort. The Spectrum's to
-\ start with (decision 7): SPACE, P, O, A, Q, S, 1, 0.
-.mb_keys     EQUB 98, 55, 54, 65, 16, 81, 48, 39
+\ jump, right, left, down, up, save, take/drop, abort. Matt's BBC keys to
+\ start with (decision 25): RETURN, X, Z, /, :, S, TAB, R.
+.mb_keys     EQUB &49, &42, &61, &68, &48, &51, &60, &33
 \ The high-score table (&A56B): ten names of 10 characters, each followed
 \ by its score's 10 digits, most significant first, two to a byte (the
 \ original's has a byte a digit; only MENU reads it); A&F's to start with.

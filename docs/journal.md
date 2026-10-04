@@ -988,3 +988,15 @@ gathers any number of one ingredient (and makes jumps lower).
   name, a refused overwrite of MENU, a load of a missing file and of CE2,
   and the right save loaded; it passes on the Model B and on the Master
   with DFS and with ADFS.
+
+### BBC keys, and a README for showing
+
+- Matt chose the defaults: Z and X, : and / (the `:*` and `/?` keys),
+  RETURN to jump, TAB to take or drop, R to abort, S to save (decision 25).
+  Their internal key numbers were read back from jsbeeb's matrix rather
+  than recalled. The test tools now take the keys from one table in
+  tools/beeb.mjs, which four of them had each spelt out.
+- The README has screenshots of six rooms and the menu, how to play, what
+  it runs on and how it's checked; LICENSE is MIT for the port's own work,
+  with A&F's game itself excluded. "Good enough" says Matt: the disc loses
+  its `-wip` (`chuckie-egg-2.ssd`, `make disc`).

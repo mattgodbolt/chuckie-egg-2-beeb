@@ -10,9 +10,9 @@
 // Pass 0 is the first time game_loop is reached; keys are set at the top of
 // a pass, before read_keys.
 import { writeFileSync } from "fs";
-import { startBeeb } from "./beeb.mjs";
+import { startBeeb, KEYS } from "./beeb.mjs";
 
-const KEYS = { up: "Q", down: "A", left: "O", right: "P", jump: "SPACE", take: "K1" };
+
 const args = process.argv.slice(2);
 const outIdx = args.indexOf("--out");
 const out = outIdx >= 0 ? args.splice(outIdx, 2)[1] : "build/bbc_passes.json";

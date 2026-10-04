@@ -59,3 +59,7 @@ things parked for discussion. The reasoning for each is in
    as I only have a physical Master to test on"): decision 14 is to be
    revisited. What it takes is being explored (the font, perhaps patched in
    at start-up; the reset back to `MENU` on MOS 3.20).
+12. **Speed**: the original keeps to 3 frames a pass everywhere; the port
+   does in all but rooms 85 and 97, where 1 or 2 passes in 20 take 4
+   (`tools/perf.mjs`). The next savings would be in `draw_sprite` and
+   `erase_image`'s inner loops.

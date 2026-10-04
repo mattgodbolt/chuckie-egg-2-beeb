@@ -687,3 +687,23 @@ gathers any number of one ingredient (and makes jumps lower).
   sideways RAM with the band tables; main RAM 130 bytes free, sideways 36.
   This used the 512 bytes the font copy freed (decision 14), which Matt now
   wants back for the Master: being looked into.
+
+### Keeping up: three frames a pass
+
+- The original's main loop is three HALTs, a pass every 3 frames, and it
+  keeps to that in every room measured (`run_tstates` between passes on
+  the Spectrum: an average of exactly 3). `tools/perf.mjs` found the BBC
+  taking 4 frames for some passes in about a dozen rooms, up to half of
+  them in room 56: slower than the original there. It predated the bands
+  (measured on the commit before: the same).
+- `tools/sample.mjs`, a sampling profiler, put most of the time in
+  `cell_looks` (a cell's tile and colours), called by `erase_image` for
+  every non-empty sprite byte of every line and by the collision test for
+  every line of each of Harry's columns, though a cell serves eight lines.
+  Sprites are now erased a column at a time (the bytes are independent),
+  looking a cell up once per cell row, and the collision test keeps the
+  last cell for each column. Room 56 holds 3 frames now; rooms 85 and 97
+  still take 4 for 1 and 2 passes in 20.
+- RAM: the game no longer searches the banks for its data with a 33-byte
+  magic; MENU, which has just found or filled the bank, leaves its number
+  in zero page `&8F`. Main RAM 124 bytes free.

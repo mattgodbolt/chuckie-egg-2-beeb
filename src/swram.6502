@@ -1,30 +1,12 @@
 \ ***************************************************************************
-\ The data's sideways RAM bank (decision 8). MENU put CE2DATA in a free
-\ bank; find it again by the magic and build stamp at its start and leave
-\ it paged in for good, so the data reads as ordinary memory at &8000. romshad is the OS's
-\ copy of romsel: it puts that back after paging ROMs itself, so write both.
+\ The data's sideways RAM bank (decision 8). MENU found or filled it and
+\ left its number at DATA_BANK_ZP for the game, which pages it in for good,
+\ so the data reads as ordinary memory at &8000. romshad is the OS's copy
+\ of romsel: it puts that back after paging ROMs itself, so write both.
 \ ***************************************************************************
 
 .find_data_bank
-{
     SEI
-    LDX #15
-.try
-    LDA romtypes,X : BNE next   ; a ROM: not ours
-    STX romsel
-    LDY #magic_end - magic - 1
-.compare
-    LDA &8000,Y : CMP magic,Y : BNE next
-    DEY : BPL compare
-    STX romshad
+    LDA DATA_BANK_ZP : STA romshad : STA romsel
     CLI
     RTS
-.next
-    DEX : BPL try
-    \ Not found: MENU would have said so already. Stop.
-.stop
-    JMP stop
-}
-\ The magic, in main memory to compare with: data_magic is the copy in the bank.
-.magic EQUS DATA_MAGIC, build_stamp
-.magic_end

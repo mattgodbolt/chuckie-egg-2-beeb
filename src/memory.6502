@@ -106,6 +106,12 @@ NM = 5
 .score      SKIP 10         ; the score's digits, most significant first (&A445)
 .lives      SKIP 1          ; (&A3FA)
 .carrying_name SKIP 1       ; the carried thing's name in the status bar
+\ screen_bits' looked-up cells (collide.6502), one for each of Harry's columns.
+.sbc_lo     SKIP 2
+.sbc_hi     SKIP 2
+.sbc_glo    SKIP 2
+.sbc_ghi    SKIP 2
+.sbc_paper  SKIP 2
 .truck_strip SKIP 1         ; the truck strip repainted last (&91B6)
 \ The lift (&A52C): type (0 none, 1 rising bar, 2 platform), start, place.
 .l_type     SKIP 1
@@ -145,6 +151,7 @@ SECTION Scratch, org = &90, guard = &FC
 .sp_row        SKIP 1          ; draw_sprite's screen row
 .sb_p          SKIP 2          ; setup_bands' pointer (bands.6502: no allocator there)
 .irq_split     SKIP 1          ; the next T1 split: 0 the status bar's, then bands 1, 2
+.sb_slot       SKIP 1          ; screen_bits' column of Harry, 0 or 1
 .set_logical_t SKIP 1
 .gbyte         SKIP 1
 \ (rooms.6502)

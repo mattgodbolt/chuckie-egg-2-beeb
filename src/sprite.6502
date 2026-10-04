@@ -97,77 +97,80 @@ ZA_AUTO1 sp_colour          ; that colour in this row's band: a byte of four pix
 {
     ZA_AUTO2 src
     ZA_AUTO2 scr
-    ZA_AUTO2 row_cell
+    ZA_AUTO2 col_src
+    ZA_AUTO2 col_scr
     ZA_AUTO1 lines
     ZA_AUTO1 width
     ZA_AUTO1 yf
     ZA_AUTO1 bcol
-    ZA_AUTO1 soff
+    ZA_AUTO1 left
     ZA_AUTO1 img
     ZA_AUTO1 mask
-    ZA_AUTO1 under
     ZA_AUTO1 tb
     LDY #0 : LDA (sp_frame),Y
     ASL A : ASL A : ASL A : STA lines
     INY : LDA (sp_frame),Y : STA width
     CLC : LDA sp_frame : ADC #2 : STA src
     LDA sp_frame+1 : ADC #0 : STA src+1
-    LDA sp_cell : STA row_cell
-    LDA sp_cell+1 : STA row_cell+1
     LDA sp_cell : ASL A : ASL A : ASL A : ASL A : ORA sp_yf : STA scr
     LDA sp_cell+1 : STA scr+1
     LDA sp_cell
     LSR scr+1 : ROR A : LSR scr+1 : ROR A : LSR scr+1 : ROR A : LSR scr+1 : ROR A
     CLC : ADC #HI(screen) : STA scr+1
+    \ A column at a time (the bytes are independent), so a cell is looked
+    \ up once for each cell row it covers, not once a line.
+    LDA #0 : STA bcol
+.column
+    CLC : LDA src : ADC bcol : STA col_src
+    LDA src+1 : ADC #0 : STA col_src+1
+    LDA bcol : ASL A : ASL A : ASL A : ASL A        ; 16 bytes a cell across
+    CLC : ADC scr : STA col_scr
+    LDA scr+1 : ADC #0 : STA col_scr+1
+    CLC : LDA sp_cell : ADC bcol : STA cell
+    LDA sp_cell+1 : ADC #0 : STA cell+1
     LDA sp_yf : STA yf
-    \ Its first row, and its colour there.
-    LDA sp_cell+1 : ASL A : ASL A : ASL A : STA sp_row
-    LDA sp_cell : LSR A : LSR A : LSR A : LSR A : LSR A : ORA sp_row : STA sp_row
-    JSR sprite_colour
-.row
-    LDA #0 : STA bcol : STA soff
-.byte
-    LDY bcol : LDA (src),Y : BEQ next_byte
+    LDA lines : STA left
+    JSR cell_looks
+.line
+    LDY #0 : LDA (col_src),Y : BEQ next_line
     STA img
     \ The room's pixels here: the tile's line, in the cell's colours.
-    CLC : LDA row_cell : ADC bcol : STA cell
-    LDA row_cell+1 : ADC #0 : STA cell+1
-    JSR cell_looks
-    LDA yf : AND #7 : TAY
+    LDA yf : TAY
     LDA (glyph),Y : STA tb
     LDA img : LSR A : LSR A : LSR A : LSR A : TAX
     LDA spread_lo,X : STA mask
     LDA tb : LSR A : LSR A : LSR A : LSR A : TAX
     LDA spread_lo,X : AND diff : EOR paper
-    LDY soff
-    EOR (scr),Y : AND mask : EOR (scr),Y : STA (scr),Y
+    LDY #0
+    EOR (col_scr),Y : AND mask : EOR (col_scr),Y : STA (col_scr),Y
     LDA img : AND #15 : TAX
     LDA spread_lo,X : STA mask
     LDA tb : AND #15 : TAX
     LDA spread_lo,X : AND diff : EOR paper
-    STA under
-    TYA : ORA #8 : TAY
-    LDA under
-    EOR (scr),Y : AND mask : EOR (scr),Y : STA (scr),Y
-.next_byte
-    LDA soff : CLC : ADC #16 : STA soff
-    INC bcol : LDA bcol : CMP width : BNE byte
-    CLC : LDA src : ADC width : STA src
+    LDY #8
+    EOR (col_scr),Y : AND mask : EOR (col_scr),Y : STA (col_scr),Y
+.next_line
+    CLC : LDA col_src : ADC width : STA col_src
     BCC src_ok
-    INC src+1
+    INC col_src+1
 .src_ok
-    INC yf : LDA yf : AND #7 : BEQ next_cell
-    INC scr
-    JMP more
+    DEC left : BEQ next_column
+    INC yf : LDA yf : CMP #8 : BEQ next_cell
+    INC col_scr                 ; (never carries: yf < 8 in a 16-byte cell)
+    JMP line
 .next_cell
-    CLC : LDA scr : ADC #LO(ROW_BYTES - 7) : STA scr
-    LDA scr+1 : ADC #HI(ROW_BYTES - 7) : STA scr+1
-    CLC : LDA row_cell : ADC #32 : STA row_cell
-    BCC more
-    INC row_cell+1
-.more
-    DEC lines : BEQ done
-    JMP row
+    LDA #0 : STA yf
+    CLC : LDA col_scr : ADC #LO(ROW_BYTES - 7) : STA col_scr
+    LDA col_scr+1 : ADC #HI(ROW_BYTES - 7) : STA col_scr+1
+    CLC : LDA cell : ADC #32 : STA cell
+    BCC looks
+    INC cell+1
+.looks
+    JSR cell_looks
+    JMP line
+.next_column
+    INC bcol : LDA bcol : CMP width : BEQ done
+    JMP column
 .done
     RTS
 }

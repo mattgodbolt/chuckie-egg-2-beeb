@@ -38,6 +38,7 @@ ZA_AUTO1 crow               ; Harry's row 0-15
     LSR cw_hi : ROR cw_lo : LSR cw_hi : ROR cw_lo
     DEX : BNE shift
 .window
+    LDA #&FF : STA sbc_hi : STA sbc_hi+1        ; nothing looked up yet
     \ Harry's top line.
     LDA h_cell : LSR A : LSR A : LSR A : LSR A : LSR A : STA cline
     LDA h_cell+1 : ASL A : ASL A : ASL A : ORA cline
@@ -55,10 +56,10 @@ ZA_AUTO1 crow               ; Harry's row 0-15
     LDA #0 : STA cs_lo
 .test_screen
     LDA h_cell : AND #31 : STA ccol
-    JSR screen_bits : AND cs_hi : BNE hit
+    LDX #0 : JSR screen_bits : AND cs_hi : BNE hit
     LDA cs_lo : BEQ next_line
     INC ccol
-    JSR screen_bits : AND cs_lo : BNE hit
+    LDX #1 : JSR screen_bits : AND cs_lo : BNE hit
 .next_line
     INC cline
     INC crow : LDA crow : CMP #16 : BNE line
@@ -69,18 +70,35 @@ ZA_AUTO1 crow               ; Harry's row 0-15
 
 \ On screen line cline, column ccol: the pixels that aren't the cell's
 \ paper, less the tile's own pixels; 1 bit a pixel, leftmost in bit 7.
+\ X is Harry's column, 0 or 1: each keeps the last cell it looked up, as
+\ one cell serves eight lines.
 .screen_bits
 {
     ZA_AUTO2 sp
     ZA_AUTO1 tb
     ZA_AUTO1 left
+    STX sb_slot
     \ cell = (line / 8) * 32 + column
     LDA cline : LSR A : LSR A : LSR A : STA cell
     LDA #0 : STA cell+1
     ASL cell : ROL cell+1 : ASL cell : ROL cell+1 : ASL cell : ROL cell+1
     ASL cell : ROL cell+1 : ASL cell : ROL cell+1
     LDA ccol : ORA cell : STA cell
+    LDA cell : CMP sbc_lo,X : BNE look
+    LDA cell+1 : CMP sbc_hi,X : BNE look
+    LDA sbc_glo,X : STA glyph
+    LDA sbc_ghi,X : STA glyph+1
+    LDA sbc_paper,X : STA paper
+    JMP looked
+.look
     JSR cell_looks                  ; glyph, paper
+    LDX sb_slot
+    LDA cell : STA sbc_lo,X
+    LDA cell+1 : STA sbc_hi,X
+    LDA glyph : STA sbc_glo,X
+    LDA glyph+1 : STA sbc_ghi,X
+    LDA paper : STA sbc_paper,X
+.looked
     LDA cline : AND #7 : TAY
     LDA (glyph),Y : STA tb
     \ The screen bytes: screen + 16 * cell + line, and 8 on.

@@ -641,3 +641,12 @@ gathers any number of one ingredient (and makes jumps lower).
   pressed while `MENU` was still starting, and "menu ready" judged by the
   build stamp, which the OS also prints when it echoes `!BOOT`.
 - Not yet: the Master (its reset ends in "Acorn MOS" and hangs), a joystick.
+
+### Fuzzing
+
+- `make fuzz` (`tools/fuzz.py`): Harry stood somewhere random in a random
+  room, random keys held for random spells, 150 passes on both machines,
+  compared pass by pass. Seeds 1 and 2: 39 of 39 compared cases match, in
+  35 rooms the fixed scenarios never visit; 3 skipped, where the start was
+  deadly and the original's game ended before there was anything to
+  compare.

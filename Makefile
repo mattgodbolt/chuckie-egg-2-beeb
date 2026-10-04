@@ -6,6 +6,7 @@
 #   make rooms    check every room the BBC draws against the original's
 #   make passes   replay tests/scenarios.txt on both, compare Harry pass by pass
 #   make front    drive the front end: menu, keys, save, load, high scores
+#   make fuzz     random walks in random rooms on both (SEED=n COUNT=n)
 #   make wip      rebuild from a clean tree and copy the disc to
 #                 chuckie-egg-2-wip.ssd, which the README links
 #   make fetch    download the Spectrum original into original/
@@ -25,7 +26,7 @@ WIP      = chuckie-egg-2-wip.ssd
 # commit, with + if the tree (the WIP disc itself aside) had changes.
 BUILD   := $(shell date -u '+%Y-%m-%d %H:%M UTC') $(shell git rev-parse --short HEAD 2>/dev/null || echo NOGIT)$(shell git diff --quiet HEAD -- . ':(exclude)$(WIP)' 2>/dev/null || echo +)
 
-.PHONY: all run check rooms passes front wip fetch zx disasm venv clean
+.PHONY: all run check rooms passes front fuzz wip fetch zx disasm venv clean
 
 all: $(TARGET) $(TEST)
 
@@ -45,6 +46,11 @@ check: rooms passes front
 
 front: $(TARGET)
 	node tools/frontcheck.mjs
+
+SEED  ?= 1
+COUNT ?= 12
+fuzz: $(TEST) build/ce2.z80 build/rooms/room_120.bin
+	python3 tools/fuzz.py $(COUNT) --seed $(SEED)
 
 # The tests' disc: MENU built with -D DIRECT=1 goes straight into a game,
 # so the tools reach the main loop without the front end.

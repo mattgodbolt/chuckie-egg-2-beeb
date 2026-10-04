@@ -228,12 +228,6 @@ MTF_TYPE = 6
     JSR emit_place
     JMP type_last
 }
-.unpack_pick EQUB 0
-.rec_len EQUB 0
-.rec_pos EQUB 0
-.rec_buf SKIP 18                ; the longest record is 17 bytes, a text
-.unpack_capped EQUB 0
-.unpack_vert EQUB 0
 
 \ TEXT_CHARS in tools/packrooms.py.
 .text_chars

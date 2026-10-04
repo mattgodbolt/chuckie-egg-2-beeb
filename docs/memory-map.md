@@ -9,7 +9,8 @@ build output (`code &0E00-&xxxx (N bytes free)`), never from this file.
 |---|---|---|
 | `&0000-&005F` | 96 | zero page, baron's allocator (`ZA_POOL`) |
 | `&0060-&008F` | 48 | zero page, the game's permanent state (`memory.6502`) |
-| `&0090-&00FF` | 112 | the OS's until the game starts; since then only `&FC` (the OS's IRQ entry saves A there) |
+| `&0090-&00F2` | 99 | zero page, the game's scratch variables (`Scratch`): the OS's until the game owns the interrupts |
+| `&00FC` | 1 | the OS's IRQ entry saves A here |
 | `&0100-&017F` | 128 | `thing_init` (page 1, copied in at start-up) |
 | `&0180-&01FF` | 128 | stack |
 | `&0200-&0235` | 54 | OS vectors (IRQ1V is the game's) |
@@ -18,10 +19,18 @@ build output (`code &0E00-&xxxx (N bytes free)`), never from this file.
 | `&0400-&06FF` | 768 | attribute map |
 | `&0700-&09FF` | 768 | tile map |
 | `&0A00-&0CFF` | 768 | cell-type map |
-| `&0D00-&0DFF` | 256 | `LowState`: monsters, objects, machines, checkpoint |
-| `&0E00-&4FFF` | 16,896 | code and data (copied down from `&1900` after `*TAPE`) |
+| `&0D00-&0DEB` | 236 | `LowState`: monsters, objects, machines, checkpoint, score, lives |
+| `&0E00-&4FFF` | 16,896 | code and data (copied down from `&1900`) |
 | `&5000-&7FFF` | 12,288 | screen: 256 x 192, MODE 1 pixels (decision 1) |
-| `&8000-&BFFF` | 16,384 | sideways RAM: packed rooms, sprites, the font (decision 8) |
+| `&8000-&BFFF` | 16,384 | sideways RAM: the mailbox, packed rooms, sprites, the font (decisions 8, 13) |
+
+Between games (decision 13): `MENU` runs at `&1900-&27FF` in MODE 7 (screen
+`&7C00`), loading `CE2DATA` at `&3000` to copy into the bank when the bank
+doesn't hold this build's. The game's state block is at `&5F00-&6772`
+(256 bytes of header, keys and high scores for a saved game, then the
+regions from `&6000`): above anything `CE2` loads over (checked by the
+build), below MODE 7's screen, so it survives the reset, `MENU` and the
+game's reload.
 
 Pages 1-3 are the OS's until the game owns the interrupts (`install_irq`)
 and reads the keyboard itself (`key_down`, straight from the System VIA):
@@ -52,7 +61,7 @@ Approximate, by each file's first label:
 | `&42A2` | object frame pointers, things, visits | 1,291 |
 | `&47AD` | object graphics | 1,256 |
 | `&4C95` | tile font | 480 |
-| `&4E75` | end: **395 bytes free** | |
+| `&4E75` | end: 395 bytes free (before the front end; now 251) | |
 
 ## The budget against a stock Model B (2026-10-04)
 

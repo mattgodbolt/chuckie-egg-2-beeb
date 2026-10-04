@@ -55,7 +55,6 @@ KIND_FIXED = &40            ; kind bit 6 (with bit 7): a machine part
     LDX tc_x
     RTS
 }
-.tc_x EQUB 0
 
 \ Load thing X's position, ink and graphic into the current-thing record
 \ (and its frame into o_frame_zp for reading), as &9A10 and &7F01 do. The
@@ -79,8 +78,6 @@ ZA_AUTO2 o_frame_zp
     LDA object_frames+1,Y : STA o_frame+1 : STA o_frame_zp+1
     RTS
 }
-.tl_t EQUB 0
-.tl_kind EQUB 0
 
 \ RoomThings (&99F6): on entering a room, mark the footprints of the
 \ portable things in it; select none. Nothing is drawn yet.
@@ -220,7 +217,6 @@ ZA_AUTO2 o_frame_zp
 .done
     RTS
 }
-.bonus_n EQUB 0
 
 \ Fixed things (&95F0): the power lever and the LIFT sign.
 .fixed_thing
@@ -361,13 +357,6 @@ ZA_AUTO2 o_frame_zp
     LDA o_ink : STA f_ink
     RTS
 }
-.drop_x EQUB 0
-.drop_row EQUB 0
-.drop_col EQUB 0
-.drop_g EQUB 0
-.drop_g2 EQUB 0
-.old_row EQUB 0
-.old_col EQUB 0
 
 \ Is the cell under the current thing's left column taken? Z clear if so.
 .under_object
@@ -507,7 +496,6 @@ ZA_AUTO2 f_frame_zp
 .done
     RTS
 }
-.dv_g EQUB 0
 
 \ PartDelivered (&9872): its light comes on; ToyBasket (&9883): every part
 \ in the basket's.
@@ -627,7 +615,6 @@ ZA_AUTO2 f_frame_zp
     LDX wl_x : DEX : BPL loop
     RTS
 }
-.wl_x EQUB 0
 \ A space in attribute 0 (black on black) at `cell`.
 .black_cell
 {
@@ -713,4 +700,3 @@ ZA_AUTO2 f_frame_zp
     INX : INX : INX : CPX #27 : BNE gfx
     JMP train_reset
 }
-.ei_n EQUB 0

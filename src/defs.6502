@@ -4,6 +4,8 @@
 
 \ --- OS entry points -----------------------------------------------------
 
+osfile  = &FFDD
+osrdch  = &FFE0
 osasci  = &FFE3
 oswrch  = &FFEE
 osword  = &FFF1
@@ -14,7 +16,9 @@ oscli   = &FFF7
 
 crtc_reg   = &FE00
 crtc_data  = &FE01
+ula_ctrl   = &FE20          ; the video ULA's control register
 ula_pal    = &FE21          ; write (index << 4) | (physical EOR 7)
+CRTC_BLANK = &30            ; R8: display enable skewed off, so nothing shows
 sysvia_orb = &FE40          ; the addressable latch: bit 3 is keyboard enable
 sysvia_ddra = &FE43
 sysvia_ora_nh = &FE4F       ; port A without handshake: the keyboard
@@ -28,6 +32,7 @@ usrvia_acr = &FE6B
 usrvia_ifr = &FE6D
 usrvia_ier = &FE6E
 SL         = 64             ; a scanline: 64 us, 64 ticks of a VIA timer
+brkv       = &0202
 irq1v      = &0204
 romsel     = &FE30          ; the sideways bank at &8000
 romshad    = &F4            ; the OS's copy of romsel: always write both

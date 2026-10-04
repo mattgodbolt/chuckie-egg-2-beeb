@@ -66,8 +66,6 @@ ZA_AUTO1 crow               ; Harry's row 0-15
 .hit
     JMP who_was_hit
 }
-.ccol EQUB 0
-.c_m EQUB 0                 ; who_was_hit's monster
 
 \ On screen line cline, column ccol: the pixels that aren't the cell's
 \ paper, less the tile's own pixels; 1 bit a pixel, leftmost in bit 7.
@@ -174,10 +172,6 @@ ZA_AUTO1 crow               ; Harry's row 0-15
     SEC
     RTS
 }
-.box_l EQUB 0
-.box_r EQUB 0
-.box_t EQUB 0
-.box_b EQUB 0
 
 \ Contact with monster c_m (&94E5).
 .contact

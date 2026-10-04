@@ -1,7 +1,7 @@
 \ ***************************************************************************
-\ The data's sideways RAM bank (decision 8). SWLOAD put CE2DATA in a free
-\ bank; find it again by the magic at its start and leave it paged in for
-\ good, so the data reads as ordinary memory at &8000. romshad is the OS's
+\ The data's sideways RAM bank (decision 8). MENU put CE2DATA in a free
+\ bank; find it again by the magic and build stamp at its start and leave
+\ it paged in for good, so the data reads as ordinary memory at &8000. romshad is the OS's
 \ copy of romsel: it puts that back after paging ROMs itself, so write both.
 \ ***************************************************************************
 
@@ -12,7 +12,7 @@
 .try
     LDA romtypes,X : BNE next   ; a ROM: not ours
     STX romsel
-    LDY #LEN(DATA_MAGIC) - 1
+    LDY #magic_end - magic - 1
 .compare
     LDA &8000,Y : CMP magic,Y : BNE next
     DEY : BPL compare
@@ -21,12 +21,13 @@
     RTS
 .next
     DEX : BPL try
-    \ Not found: SWLOAD would have said so already. Stop.
+    \ Not found: MENU would have said so already. Stop.
 .stop
     JMP stop
 }
 \ The magic, in main memory to compare with: data_magic is the copy in the bank.
-.magic EQUS DATA_MAGIC
+.magic EQUS DATA_MAGIC, build_stamp
+.magic_end
 
 \ Copy the OS's character definitions 32-95 into text_font, through
 \ OSWORD 10, which works wherever the MOS keeps its font (OS 1.20 at &C000,

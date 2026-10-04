@@ -25,7 +25,9 @@ things parked for discussion. The reasoning for each is in
    colour, against 97.8% now. The status bar's split shows the timing can
    be held; a split between two playfield rows has content on both sides,
    so it must change logical 1 and 2 in a horizontal blank. To be costed
-   as a colour layer once the game plays.
+   as a colour layer once the game plays. Rich TW again: raster colours a
+   few times down the screen would also change non-character colours and
+   look more authentic; baron's `examples/colours/` shows the technique.
 5. **Text in the MOS font** (decision 4), not the Spectrum ROM's.
 6. **A MODE 7 instructions loader** (Matt's idea). The original loaded
    from tape, so its instructions were part of the game: shown once at
@@ -38,3 +40,18 @@ things parked for discussion. The reasoning for each is in
    noise, shifted about 150 times a second, while the train is noisy. The
    RNG calls stay where they were, so the game's random sequence matches.
    The character is close; is it close enough?
+8. **Footsteps** (Matt, on the first sound build: "will need work but it's
+   a start"). The Spectrum's two-cycle tick doesn't carry well on the
+   SN76489. Consider the more melodic footfall of *Chuckie Egg* 1's BBC
+   version instead of copying the Spectrum click.
+9. **The front end** (decision 13). One save slot, "CEGAME", on the game
+   disc (a write-protected disc gives the DFS's error, then the menu). The
+   menu's last line shows the build; the original's row 23 said JOYSTICK
+   COMPATIBLE and now offers the instructions again. A name can be typed
+   in lower case (the original took lower case unless CAPS was held).
+10. **BREAK during play** isn't caught: the OS's page 2 holds the game's
+   tables then, so the reset that follows may misbehave. CTRL-BREAK, then
+   SHIFT-BREAK, gets back to the menu. Making BREAK return to the menu
+   cleanly would mean keeping `&0258` and `&027F-&029B` free of tables.
+11. **The Master**: the game's reset doesn't come back to `MENU` there yet
+   (MOS 3.20's start-up options and workspace differ from OS 1.20's).

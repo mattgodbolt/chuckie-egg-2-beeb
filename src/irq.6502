@@ -30,7 +30,6 @@ FUNCTION ula_entry(l, n, phys) = ((l AND 2) * 4 + (n AND 2) * 2 + (l AND 1) * 2 
 
 \ The room's sixteen values (set_room_palette fills them): the ten the
 \ status bar never shows first, then the six it does, which T1 writes.
-.room_ula   SKIP 16
 \ The status bar's six: logical 1, then 0, each beside 0, 1 and 3.
 .status_ula
     FOR l = {1, 0}

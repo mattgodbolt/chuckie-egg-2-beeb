@@ -1,15 +1,22 @@
 \ ***************************************************************************
 \ The game: the main loop and what happens between rooms (the original's
-\ &7743-&78BE and &8A29). So far: Harry, the rooms, the status bar.
+\ &7743-&78BE and &8A29).
 \ ***************************************************************************
 
-\ Once, when the game is loaded.
+\ Each time the game is loaded (MENU runs it for every game): a new game,
+\ or the one at STATE carried on.
 .init_game
 {
-    LDA #0 : STA dbg_room : STA o_index : STA noise_flag
+    LDA #0 : STA dbg_room : STA noise_flag : STA save_armed
+    LDA mb_start : BEQ fresh
+    LDA #0 : STA mb_start
+    JMP resume
+.fresh
+    STA o_index
+    \ The original never reseeds its RNG: it carries on from the last game.
     LDX #3
 .seed
-    LDA rng_seed,X : STA rng_state,X
+    LDA mb_rng,X : STA rng_state,X
     DEX : BPL seed
     \ Fall into new_game.
 }
@@ -221,7 +228,7 @@ CHECKPOINT_VARS = h_frame + 2 - h_cell    ; h_cell .. h_frame
     LDA #10 : STA t_col+&25
     LDA factory : AND #&FB : STA factory
     DEC lives : BNE alive
-    JMP new_game                    ; (game over: the menu, later)
+    LDA #MB_OVER : JMP handoff      ; game over: the front end checks the score
 .alive
     JSR enter_room
     JMP game_loop
@@ -286,7 +293,6 @@ CHECKPOINT_VARS = h_frame + 2 - h_cell    ; h_cell .. h_frame
     JSR any_key : BEQ press
     RTS
 }
-.ed_n EQUB 0
 .delivered_text EQUS "EGGS DELIVERED:-", 0
 \ Character A, yellow on black, at `cell`; step right.
 .yellow_char
@@ -333,19 +339,42 @@ CHECKPOINT_VARS = h_frame + 2 - h_cell    ; h_cell .. h_frame
     LDY #7
 .key
     STY keys_i
-    LDX key_codes,Y : JSR key_down
+    LDX mb_keys,Y : JSR key_down
     CMP #0 : CLC : BEQ up
     SEC
 .up
     ROL ctrl
     LDY keys_i : DEY : BPL key
+    \ Abort and save go to the front end at once (&7902). A save needs a
+    \ fresh press: the key may still be down when the game carries on.
+    BIT ctrl : BPL no_abort
+    LDA #MB_ABORT : JMP handoff
+.no_abort
+    LDA ctrl : AND #&20 : BEQ save_up
+    LDA save_armed : BEQ done
+    LDA #MB_SAVE : JMP handoff
+.save_up
+    LDA #1 : STA save_armed
+.done
     RTS
 }
-.keys_i EQUB 0
-\ Negative INKEY codes (internal key number EOR &FF; measured in jsbeeb),
-\ bit 0 first: SPACE, P, O, A, Q, S, 1, 0.
-.key_codes
-    EQUB 98, 55, 54, 65, 16, 81, 48, 39
+
 
 \ The RNG's state on the tape (&91B1).
-.rng_seed EQUS "9090"
+\ Carry on with the game at STATE, as the original's load does (&A21B):
+\ the room drawn again, its things, then the main loop, with no truck. The
+\ original's cipher leaves the RNG in a fixed state after a save or a load.
+.resume
+{
+    SEC : JSR copy_state
+    LDX #3
+.seed_rng
+    LDA resumed_rng,X : STA rng_state,X
+    DEX : BPL seed_rng
+    LDX #&FF : TXS
+    LDA room : JSR draw_room
+    LDA #0 : STA drawn
+    JSR room_things
+    JMP game_loop
+}
+.resumed_rng EQUB &5D, &00, &07, &B1

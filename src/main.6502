@@ -1,9 +1,9 @@
 \ ***************************************************************************
 \ CHUCKIE EGG 2 for the BBC Micro - build file
 \
-\ !BOOT selects MODE 1 and *RUNs CE2, which loads at &1900, selects *TAPE so
-\ the DFS lets go of its workspace, copies the program down to &0E00 and
-\ runs it. For now the program is the room viewer (viewer.6502).
+\ !BOOT runs MENU, the front end (menu.6502), which puts CE2DATA in a
+\ sideways RAM bank and runs CE2: it loads at &1900, copies the program
+\ down to &0E00 and runs it. The game comes back to MENU by resetting the machine (state.6502).
 \ ***************************************************************************
 
 INCLUDE "defs.6502"
@@ -24,13 +24,9 @@ ENDIF
 SPLIT_T1 = 83 * SL - 2 + SPLIT_ADJ
 STATUS_PAPER = 0            ; black (1, red, shows where the split lands)
 
-\ MODE 1 is selected by BASIC before the program loads: the program reaches
-\ past &3000 once copied down, so a MODE change after that would wipe it.
-\ The palette is blacked out so nobody sees the file pass through screen
-\ memory on its way in.
 \ The build stamp comes from the Makefile (-D BUILD="date time sha"), so a
-\ disc says what it is: *TYPE !BOOT shows it. A + after the sha means the
-\ tree had uncommitted changes.
+\ disc says what it is: *TYPE !BOOT and MENU's bottom line show it. A + after
+\ the sha means the tree had uncommitted changes.
 IF DEFINED(BUILD)
     build_stamp = BUILD
 ELSE
@@ -39,20 +35,21 @@ ENDIF
 
 SECTION Boot, filename = "!BOOT", exec = &FFFFFFFF
     EQUS "*| CHUCKIE EGG 2 ", build_stamp, 13
-    EQUS "MODE 1", 13
-    EQUS "FOR I%=0 TO 3:VDU 19,I%,0;0;:NEXT", 13
-    EQUS "*RUN SWLOAD", 13
+    EQUS "*RUN MENU", 13
 ENDSECTION
 
-\ The data's sideways RAM bank (decision 8): SWLOAD puts CE2DATA in a free
-\ one, then runs CE2, which finds it again by its magic (swram.6502).
-SECTION SwLoad, org = &1900, load = &FFFF1900, exec = &FFFF0000 + swload, filename = "SWLOAD"
-    INCLUDE "swload.6502"
+\ The front end, in MODE 7 (decision 13). It must end below &3000, where it
+\ loads CE2DATA to copy into the bank.
+SECTION Menu, org = &1900, load = &FFFF1900, exec = &FFFF0000 + menu, filename = "MENU"
+    INCLUDE "menu.6502"
+    INCLUDE "data/front.6502"
+    ASSERT P% <= &3000
 ENDSECTION
 
 SECTION Data, org = &8000, load = &FFFF3000, filename = "CE2DATA", guard = &C000
 .data_magic
-    EQUS DATA_MAGIC
+    EQUS DATA_MAGIC, build_stamp    ; MENU loads it again if the build differs
+    INCLUDE "state.6502"
     \ The rooms, packed by tools/packrooms.py (decision 5).
 .packed_rooms
     INCBIN "data/packed.bin"
@@ -79,6 +76,7 @@ SECTION Loader, org = &1900, load = &FFFF1900, exec = &FFFF0000 + loader, filena
     ZA_ENTRY
     LDX #&FF : TXS
     JSR find_data_bank
+    JSR keep_os                 ; before the tables overwrite page 2
     JSR copy_font
     JSR init_system
     JSR copy_os_pages
@@ -104,6 +102,7 @@ ENDIF
     INCLUDE "objects.6502"
     INCLUDE "machines.6502"
     INCLUDE "sound.6502"
+    INCLUDE "handoff.6502"
     INCLUDE "game.6502"
 IF DEFINED(VIEWER)
     INCLUDE "viewer.6502"
@@ -158,9 +157,11 @@ ENDIF
 .payload_end
 
 \ Runs from where the file loaded, after the payload; nothing in here is
-\ needed afterwards.
+\ needed afterwards. The DFS stays the filing system, though its workspace
+\ is about to be overwritten: the game never calls it, and after the game's
+\ reset (state.6502) the DFS must still be there to boot MENU. (With *TAPE
+\ selected here, that reset came up in the cassette filing system.)
 .loader
-    LDX #LO(tape) : LDY #HI(tape) : JSR oscli
     LDX #HI(code_end - start + &FF)
     LDY #0
 .copy_down
@@ -169,6 +170,6 @@ ENDIF
     INC copy_down+2 : INC copy_down+5
     DEX : BNE copy_down
     JMP start
-.tape
-    EQUS "TAPE", 13
+.loader_end
+    ASSERT loader_end <= SAVE_HDR   ; the game's state above it survives the load
 ENDSECTION

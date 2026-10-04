@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Run a scripted session against the game and capture what happened.
 //
-//   node tools/play.mjs '<script>' [prefix] [--disc build/ce2.ssd] [--until start] [--boot 0] [--model B-DFS1.2]
+//   node tools/play.mjs '<script>' [prefix] [--disc build/test.ssd] [--until start] [--boot 0] [--model B-DFS1.2]
 //
 // It boots, runs to the symbol --until (the program's entry, by default),
 // waits --boot more seconds, then runs the script.
@@ -28,7 +28,10 @@ const opt = (name, dflt) => {
     args.splice(i, 2);
     return v;
 };
-const disc = opt("disc", "build/ce2.ssd");
+// The tests' disc goes straight into a game; build/ce2.ssd has the front
+// end (MENU) first. Each disc's symbols are beside it.
+const disc = opt("disc", "build/test.ssd");
+const symbols = disc.endsWith("test.ssd") ? "build/test.json" : disc.endsWith("viewer.ssd") ? "build/viewer.json" : "build/symbols.json";
 const bootSecs = parseFloat(opt("boot", "0"));
 // Run to this symbol after booting: the program is running from there on.
 const bootUntil = opt("until", "start");
@@ -36,7 +39,7 @@ const model = opt("model", "B-DFS1.2");
 const script = args[0] ?? "";
 const prefix = args[1] ?? "shots/p_";
 
-const beeb = await startBeeb({ disc, bootSecs, bootUntil, model });
+const beeb = await startBeeb({ disc, bootSecs, bootUntil, model, symbols });
 try {
     for (const raw of script.split(",")) {
         const step = raw.trim();

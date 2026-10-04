@@ -25,6 +25,7 @@ ZA_AUTO1 textmode           ; set while drawing text (&A3FF)
     PHA
     JSR set_room_palette
     JSR cls
+    LDA #8 : STA crtc_reg : LDA #0 : STA crtc_data  ; shown (blank from start-up)
     JSR draw_status_bar
     PLA : JSR unpack_room
     \ The background: its paper as both paper and ink.
@@ -194,7 +195,6 @@ ZA_AUTO1 textmode           ; set while drawing text (&A3FF)
 .done
     RTS
 }
-.back_cells_n EQUB 0
 
 \ ---------------------------------------------------------------------------
 \ The command handlers. Each is entered with the command byte in A and the

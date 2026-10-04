@@ -68,7 +68,6 @@ ZA_AUTO2 pp                 ; SideWalls' column pointer
     JMP (harry_vec)
     ZA_CANJUMP st_fall, st_walk, st_pipe, st_ladder, st_rope, st_slope_up, st_slide, st_jump, st_lift
 }
-.harry_vec EQUW 0
 \ The states (&8A17).
 .states_lo
     EQUB LO(st_fall), LO(st_walk), LO(st_pipe), LO(st_ladder), LO(st_rope)

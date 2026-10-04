@@ -10,12 +10,9 @@
 \   row 1, col 22:  min(lives, 9) lives icons (tile &56), then a blank
 \ ***************************************************************************
 
-\ The score, ten digits 0-9, most significant first (&A445); lives (&A3FA);
-\ the name of what Harry carries, 0-10 (0 = NOTHING; objects.6502 keeps
-\ the thing itself in `carried`).
-.score      SKIP 10
-.lives      EQUB 5
-.carrying_name EQUB 0
+\ The score, lives and the carried name are in LowState (memory.6502):
+\ part of a game's state, which goes to the front end and back. The name
+\ is 0-10 (0 = NOTHING; objects.6502 keeps the thing itself in `carried`).
 
 .draw_status_bar
 {
@@ -48,14 +45,11 @@
 .done
     RTS
 }
-.vb_value EQUB 0
-.vb_n EQUB 0
 
 \ Redraw score digit X (add_score does, as the digits change).
 .draw_digit
     TXA : CLC : ADC #32 : STA cell : LDA #0 : STA cell+1
     LDA score,X : CLC : ADC #48 : JMP status_char
-.status_i EQUB 0
 
 .status_labels
     EQUS "SCORE  CARRYING  LIVES", 0
@@ -82,7 +76,6 @@
     CPX #10 : BNE digit
     RTS
 }
-.status_x EQUB 0
 
 \ What Harry carries, at row 1, columns 12-19.
 .draw_carrying

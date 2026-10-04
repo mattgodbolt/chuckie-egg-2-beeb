@@ -1,0 +1,108 @@
+\ ***************************************************************************
+\ The game's way back to the front end (decision 13; the mailbox and the
+\ why are in state.6502).
+\ ***************************************************************************
+
+\ The parts of memory that make up a game in progress, copied to STATE
+\ on the way out and back on a resume: the fixed zero page, LowState, the
+\ thing and monster tables, the visit flags and the thing types.
+.state_regions
+    EQUW ZP_FIXED : EQUB &90 - ZP_FIXED
+    EQUW &0D00 : EQUB 0         ; (0: 256)
+    EQUW things : EQUB 0
+    EQUW things + &100 : EQUB 0
+    EQUW things + &200 : EQUB 0
+    EQUW things + &300 : EQUB 0
+    EQUW monster_table : EQUB 0
+    EQUW visits : EQUB 121
+    EQUW thing_types : EQUB 201
+.state_regions_end
+
+\ Copy the regions to STATE (C clear) or back from it (C set).
+.copy_state
+{
+    ZA_AUTO2 sr_mem
+    ZA_AUTO2 sr_blk
+    PHP
+    LDA #LO(STATE) : STA sr_blk
+    LDA #HI(STATE) : STA sr_blk+1
+    LDX #0
+.region
+    LDA state_regions,X : STA sr_mem
+    LDA state_regions+1,X : STA sr_mem+1
+    LDY #0
+.byte
+    PLP : PHP : BCS back
+    LDA (sr_mem),Y : STA (sr_blk),Y
+    JMP next
+.back
+    LDA (sr_blk),Y : STA (sr_mem),Y
+.next
+    INY
+    TYA : CMP state_regions+2,X : BNE byte
+    CLC : TYA : BNE add
+    INC sr_blk+1                ; a whole page
+    JMP done_add
+.add
+    ADC sr_blk : STA sr_blk
+    BCC done_add
+    INC sr_blk+1
+.done_add
+    INX : INX : INX
+    CPX #state_regions_end - state_regions : BNE region
+    PLP
+    RTS
+}
+
+\ Back to MENU with reason A: the state saved, the OS put back, a reset.
+.handoff
+{
+    SEI
+    STA mb_reason
+    LDA #0 : STA mb_game
+    LDA lives : BEQ no_game
+    INC mb_game
+.no_game
+    LDX #9
+.keep_score
+    LDA score,X : STA mb_score,X
+    DEX : BPL keep_score
+    LDX #3
+.keep_rng
+    LDA rng_state,X : STA mb_rng,X
+    DEX : BPL keep_rng
+    CLC : JSR copy_state
+    JSR sound_init              ; silence
+    \ Every key up first: the abort or save key will still be down, and a
+    \ key held through a BREAK stops the DFS booting (it picks a filing
+    \ system); SHIFT would stop the boot, CTRL make it a hard reset.
+.keys
+    JSR any_key : BNE keys
+    LDX #0 : JSR key_down : BNE keys
+    LDX #1 : JSR key_down : BNE keys
+    \ The keyboard as the OS left it (sound_write leaves port A all
+    \ outputs, and the reset's boot reads keys through bit 7): bit 7 an
+    \ input again, and auto-scan back on.
+    LDA #&7F : STA sysvia_ddra
+    LDA #&0B : STA sysvia_orb
+    LDX #OS_KEPT_LEN - 1
+.os
+    LDA mb_os,X : STA OS_KEPT,X
+    DEX : BPL os
+    LDA #0 : STA &0258          ; *FX 200: no memory clear on BREAK
+    LDA &028F : EOR #8 : STA &028F  ; BREAK boots without SHIFT, this once
+    LDA #1 : STA mb_flipped
+    JMP (&FFFC)
+}
+
+\ Note what a soft BREAK keeps, before the game's tables overwrite page 2.
+.keep_os
+{
+    LDX #OS_KEPT_LEN - 1
+.copy
+    LDA OS_KEPT,X : STA mb_os,X
+    DEX : BPL copy
+    LDA #MB_PLAYING : STA mb_reason
+    LDA #0 : STA mb_game        ; (what's at STATE is stale from now)
+    RTS
+}

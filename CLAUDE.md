@@ -36,8 +36,18 @@ Baron is expected at `../baron/build/src/baron` or on the PATH.
 
 ## Testing
 
-- `node tools/play.mjs '<script>' shots/prefix_ --disc build/ce2.ssd`: the
-  BBC. Steps: a number waits seconds, `f10` frames, `SPACE:tap`,
+- Three discs: `build/ce2.ssd` (the release: `!BOOT` runs `MENU`, the
+  front end), `build/test.ssd` (`-D DIRECT=1`: `MENU` goes straight into a
+  game; the tools use it, with `build/test.json`) and `build/viewer.ssd`.
+- `make front` (`tools/frontcheck.mjs`) drives the front end on the
+  release disc. `MENU` (`&1900-&27FF`) shares addresses with the game's
+  code: once the game has run, put breakpoints only on game routines
+  above `&2800`, and recognise `MENU` by its text in MODE 7's screen
+  memory. Not by the build stamp: the OS prints that too, echoing
+  `!BOOT`'s first line.
+
+- `node tools/play.mjs '<script>' shots/prefix_ [--disc build/test.ssd]`:
+  the BBC. Steps: a number waits seconds, `f10` frames, `SPACE:tap`,
   `LEFT:down`/`LEFT:up`, `!name` screenshots, `#name` dumps the screen,
   `?sym:n` peeks, `=sym:v1/v2` pokes, `@label` runs to a label. Symbols come
   from `build/symbols.json`.
@@ -54,8 +64,8 @@ bytes, so row r starts at `screen + r * &200`. In a byte, a pixel's high bit
 is in the top nibble and its low bit in the bottom one: colour 1 = `&0F`,
 2 = `&F0`, 3 = `&FF` for four pixels.
 
-`!BOOT` selects MODE 1 before the code loads; a MODE change later would
-clear `&3000-&7FFF`.
+The game sets MODE 1 in the hardware (`init_system`): `MENU` leaves the OS
+in MODE 7, and an OS mode change would clear the state block at `&5F00`.
 
 ## Checks
 

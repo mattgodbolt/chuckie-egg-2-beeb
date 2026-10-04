@@ -2,12 +2,13 @@
 \ System: the narrowed screen, vsync counting, keyboard.
 \ ***************************************************************************
 
-\ Cursor off, the screen narrowed to 256 x 192 at &5000 (decision 1), and
-\ the interrupts taken over (irq.6502). !BOOT has already selected MODE 1.
+\ MODE 1, set in the hardware (MENU leaves the OS in MODE 7, and an OS mode
+\ change would clear the game's state at STATE): the screen narrowed to
+\ 256 x 192 at &5000 (decision 1), blank until the first room is drawn
+\ (draw_room shows it); then the interrupts taken over (irq.6502).
 .init_system
 {
-    \ The cursor off, as VDU 23,1,0 would do it.
-    LDA #10 : STA crtc_reg : LDA #&20 : STA crtc_data
+    LDA #&D8 : STA ula_ctrl         ; MODE 1's pixels: 4 colours, 20 columns of bytes
     LDX #crtc_end - crtc_regs - 2
 .crtc
     LDA crtc_regs,X : STA crtc_reg
@@ -38,18 +39,26 @@
     RTS
 }
 
-\ Register, value pairs. R2 and R7 move with the narrower, shorter picture
-\ to keep its centre where MODE 1's is.
+\ Register, value pairs: MODE 1's, but R2 and R7 move with the narrower,
+\ shorter picture to keep its centre where MODE 1's is.
 .crtc_regs
+    EQUB 0, 127
+    EQUB 3, &28
+    EQUB 4, 38
+    EQUB 5, 0
+    EQUB 9, 7
+    EQUB 10, &20                ; the cursor off
+    EQUB 11, 8
     EQUB 1, SCREEN_COLS * 2
     EQUB 2, 98 - (80 - SCREEN_COLS * 2) / 2
     EQUB 6, SCREEN_ROWS
     EQUB 7, 34 - (32 - SCREEN_ROWS) / 2
     EQUB 12, HI(screen / 8)
     EQUB 13, LO(screen / 8)
-    \ No interlace: with it, VSync moves half a line in alternate fields, and
-    \ the palette split (irq.6502) has to land in a 32us blank.
-    EQUB 8, 0
+    \ Blank for now (display enable off). Then no interlace: with it, VSync
+    \ moves half a line in alternate fields, and the palette split
+    \ (irq.6502) has to land in a 32us blank.
+    EQUB 8, CRTC_BLANK
 .crtc_end
 
 \ Is a key down? X = internal key number. Z clear (BNE) if it is. Read

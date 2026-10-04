@@ -8,18 +8,21 @@ the BBC Micro, in 6502 assembly.
 That link boots [`chuckie-egg-2-wip.ssd`](chuckie-egg-2-wip.ssd), the latest
 work-in-progress disc, in [jsbeeb](https://github.com/mattgodbolt/jsbeeb).
 
-**Status: playable, no front end yet.** Harry, the monsters, the objects
-(taking, dropping, the vats, the toy and egg makers), the truck, the train
-and the lifts all run as the original's code does, checked pass by pass
-against the original, through all 120 rooms. Sound: the movement tick, the
-train's rumble and the life-lost tune. A new game starts at once and
-restarts after the last life; there's no menu, high-score table or game
-over screen yet. Keys are the Spectrum's for now: **O** left, **P** right,
-**Q** up, **A** down, **SPACE** jump, **1** take/drop. `*TYPE !BOOT` on the
-disc shows when it was built and from which commit.
+**Status: playable.** Harry, the monsters, the objects (taking, dropping,
+the vats, the toy and egg makers), the truck, the train and the lifts all run
+as the original's code does, checked pass by pass against the original,
+through all 120 rooms. Sound: the movement tick, the train's rumble and the
+life-lost tune. The front end is the original's, in MODE 7: instructions,
+the menu with the high-score table, **P** play, **R** redefine keys, **L**
+load and **S** save (one saved game, `CEGAME`, on the disc), **I** the
+instructions again. Keys in play are the Spectrum's until redefined:
+**O** left, **P** right, **Q** up, **A** down, **SPACE** jump, **1**
+take/drop, **S** save, **0** abort. The menu's bottom line (and `*TYPE
+!BOOT`) shows when the disc was built and from which commit.
 
-It needs a BBC Model B with 16K of sideways RAM (or a B+128 or a Master);
-the browser link above provides one.
+It needs a BBC Model B with 16K of sideways RAM; the browser link above
+provides one. (A Master runs the game, but its return to the menu after a
+game doesn't work yet.)
 
 See [docs/journal.md](docs/journal.md) for the story so far,
 [docs/research.md](docs/research.md) for what the original is, and

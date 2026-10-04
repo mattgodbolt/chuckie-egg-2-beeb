@@ -76,7 +76,6 @@
     ORA #&40 : STA room_ula+12,Y           ; beside 3
     RTS
 }
-.set_logical_t EQUB 0
 
 \ Fill the whole screen with zero (logical colour 0).
 .cls
@@ -132,7 +131,6 @@ ZA_AUTO1 diff               ; ink pixels EOR paper pixels
     DEY : BPL line
     RTS
 }
-.gbyte EQUB 0
 
 \ A byte of four pixels in logical colour 0-3.
 .colour_bytes

@@ -54,7 +54,6 @@ mon_type  = monster_table + &300
     CPY #0 : BNE scan
     RTS
 }
-.m_entry EQUB 0
 
 \ Monster X from table entry Y (&8B5D).
 .setup_monster
@@ -87,7 +86,6 @@ mon_type  = monster_table + &300
     LDA m_step : ASL A : STA m_dy,X
     JMP choose_frame
 }
-.m_step EQUB 0
 
 \ Monster X to its start cell, top line.
 .m_to_start
@@ -98,7 +96,6 @@ mon_type  = monster_table + &300
     RTS
 
 \ ChooseFrame (&8E70): base + (dx < 0 ? 4 : 0) + sub, halved when fast.
-.cf_x EQUB 0
 .choose_frame
 {
     LDA m_sub,X
@@ -133,7 +130,6 @@ mon_type  = monster_table + &300
 .done
     RTS
 }
-.m_cur EQUB 0
 
 \ Tick (&8C2C)
 .tick
@@ -205,9 +201,6 @@ mon_type  = monster_table + &300
     JMP vcheck
 }
 \ (the scratch the tick uses)
-.m_c EQUB 0
-.m_n EQUB 0
-.m_ropes EQUB 0
 
 \ m_w, m_h from monster X's frame; mon_p = type_map + its cell.
 ZA_AUTO2 mon_p
@@ -220,8 +213,6 @@ ZA_AUTO2 mframe
     LDA m_cell_lo,X : STA mon_p
     CLC : LDA m_cell_hi,X : ADC #HI(type_map) : STA mon_p+1
     RTS
-.m_w EQUB 0
-.m_h EQUB 0
 
 \ VCheck (&8CD3): up needs the row above clear, down the row below; each
 \ cell clear but for ropes, and unless free, at least one rope.
@@ -449,4 +440,3 @@ ZA_AUTO2 mframe
 .done
     RTS
 }
-.dl_i EQUB 0

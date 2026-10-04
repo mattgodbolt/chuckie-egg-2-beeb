@@ -58,12 +58,6 @@
     RTS
 }
 ZA_AUTO2 ds_p
-.ds_ink EQUB 0
-.ds_rows EQUB 0
-.ds_b EQUB 0                ; strips
-.ds_c EQUB 0                ; the first strip's frame
-.ds_d EQUB 0                ; column
-.ds_e EQUB 0                ; row
 
 \ Repaint B cells down from column D, row C from the maps (&8FA5).
 .restore_cells
@@ -79,9 +73,6 @@ ZA_AUTO2 ds_p
     DEC rc_b : BNE loop
     RTS
 }
-.rc_b EQUB 0
-.rc_c EQUB 0
-.rc_d EQUB 0
 
 \ Redraw `cell` from the tile and attribute maps.
 .redraw_cell
@@ -139,7 +130,6 @@ ZA_AUTO2 ds_p
     DEC ta_b : BNE step
     RTS
 }
-.ta_b EQUB 0
 
 \ Ten frames (&904E).
 .wait10
@@ -150,7 +140,6 @@ ZA_AUTO2 ds_p
     DEC w10_n : BNE loop
     RTS
 }
-.w10_n EQUB 0
 
 \ The truck driving off with the egg (&9059), the cells behind it repainted.
 .truck_leaves
@@ -290,7 +279,6 @@ ZA_AUTO2 ds_p
     RTS
 }
 ZA_AUTO2 lf
-.sl_row EQUB 0
 
 \ RunLift (&90F0), once a pass: move, erase, draw.
 .run_lift

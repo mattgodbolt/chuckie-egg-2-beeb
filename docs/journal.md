@@ -588,3 +588,56 @@ gathers any number of one ingredient (and makes jumps lower).
   the tiles 49 and the cell types 8. An escape is now an index into its
   field's vocabulary, 6, 6 and 3 bits: 7,770 bytes down to 7,289, plus
   109 bytes of tables. Sideways RAM: 461 bytes free.
+
+### A front end, and a way back to it
+
+- The original's front end didn't fit in the game: about 240 bytes of main
+  RAM were left, 460 of sideways RAM, and saving and loading need the OS
+  and the DFS, which the game has pushed out. So the front end is a
+  separate MODE 7 program, `MENU` (decision 13, Matt's MODE 7 loader idea
+  taken further), with the original's instructions, menu, high-score table,
+  name entry, redefine keys, and load and save, now to disc. Its text comes
+  from the tape (`tools/mkfront.py`) and sits where the Spectrum put it.
+- **The way back is a reset.** The game puts its state in a block at
+  `&5F00` and why it stopped in a mailbox in the sideways bank, puts back
+  what a soft BREAK keeps of OS page 2, flips start-up option bit 3 so that
+  BREAK boots without SHIFT, and jumps through the reset vector. `!BOOT`
+  runs `MENU`, which flips the bit back. Matt: "it's not too clever - it's
+  a great idea".
+- Getting the reset to come back took reading OS 1.20's reset code and
+  DFS 1.2's service handler in the emulator rather than guessing:
+  - junk in `&0258` (`*FX 200`) made the reset clear memory;
+  - junk in `&028F` chose the screen mode the reset selects: MODE 2, whose
+    screen at `&3000` wiped the state block;
+  - the BREAK intercept runs before the DFS claims the machine, so the
+    boot is better left to the DFS: flipping bit 3 of `&028F`, which a soft
+    BREAK keeps, makes it boot as SHIFT-BREAK does;
+  - the reset came up in the cassette system twice: once I blamed the
+    loader's `*TAPE` (removed anyway, as the game never calls the filing
+    system), once port A (the sound writes leave it all outputs); the real
+    cause was **a key held through the reset**, the abort key itself, which
+    makes the DFS decline the boot. The handoff now waits for every key to
+    be released, SHIFT and CTRL included.
+- Save in play: the game hands over, `MENU` writes the file and runs the
+  game again, which carries on from the block: Harry, the room, the
+  monsters, the things all as they were, and the RNG where the original's
+  cipher leaves it (`5D 00 07 B1`). The RNG also carries over between games
+  through the mailbox, as the original never reseeds.
+- RAM: the game's scratch variables moved into zero page `&90-&F2`, free
+  once the game owns the interrupts (decision 11), saving their bytes and a
+  byte on every access; the score, lives and carried name moved into
+  LowState so the state block is a few whole regions. Main RAM 251 bytes
+  free, sideways 172.
+- The display stays blank (CRTC R8) from start-up until the first room's
+  screen is cleared, and the game sets MODE 1 in the hardware: `MENU`
+  leaves the OS in MODE 7, and an OS mode change would clear the block.
+- `make front` (`tools/frontcheck.mjs`) drives it all on the release
+  disc: the instructions, redefining the keys (a repeat refused), playing
+  with them, saving and carrying on, aborting, loading, and game over with
+  a new high score and its name. The tools now use `build/test.ssd`, whose
+  `MENU` goes straight into a game. Bugs it found: two routines sharing
+  `MENU`'s zero page (a counter clobbered by the line printer), the ©
+  sign being DELETE to OSWRCH, and two test-timing traps of my own: a key
+  pressed while `MENU` was still starting, and "menu ready" judged by the
+  build stamp, which the OS also prints when it echoes `!BOOT`.
+- Not yet: the Master (its reset ends in "Acorn MOS" and hangs), a joystick.

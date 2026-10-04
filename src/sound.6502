@@ -22,6 +22,7 @@
 \ Everything silent, the noise set up and channel 2 clocking it, silent.
 .sound_init
 {
+    LDA #0 : STA noise_on
     LDX #sound_init_end - sound_init_bytes - 1
 .loop
     STX si_x
@@ -29,7 +30,6 @@
     LDX si_x : DEX : BPL loop
     RTS
 }
-.si_x EQUB 0
 .sound_init_bytes                   ; (written last first)
     EQUB &FF, &E7                   ; noise: silent; white, clocked by channel 2
     EQUB &34, &C1                   ; channel 2: N = 833, about 150Hz
@@ -59,8 +59,6 @@
     LDX dt_i : INX : INX : INX : CPX #death_notes_end - death_notes : BNE note
     LDA #&9F : JMP sound_write
 }
-.dt_i EQUB 0
-.dt_n EQUB 0
 \ Each note: the SN76489's N (125000 / f, at its 4MHz clock), and its length
 \ in 4ms steps (measured from the original: frontend.md 7.3).
 MACRO NOTE n, ms
@@ -111,8 +109,6 @@ ENDMACRO
     JSR wait_us
     LDA #&BF : JMP sound_write              ; off
 }
-.ms_l0 EQUB 0
-.ms_n EQUB 0
 
 \ The train's noise: on while the noise flag is (machines.6502 sets it
 \ once a pass), off when it isn't.
@@ -127,4 +123,3 @@ ENDMACRO
 .same
     RTS
 }
-.noise_on EQUB 0

@@ -1,0 +1,46 @@
+\ ***************************************************************************
+\ The front end's mailbox and the game's way back to it (decision 13).
+\
+\ MENU (menu.6502) is the front end: instructions, the menu, high scores,
+\ keys, loading and saving, all with the OS and the DFS alive. The game owns
+\ the machine, so it can't go back to them; it goes back by resetting the
+\ machine instead. Before the reset it puts its state in the block at
+\ STATE and why it stopped in the mailbox, puts back the OS bytes a soft
+\ BREAK keeps, and flips the start-up option that makes BREAK boot without
+\ SHIFT, so the reset runs !BOOT, which runs MENU.
+\
+\ The mailbox lives in the sideways bank: it survives the reset, the OS and
+\ the reloading of the game, and the bank is paged in while the game runs.
+\ MENU reaches it by paging the bank in itself. The code that uses it is in
+\ handoff.6502.
+\ ***************************************************************************
+
+\ The mailbox: set up in CE2DATA as loaded, kept for as long as the bank
+\ holds this build's data.
+.mailbox
+.mb_flipped  EQUB 0             ; the game flipped &028F bit 3 for its reset
+.mb_reason   EQUB MB_BOOT       ; why the game stopped (MB_ below)
+.mb_start    EQUB 0             ; 0: a new game; 1: resume from STATE
+.mb_game     EQUB 0             ; STATE holds a game with lives left
+.mb_score    SKIP 10            ; the score, when a game ended
+.mb_rng      EQUS "9090"        ; the RNG between games (the tape's seed)
+\ The keys, internal key numbers in the order of the game's control bits:
+\ jump, right, left, down, up, save, take/drop, abort. The Spectrum's to
+\ start with (decision 7): SPACE, P, O, A, Q, S, 1, 0.
+.mb_keys     EQUB 98, 55, 54, 65, 16, 81, 48, 39
+\ The high-score table (&A56B): ten names of 10 characters, each followed
+\ by 10 digits, most significant first; A&F's to start with.
+.mb_table
+FOR n = 1..10
+    EQUS "A&F......."
+    EQUB 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
+NEXT
+.mb_os       SKIP OS_KEPT_LEN   ; what a soft BREAK keeps of page 2
+.mailbox_end
+
+MB_BOOT     = 0                 ; first boot, or BREAK pressed in a game
+MB_OVER     = 1                 ; game over: check the score
+MB_ABORT    = 2                 ; the abort key
+MB_SAVE     = 3                 ; the save key: save, then carry on
+MB_PLAYING  = 4                 ; a game is running
+

@@ -1,10 +1,11 @@
 # CHUCKIE EGG 2 — BBC Micro port
 #
-#   make          assemble build/ce2.ssd
+#   make          assemble build/ce2.ssd, and build/test.ssd for the tools
 #   make run      boot it in jsbeeb and grab a screenshot
-#   make check    every check: make rooms and make passes
+#   make check    every check: make rooms, make passes and make front
 #   make rooms    check every room the BBC draws against the original's
 #   make passes   replay tests/scenarios.txt on both, compare Harry pass by pass
+#   make front    drive the front end: menu, keys, save, load, high scores
 #   make wip      rebuild from a clean tree and copy the disc to
 #                 chuckie-egg-2-wip.ssd, which the README links
 #   make fetch    download the Spectrum original into original/
@@ -16,6 +17,7 @@
 BARON   ?= $(firstword $(wildcard ../baron/build/src/baron) baron)
 PYTHON  ?= .venv/bin/python
 TARGET   = build/ce2.ssd
+TEST     = build/test.ssd
 SYMBOLS  = build/symbols.json
 SOURCES  = $(wildcard src/*.6502 src/data/*)
 WIP      = chuckie-egg-2-wip.ssd
@@ -23,9 +25,9 @@ WIP      = chuckie-egg-2-wip.ssd
 # commit, with + if the tree (the WIP disc itself aside) had changes.
 BUILD   := $(shell date -u '+%Y-%m-%d %H:%M UTC') $(shell git rev-parse --short HEAD 2>/dev/null || echo NOGIT)$(shell git diff --quiet HEAD -- . ':(exclude)$(WIP)' 2>/dev/null || echo +)
 
-.PHONY: all run check rooms passes wip fetch zx disasm venv clean
+.PHONY: all run check rooms passes front wip fetch zx disasm venv clean
 
-all: $(TARGET)
+all: $(TARGET) $(TEST)
 
 # The symbol dump is how the test tools find the game's variables.
 $(TARGET): $(SOURCES) | build
@@ -37,11 +39,19 @@ build:
 	mkdir -p build
 
 run: $(TARGET)
-	node tools/play.mjs '3,!run' shots/ --disc $(TARGET)
+	node tools/play.mjs '6,!run' shots/ --disc $(TARGET)
 
-check: rooms passes
+check: rooms passes front
 
-passes: $(TARGET) build/ce2.z80
+front: $(TARGET)
+	node tools/frontcheck.mjs
+
+# The tests' disc: MENU built with -D DIRECT=1 goes straight into a game,
+# so the tools reach the main loop without the front end.
+$(TEST): $(SOURCES) | build
+	$(BARON) -D DIRECT=1 -D 'BUILD="$(BUILD) test"' -o $(TEST) --title CHUCKIE2 --opt 3 --symbols build/test.json src/main.6502
+
+passes: $(TEST) build/ce2.z80
 	tools/passcheck.sh
 
 # The room viewer: the same program with -D VIEWER=1, which steps through

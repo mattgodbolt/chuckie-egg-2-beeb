@@ -29,7 +29,8 @@ const inputs = (args[0] ?? "").split(",").filter(Boolean).map((part) => {
 });
 const passes = parseInt(args[1] ?? "100");
 
-const b = await startBeeb({ disc: "build/ce2.ssd" });
+// The tests' disc (make build/test.ssd): straight into a game, no front end.
+const b = await startBeeb({ disc: "build/test.ssd", symbols: "build/test.json" });
 const held = new Set();
 const log = [];
 try {

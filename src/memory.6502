@@ -104,6 +104,9 @@ NM = 5
 \ Things drawn in this room since it was entered (for collide.6502).
 .on_screen  SKIP 32         ; a bit per thing
 .noise_flag SKIP 1          ; the train's noise on (&91B5)
+.score      SKIP 10         ; the score's digits, most significant first (&A445)
+.lives      SKIP 1          ; (&A3FA)
+.carrying_name SKIP 1       ; the carried thing's name in the status bar
 .truck_strip SKIP 1         ; the truck strip repainted last (&91B6)
 \ The lift (&A52C): type (0 none, 1 rising bar, 2 platform), start, place.
 .l_type     SKIP 1
@@ -131,3 +134,102 @@ SECTION Maps, org = &0400, guard = &0D00
 .tile_map   SKIP 768        ; the tile drawn there; bit 7 set for text
 .type_map   SKIP 768        ; the cell type: what Harry can stand on, climb...
 ENDSECTION
+
+\ Scratch variables in zero page &90-&FB: the OS's, but the game makes no
+\ OS calls once it owns the interrupts (decision 11), and the OS's IRQ entry
+\ only uses &FC. Nothing here is used before install_irq.
+SECTION Scratch, org = &90, guard = &FC
+\ (irq.6502)
+.room_ula      SKIP 16
+\ (screen.6502)
+.set_logical_t SKIP 1
+.gbyte         SKIP 1
+\ (rooms.6502)
+.back_cells_n  SKIP 1
+\ (status.6502)
+.vb_value      SKIP 1
+.vb_n          SKIP 1
+.status_i      SKIP 1
+.status_x      SKIP 1
+\ (unpack.6502)
+.unpack_pick   SKIP 1
+.rec_len       SKIP 1
+.rec_pos       SKIP 1
+.rec_buf       SKIP 18          ; the longest record is 17 bytes, a text
+.unpack_capped SKIP 1
+.unpack_vert   SKIP 1
+\ (harry.6502)
+.harry_vec     SKIP 2
+\ (monsters.6502)
+.m_entry       SKIP 1
+.m_step        SKIP 1
+.cf_x          SKIP 1
+.m_cur         SKIP 1
+.m_c           SKIP 1
+.m_n           SKIP 1
+.m_ropes       SKIP 1
+.m_w           SKIP 1
+.m_h           SKIP 1
+.dl_i          SKIP 1
+\ (collide.6502)
+.ccol          SKIP 1
+.c_m           SKIP 1          ; who_was_hit's monster
+.box_l         SKIP 1
+.box_r         SKIP 1
+.box_t         SKIP 1
+.box_b         SKIP 1
+\ (objects.6502)
+.tc_x          SKIP 1
+.tl_t          SKIP 1
+.tl_kind       SKIP 1
+.bonus_n       SKIP 1
+.drop_x        SKIP 1
+.drop_row      SKIP 1
+.drop_col      SKIP 1
+.drop_g        SKIP 1
+.drop_g2       SKIP 1
+.old_row       SKIP 1
+.old_col       SKIP 1
+.dv_g          SKIP 1
+.wl_x          SKIP 1
+.ei_n          SKIP 1
+\ (machines.6502)
+.ds_ink        SKIP 1
+.ds_rows       SKIP 1
+.ds_b          SKIP 1          ; strips
+.ds_c          SKIP 1          ; the first strip's frame
+.ds_d          SKIP 1          ; column
+.ds_e          SKIP 1          ; row
+.rc_b          SKIP 1
+.rc_c          SKIP 1
+.rc_d          SKIP 1
+.ta_b          SKIP 1
+.w10_n         SKIP 1
+.sl_row        SKIP 1
+\ (game.6502)
+.ed_n          SKIP 1
+.keys_i        SKIP 1
+.save_armed    SKIP 1
+\ (sound.6502)
+.si_x          SKIP 1
+.dt_i          SKIP 1
+.dt_n          SKIP 1
+.ms_l0         SKIP 1
+.ms_n          SKIP 1
+.noise_on      SKIP 1
+ENDSECTION
+
+\ The game's state on its way to and from the front end (state.6502,
+\ menu.6502): a saved game is the 256 bytes from SAVE_HDR (MENU's header,
+\ the keys and the high-score table), then the regions at STATE. Above
+\ anything CE2 loads over (main.6502 checks) and below MODE 7's screen,
+\ so it survives the reset, MENU and the game's reload.
+SAVE_HDR   = &5F00          ; "CE2SAVE" and the build stamp, 40 bytes
+SAVE_KEYS  = &5F28
+SAVE_TABLE = &5F30          ; 200 bytes
+STATE      = &6000
+
+\ What a soft BREAK keeps of the OS's page 2 (the reset code clears and
+\ resets the rest), including the start-up options at &028F.
+OS_KEPT     = &027F
+OS_KEPT_LEN = &1D

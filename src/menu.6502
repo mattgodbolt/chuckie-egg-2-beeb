@@ -1,0 +1,651 @@
+\ ***************************************************************************
+\ MENU: the front end (decision 13), in MODE 7, with the OS and the DFS
+\ alive. !BOOT runs it at start-up and again after every game, because the
+\ game comes back by resetting the machine (state.6502).
+\
+\ It puts CE2DATA in a sideways RAM bank (decision 8) unless this build's
+\ data is there already, then reads the mailbox in that bank: why the game
+\ stopped, its score, the keys and the high-score table. Then the
+\ original's front end (docs/research/frontend.md sections 1-5): the
+\ instructions on first boot, the menu with the high scores, a new high
+\ score's name, redefining the keys, and loading and saving a game, here to
+\ disc. Its text is the original's (tools/mkfront.py, data/front.6502),
+\ printed where the Spectrum printed it, four columns in so that MODE 7's
+\ colour codes fit.
+\ ***************************************************************************
+
+\ The mailbox, copied into MENU's memory while it runs.
+MAILBOX_LEN = mailbox_end - mailbox
+M_FLIPPED   = mbox + (mb_flipped - mailbox)
+M_REASON    = mbox + (mb_reason - mailbox)
+M_START     = mbox + (mb_start - mailbox)
+M_GAME      = mbox + (mb_game - mailbox)
+M_SCORE     = mbox + (mb_score - mailbox)
+M_RNG       = mbox + (mb_rng - mailbox)
+M_KEYS      = mbox + (mb_keys - mailbox)
+M_TABLE     = mbox + (mb_table - mailbox)
+
+\ Where a game's lives are in the state block: its regions start with the
+\ fixed zero page, then LowState (state.6502).
+STATE_LIVES = STATE + (&90 - ZP_FIXED) + (lives - &0D00)
+STATE_END   = STATE + (&90 - ZP_FIXED) + 256 + 1024 + 256 + 121 + 201
+
+mz_ptr  = &70               ; MENU's zero page: the OS leaves &70-&8F to us
+mz_ptr2 = &72
+mz_n    = &74
+mz_i    = &75
+mz_k    = &76
+mz_e    = &77               ; the new high score's entry
+mz_r    = &78               ; redefine's prompt (print_lines uses mz_i)
+
+.menu
+{
+    LDA #LO(menu_error) : STA brkv
+    LDA #HI(menu_error) : STA brkv+1
+    TSX : STX menu_sp
+    \ !BOOT is still open as the *EXEC file: close it now, or the first key
+    \ read finds its end and closes it then, losing a key pressed meanwhile.
+    LDX #LO(close_exec) : LDY #HI(close_exec) : JSR oscli
+    LDA #229 : LDX #1 : LDY #0 : JSR osbyte    ; ESCAPE is an ordinary key
+    JSR mode7
+    JSR find_bank
+    JSR get_mailbox
+    \ Put back the BREAK option the game flipped for its reset.
+    LDA M_FLIPPED : BEQ unflipped
+    LDA #0 : STA M_FLIPPED
+    LDA &028F : EOR #8 : STA &028F
+.unflipped
+    LDA M_REASON : LDX #MB_BOOT : STX M_REASON
+IF DEFINED(DIRECT) OR DEFINED(VIEWER)
+    JMP play                    ; the tests' discs: straight into the program
+ENDIF
+    CMP #MB_OVER : BNE not_over
+    JSR hiscore_check
+    JMP main_menu
+.not_over
+    CMP #MB_SAVE : BNE not_save
+    JSR save_game
+    LDA #1 : STA M_START
+    JMP run_game                ; and carry on playing
+.not_save
+    CMP #MB_BOOT : BNE main_menu    ; aborted, or BREAK pressed in a game
+    JSR instructions
+}
+.main_menu
+{
+    LDX menu_sp : TXS
+    JSR draw_menu
+.key
+    JSR get_key
+    CMP #'P' : BEQ play
+    CMP #'R' : BNE not_r
+    JSR redefine : JMP main_menu
+.not_r
+    CMP #'L' : BNE not_l
+    JMP load_game
+.not_l
+    CMP #'S' : BNE not_s
+    JSR save_game : JMP main_menu
+.not_s
+    CMP #'I' : BNE key
+    JSR instructions : JMP main_menu
+}
+.play
+    LDA #0 : STA M_START
+.run_game
+{
+    JSR put_mailbox
+    LDX #LO(loading) : LDY #HI(loading) : JSR print_lines
+    LDX #LO(run_ce2) : LDY #HI(run_ce2) : JMP oscli
+}
+.run_ce2 EQUS "RUN CE2", 13
+.close_exec EQUS "EXEC", 13
+.loading
+    EQUB 24, 12, 3, 0 : EQUS "LOADING..." : EQUB 0
+    EQUB &FF
+
+\ A disc error: say what, then back to the menu.
+.menu_error
+{
+    LDX menu_sp : TXS
+    LDA #31 : JSR oswrch : LDA #0 : JSR oswrch : LDA #24 : JSR oswrch
+    LDA #129 : JSR oswrch           ; red
+    LDY #1
+.msg
+    LDA (&FD),Y : BEQ done
+    JSR oswrch
+    INY : BNE msg
+.done
+    JSR get_key
+    JMP main_menu
+}
+
+\ --- The sideways bank ------------------------------------------------------
+
+\ This build's data in a bank already (the game's reset leaves it there)?
+\ If not, CE2DATA into the highest free one: no ROM found there at
+\ start-up, and a byte at &8000 can be flipped.
+.find_bank
+{
+    SEI
+    LDX #15
+.try
+    LDA romtypes,X : BNE next
+    STX romsel
+    LDY #data_id_end - data_id - 1
+.compare
+    LDA &8000,Y : CMP data_id,Y : BNE next
+    DEY : BPL compare
+    STX data_bank
+    JMP page_back
+.next
+    DEX : BPL try
+    LDA romshad : STA romsel
+    CLI
+    LDX #LO(load_data) : LDY #HI(load_data) : JSR oscli
+    SEI
+    LDX #15
+.free
+    LDA romtypes,X : BNE not_free
+    STX romsel
+    LDA &8000 : EOR #&FF : STA &8000
+    CMP &8000 : BEQ found
+.not_free
+    DEX : BPL free
+    LDA romshad : STA romsel
+    CLI
+    LDX #LO(no_ram) : LDY #HI(no_ram) : JSR print_lines
+.stop
+    JMP stop
+.found
+    EOR #&FF : STA &8000        ; put the byte back
+    STX data_bank
+    LDA #&30 : STA mz_ptr+1 : LDA #&80 : STA mz_ptr2+1
+    LDY #0 : STY mz_ptr : STY mz_ptr2
+.copy
+    LDA (mz_ptr),Y : STA (mz_ptr2),Y
+    INY : BNE copy
+    INC mz_ptr+1 : INC mz_ptr2+1
+    LDA mz_ptr2+1 : CMP #&C0 : BNE copy
+}
+.page_back
+    LDA romshad : STA romsel
+    CLI
+    RTS
+.load_data EQUS "LOAD CE2DATA 3000", 13
+.no_ram
+    EQUB 10, 0, 7, 0 : EQUS "CHUCKIE EGG 2 needs 16K of" : EQUB 0
+    EQUB 11, 0, 7, 0 : EQUS "sideways RAM, and none was found." : EQUB 0
+    EQUB &FF
+.data_id EQUS DATA_MAGIC, build_stamp
+.data_id_end
+
+\ The mailbox from the bank into mbox, and back.
+.get_mailbox
+{
+    SEI
+    LDA data_bank : STA romsel
+    LDX #MAILBOX_LEN - 1
+.copy
+    LDA mailbox,X : STA mbox,X
+    DEX : CPX #&FF : BNE copy
+    JMP page_back
+}
+.put_mailbox
+{
+    SEI
+    LDA data_bank : STA romsel
+    LDX #MAILBOX_LEN - 1
+.copy
+    LDA mbox,X : STA mailbox,X
+    DEX : CPX #&FF : BNE copy
+    JMP page_back
+}
+
+\ --- Text -------------------------------------------------------------------
+
+.mode7
+{
+    LDX #0
+.vdu
+    LDA mode7_vdu,X : JSR oswrch
+    INX : CPX #mode7_end - mode7_vdu : BNE vdu
+    RTS
+}
+.mode7_vdu
+    EQUB 22, 7                  ; MODE 7
+    EQUB 23, 1, 0, 0, 0, 0, 0, 0, 0, 0     ; no cursor
+.mode7_end
+
+\ Teletext's colour codes for the Spectrum's inks (black ink shows white).
+.teletext_colour
+    EQUB 135, 132, 129, 133, 130, 134, 131, 135
+
+\ Print the lines at YX (data/front.6502's format): each where the
+\ Spectrum had it, four columns right, after its colour code; a line with
+\ a paper colour sets the background first and puts black back after.
+.print_lines
+{
+    STX mz_ptr : STY mz_ptr+1
+.line
+    LDY #0 : LDA (mz_ptr),Y : CMP #&FF : BEQ done
+    STA mz_k                    ; row
+    INY : LDA (mz_ptr),Y : CLC : ADC #3 : STA mz_n  ; column of the ink's code
+    INY : LDA (mz_ptr),Y : STA mz_i                 ; ink
+    INY : LDA (mz_ptr),Y                            ; paper
+    BEQ plain
+    TAX
+    LDA mz_n : SEC : SBC #2 : JSR tab
+    LDA teletext_colour,X : JSR oswrch
+    LDA #157 : JSR oswrch       ; new background
+    JMP ink
+.plain
+    LDA mz_n : JSR tab
+.ink
+    LDX mz_i : LDA teletext_colour,X : JSR oswrch
+    LDY #4
+.text
+    LDA (mz_ptr),Y : BEQ end
+    JSR oswrch
+    INY : BNE text
+.end
+    LDY #3 : LDA (mz_ptr),Y : BEQ next
+    LDA #156 : JSR oswrch       ; black background
+.next
+    \ Past the text's 0.
+    LDY #4
+.skip
+    LDA (mz_ptr),Y : INY : CMP #0 : BNE skip
+    TYA : CLC : ADC mz_ptr : STA mz_ptr
+    BCC line
+    INC mz_ptr+1 : JMP line
+.done
+    RTS
+}
+
+\ Move the cursor to column A, row mz_k.
+.tab
+    PHA
+    LDA #31 : JSR oswrch
+    PLA : JSR oswrch
+    LDA mz_k : JMP oswrch
+
+\ A key from the keyboard, waiting for a new press; letters as capitals.
+.get_key
+{
+    LDA #21 : LDX #0 : JSR osbyte       ; nothing left over in the buffer
+    JSR osrdch
+    CMP #'a' : BCC done
+    CMP #'z' + 1 : BCS done
+    AND #&DF
+.done
+    RTS
+}
+
+.m_cls
+    LDA #12 : JMP oswrch
+
+\ --- The instructions (&60C2) -------------------------------------------------
+
+\ The title page (without the original's printout, for the ZX Printer), then
+\ the two pages, a key between each.
+.instructions
+    JSR m_cls
+    LDX #LO(instr_title) : LDY #HI(instr_title) : JSR print_lines
+    JSR get_key
+    JSR m_cls
+    LDX #LO(instr_page1) : LDY #HI(instr_page1) : JSR print_lines
+    JSR get_key
+    JSR m_cls
+    LDX #LO(instr_page2) : LDY #HI(instr_page2) : JSR print_lines
+    JMP get_key
+
+\ --- The menu (&9BDC) and the high scores (&9F37) -----------------------------
+
+.draw_menu
+    JSR m_cls
+    JSR draw_hiscores
+    LDX #LO(menu_text) : LDY #HI(menu_text) : JSR print_lines
+    LDX #LO(menu_extra) : LDY #HI(menu_extra) : JMP print_lines
+\ The original's row 23 says JOYSTICK COMPATIBLE; this one hasn't a joystick
+\ yet, but it has the instructions again, and its build.
+.menu_extra
+    EQUB 23, 2, 7, 0 : EQUS "I TO SEE THE INSTRUCTIONS" : EQUB 0
+    EQUB 24, 2, 1, 0 : EQUS build_stamp : EQUB 0
+    EQUB &FF
+
+\ Rows 0-13: the title, then the table between two bars, yellow on blue.
+.draw_hiscores
+{
+    LDX #LO(hiscore_title) : LDY #HI(hiscore_title) : JSR print_lines
+    LDX #LO(hiscore_bar) : LDY #HI(hiscore_bar) : JSR print_lines
+    LDA #0 : STA mz_i
+.entry
+    JSR draw_entry
+    INC mz_i : LDA mz_i : CMP #10 : BNE entry
+    RTS
+}
+.hiscore_bar
+    EQUB 13, 5, 6, 1 : EQUS "                        " : EQUB 0
+    EQUB &FF
+
+\ Entry mz_i on row 3 + mz_i: " " name ".." 10 digits " ".
+.draw_entry
+{
+    LDA mz_i : CLC : ADC #3 : STA mz_k
+    LDA #6 : JSR tab
+    LDA #132 : JSR oswrch : LDA #157 : JSR oswrch : LDA #131 : JSR oswrch
+    LDA #' ' : JSR oswrch
+    JSR entry_ptr
+    LDY #0
+.name
+    LDA (mz_ptr2),Y : JSR oswrch
+    INY : CPY #10 : BNE name
+    LDA #'.' : JSR oswrch : JSR oswrch
+.digits
+    LDA (mz_ptr2),Y : ORA #'0' : JSR oswrch
+    INY : CPY #20 : BNE digits
+    LDA #' ' : JSR oswrch
+    LDA #156 : JMP oswrch
+}
+
+\ mz_ptr2 = the table's entry mz_i.
+.entry_ptr
+{
+    LDA #LO(M_TABLE) : STA mz_ptr2
+    LDA #HI(M_TABLE) : STA mz_ptr2+1
+    LDX mz_i : BEQ done
+.add
+    CLC : LDA mz_ptr2 : ADC #20 : STA mz_ptr2
+    BCC next
+    INC mz_ptr2+1
+.next
+    DEX : BNE add
+.done
+    RTS
+}
+
+\ HISCORE_CHECK (&9E2D): the score goes in above the first entry it beats
+\ (a tie goes below), the rest move down, and the name is typed in.
+.hiscore_check
+{
+    LDA #0 : STA mz_i
+.entry
+    JSR entry_ptr
+    LDY #10
+    LDX #0
+.digit
+    LDA M_SCORE,X : CMP (mz_ptr2),Y : BCC lower : BNE higher
+    INY : INX : CPX #10 : BNE digit
+.lower
+    INC mz_i : LDA mz_i : CMP #10 : BNE entry
+    RTS                         ; not on the table
+.higher
+    \ Entries mz_i..8 down one, from the bottom (&9E65).
+    LDA mz_i : CMP #9 : BEQ moved
+    ASL A : ASL A : STA mz_n
+    ASL A : ASL A : CLC : ADC mz_n : STA mz_n   ; 20 * mz_i
+    LDX #179
+.shuffle
+    LDA M_TABLE,X : STA M_TABLE+20,X
+    CPX mz_n : BEQ moved
+    DEX : JMP shuffle
+.moved
+    \ The score in, the name ten dots.
+    LDA mz_i : STA mz_e         ; (drawing the table uses mz_i)
+    JSR entry_ptr
+    LDY #19 : LDX #9
+.put_score
+    LDA M_SCORE,X : STA (mz_ptr2),Y
+    DEY : DEX : BPL put_score
+    LDA #'.'
+.dots
+    STA (mz_ptr2),Y
+    DEY : BPL dots
+    JSR m_cls
+    JSR draw_hiscores
+    LDX #LO(enter_name) : LDY #HI(enter_name) : JSR print_lines
+    JMP name_entry
+}
+\ The name, typed at its entry: DELETE goes back a column and puts the dot
+\ back, RETURN ends it, up to ten characters.
+.name_entry
+{
+    LDA #0 : STA mz_n           ; characters typed
+.key
+    LDA mz_e : STA mz_i
+    JSR entry_ptr
+    LDA mz_i : CLC : ADC #3 : STA mz_k
+    LDA mz_n : CLC : ADC #10 : JSR tab
+    LDA #21 : LDX #0 : JSR osbyte
+    JSR osrdch
+    CMP #13 : BEQ done
+    CMP #127 : BNE not_delete
+    LDA mz_n : BEQ key
+    DEC mz_n
+    LDY mz_n : LDA #'.' : STA (mz_ptr2),Y
+    LDA mz_n : CLC : ADC #10 : JSR tab
+    LDA #'.' : JSR oswrch
+    JMP key
+.not_delete
+    CMP #' ' : BCC key
+    CMP #127 : BCS key
+    LDY mz_n : CPY #10 : BCS key
+    STA (mz_ptr2),Y
+    JSR oswrch
+    INC mz_n
+    JMP key
+.done
+    RTS
+}
+
+\ --- Redefining the keys (&9CF8) ----------------------------------------------
+
+\ The prompts in the original's order, and where each key goes in the
+\ game's order (jump, right, left, down, up, save, take/drop, abort).
+.redefine_slot EQUB 4, 3, 2, 1, 0, 6, 7, 5
+.redefine_prompt
+    EQUW press_0, press_1, press_2, press_3, press_4, press_5, press_6, press_7
+
+.redefine
+{
+    JSR m_cls
+    LDX #LO(redefine_title) : LDY #HI(redefine_title) : JSR print_lines
+    LDX #7
+    LDA #&FF
+.clear
+    STA M_KEYS,X
+    DEX : BPL clear
+    LDA #0 : STA mz_r
+.prompt
+    LDA mz_r : ASL A : TAX
+    LDY redefine_prompt+1,X : LDA redefine_prompt,X : TAX
+    JSR print_lines
+    \ Wait 14 frames, then for a key that isn't taken (CAPTURE_KEY, &9FEB).
+.capture
+    LDX #14
+.frames
+    TXA : PHA : LDA #19 : JSR osbyte : PLA : TAX
+    DEX : BNE frames
+    JSR scan_key : BMI capture
+    LDY #7
+.taken
+    CMP M_KEYS,Y : BEQ capture
+    DEY : BPL taken
+    LDY mz_r : LDX redefine_slot,Y : STA M_KEYS,X
+    PHA
+    LDA mz_r : ASL A : CLC : ADC #7 : STA mz_k
+    LDA #28 : JSR tab
+    LDA #134 : JSR oswrch       ; cyan
+    PLA : JSR print_key_name
+    INC mz_r : LDA mz_r : CMP #8 : BNE prompt
+    \ (The original waits 28 frames, then goes back to the menu.)
+    LDX #28
+.wait
+    TXA : PHA : LDA #19 : JSR osbyte : PLA : TAX
+    DEX : BNE wait
+    RTS
+}
+
+\ The internal number of a key that's down (SHIFT and CTRL too), or &FF.
+.scan_key
+{
+    LDA #121 : LDX #16 : JSR osbyte     ; the keys from Q up
+    TXA : BPL done
+    LDA #121 : LDX #&80 : JSR osbyte    ; SHIFT
+    LDA #0 : CPX #0 : BMI done
+    LDA #121 : LDX #&81 : JSR osbyte    ; CTRL
+    LDA #1 : CPX #0 : BMI done
+    LDA #&FF
+.done
+    RTS
+}
+
+\ Print the name of key A (an internal key number).
+.print_key_name
+{
+    TAX
+    LDA key_names,X : BMI special
+    JMP oswrch
+.special
+    AND #&7F : TAX
+    LDY #0
+.find
+    DEX : BMI found
+.skip
+    LDA special_names,Y : INY : CMP #0 : BNE skip
+    JMP find
+.found
+    LDA special_names,Y : BEQ done
+    JSR oswrch
+    INY : BNE found
+.done
+    RTS
+}
+
+\ Each internal key number's name: a character, or &80 + n for the nth
+\ special name.
+.key_names
+    EQUB &80, &81, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
+    EQUS "Q345", &82, "8", &83, "-^", &84, 0, 0, 0, 0, 0, 0
+    EQUB &85 : EQUS "WET7I90_" : EQUB &86, 0, 0, 0, 0, 0, 0
+    EQUS "12DR6UOP[" : EQUB &87, 0, 0, 0, 0, 0, 0
+    EQUB &88 : EQUS "AXFYJK@:" : EQUB &89, 0, 0, 0, 0, 0, 0
+    EQUB &8A : EQUS "SCGHNL;]" : EQUB &8B, 0, 0, 0, 0, 0, 0
+    EQUB &8C : EQUS "Z" : EQUB &8D : EQUS "VBM,./" : EQUB &8E, 0, 0, 0, 0, 0, 0
+    EQUB &8F, &90, &91, &92, &93, &94, &95, &96, 92, &97, 0, 0, 0, 0, 0, 0
+.special_names
+    EQUS "SHIFT", 0, "CTRL", 0, "f4", 0, "f7", 0, "LEFT", 0
+    EQUS "f0", 0, "DOWN", 0, "UP", 0, "CAPS LOCK", 0, "RETURN", 0
+    EQUS "SHIFT LOCK", 0, "DELETE", 0, "TAB", 0, "SPACE", 0, "COPY", 0
+    EQUS "ESCAPE", 0, "f1", 0, "f2", 0, "f3", 0, "f5", 0, "f6", 0, "f8", 0
+    EQUS "f9", 0, "RIGHT", 0
+
+\ --- Loading and saving (&A16E, &A21B) ----------------------------------------
+
+\ A saved game is everything, as the original's is: a header, the keys,
+\ the high scores, then the game at STATE (with no lives if there isn't
+\ one). Saving or loading leaves the RNG where the original's cipher does.
+.save_game
+{
+    LDX #LO(saving) : LDY #HI(saving) : JSR print_lines
+    JSR header_keys_table
+    LDA M_GAME : BNE game
+    LDA #0 : STA STATE_LIVES
+.game
+    LDX #17
+.block
+    LDA save_block,X : STA osfile_block,X
+    DEX : BPL block
+    LDA #0 : LDX #LO(osfile_block) : LDY #HI(osfile_block) : JSR osfile
+    JMP cipher_rng
+}
+.saving
+    EQUB 24, 12, 3, 0 : EQUS "SAVING..." : EQUB 0
+    EQUB &FF
+
+.load_game
+{
+    LDX #LO(loading_game) : LDY #HI(loading_game) : JSR print_lines
+    LDX #17
+.block
+    LDA load_block,X : STA osfile_block,X
+    DEX : BPL block
+    LDA #&FF : LDX #LO(osfile_block) : LDY #HI(osfile_block) : JSR osfile
+    \ This build's?
+    LDX #save_id_end - save_id - 1
+.check
+    LDA SAVE_HDR,X : CMP save_id,X : BNE wrong
+    DEX : BPL check
+    LDX #7
+.keys
+    LDA SAVE_KEYS,X : STA M_KEYS,X
+    DEX : BPL keys
+    LDX #199
+.table
+    LDA SAVE_TABLE,X : STA M_TABLE,X
+    DEX : CPX #&FF : BNE table
+    JSR cipher_rng
+    LDA #0 : STA M_GAME
+    LDA STATE_LIVES : BEQ menu_again    ; only the table and the keys
+    INC M_GAME
+    LDA #1 : STA M_START
+    JMP run_game
+.wrong
+    LDX #LO(wrong_save) : LDY #HI(wrong_save) : JSR print_lines
+    JSR get_key
+.menu_again
+    JMP main_menu
+}
+.loading_game
+    EQUB 24, 12, 3, 0 : EQUS "LOADING..." : EQUB 0
+    EQUB &FF
+.wrong_save
+    EQUB 24, 0, 1, 0 : EQUS "SAVED BY ANOTHER BUILD: PRESS A KEY" : EQUB 0
+    EQUB &FF
+
+\ The header, keys and table above STATE, ready to save.
+.header_keys_table
+{
+    LDX #save_id_end - save_id - 1
+.id
+    LDA save_id,X : STA SAVE_HDR,X
+    DEX : BPL id
+    LDX #7
+.keys
+    LDA M_KEYS,X : STA SAVE_KEYS,X
+    DEX : BPL keys
+    LDX #199
+.table
+    LDA M_TABLE,X : STA SAVE_TABLE,X
+    DEX : CPX #&FF : BNE table
+    RTS
+}
+.save_id EQUS "CE2SAVE", build_stamp
+.save_id_end
+
+.cipher_rng
+{
+    LDX #3
+.copy
+    LDA cipher_state,X : STA M_RNG,X
+    DEX : BPL copy
+    RTS
+}
+.cipher_state EQUB &5D, &00, &07, &B1
+
+.save_name EQUS "CEGAME", 13
+\ OSFILE's blocks: the name, then load, exec, start and end (save) or the
+\ load address with exec's low byte 0 to use it (load).
+.save_block
+    EQUW save_name
+    EQUD &FFFF0000 OR SAVE_HDR, &FFFF0000 OR SAVE_HDR
+    EQUD &FFFF0000 OR SAVE_HDR, &FFFF0000 OR STATE_END
+.load_block
+    EQUW save_name
+    EQUD &FFFF0000 OR SAVE_HDR, 0, 0, 0
+
+.menu_sp    EQUB 0
+.data_bank  EQUB 0
+.osfile_block SKIP 18
+.mbox       SKIP MAILBOX_LEN

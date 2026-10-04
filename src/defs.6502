@@ -17,6 +17,12 @@ crtc_data  = &FE01
 ula_pal    = &FE21          ; write (index << 4) | (physical EOR 7)
 sysvia_ifr = &FE4D
 sysvia_ier = &FE4E          ; write bit 7 clear to disable the bits set
+usrvia_t1cl = &FE64         ; reading it acknowledges T1
+usrvia_t1ch = &FE65         ; writing it starts the count
+usrvia_acr = &FE6B
+usrvia_ifr = &FE6D
+usrvia_ier = &FE6E
+SL         = 64             ; a scanline: 64 us, 64 ticks of a VIA timer
 irq1v      = &0204
 mos_font   = &C000          ; OS 1.20's font, characters 32-127
 

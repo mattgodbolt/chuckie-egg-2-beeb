@@ -203,3 +203,26 @@ its red and yellow brickwork comes out magenta and yellow.
 - `docs/memory-map.md` started: with the rooms packed, 5,103 bytes are free
   under the screen. The original's code is ~14K and its graphics ~8K, so
   the memory budget is the next problem.
+
+### The interrupts, and a palette split for the status bar
+
+- The status bar is white text on black; many rooms have neither in their
+  four colours. So rows 0-1 get their own palette: `src/irq.6502` now owns
+  IRQ1V outright (after the port kit's `lib/irq.6502`: both VIAs silenced
+  but VSync and the User VIA's T1). At VSync it writes the status bar's
+  palette and starts T1; when T1 fires it writes the room's: logical 1-3
+  first, during the last scanline of row 1 (blank in an upper-case font),
+  then logical 0, aimed at the horizontal blank before row 2.
+- **Measured, by making the status paper red** and finding where the red
+  stops in jsbeeb's screenshots (4 screen pixels per scanline here). First
+  try: 188 pixels into line 14. MODE 1 runs with interlace sync on, which
+  moves VSync half a line in alternate fields — a 32 µs swing against a
+  32 µs blank — so R8 is now 0, as `*TV 0,1` would set. After that the
+  switch point held to within 8 pixels (1 µs, the interrupt latency)
+  frame to frame. Retuned: `SPLIT_T1 = 83 * SL - 2 + 46` puts the red on
+  exactly lines 0-15 in every frame sampled, with the logical-0 writes
+  about 4.5 µs into the blank and done 11.5 µs before row 2.
+- jsbeeb only. The port kit's experience is that raster timing wants
+  checking on a second emulator (b2) and on hardware; noted for later.
+- With the OS's interrupt gone, OSBYTE 129's negative INKEY still reads
+  the keys in the viewer: it scans the matrix itself.

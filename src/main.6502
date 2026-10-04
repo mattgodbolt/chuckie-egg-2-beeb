@@ -9,6 +9,13 @@
 INCLUDE "defs.6502"
 INCLUDE "memory.6502"
 
+\ The palette split (irq.6502): T1 is started in the VSync interrupt and
+\ fires in the last scanline of row 1, so that its last four writes (logical
+\ colour 0) land in the horizontal blank before row 2. Measured on jsbeeb,
+\ see docs/journal.md.
+SPLIT_T1 = 83 * SL - 2 + 46
+STATUS_PAPER = 0            ; black (1, red, shows where the split lands)
+
 \ MODE 1 is selected by BASIC before the program loads: the program reaches
 \ past &3000 once copied down, so a MODE change after that would wipe it.
 \ The palette is blacked out so nobody sees the file pass through screen
@@ -34,6 +41,7 @@ SECTION Loader, org = &1900, load = &FFFF1900, exec = &FFFF0000 + loader, filena
 }
 
     INCLUDE "system.6502"
+    INCLUDE "irq.6502"
     INCLUDE "screen.6502"
     INCLUDE "rooms.6502"
     INCLUDE "unpack.6502"

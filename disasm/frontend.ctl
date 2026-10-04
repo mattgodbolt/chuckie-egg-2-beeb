@@ -69,7 +69,7 @@ c $78C1 Read the eight control keys into &A48A
 D $78C1 For each (port high byte, mask, code) entry of #R$A42C in turn, shift in 1 if the key is down. The first entry ends up in bit 7: 7 abort, 6 take/drop, 5 save, 4 up, 3 down, 2 left, 1 right, 0 jump.
 @ $78D5 label=ROOM_SKIP_GATE
   $78D5 JP #R$7902; NOPped by cheat byte bit 3.
-  $78D8 CAPS SHIFT held with left/right: change room by -1/+1 (+3... with both), wrapping 1-120, and redraw.
+  $78D8 CAPS SHIFT held with left/right: change room by -1/+1 (-3 with both), wrapping 1-120, and redraw.
 @ $7902 label=KEY_ACTIONS
   $7902 Abort: straight back to the menu (no high-score check).
   $7908 Save: save the game to tape, then carry on.

@@ -44,10 +44,9 @@ ZA_AUTO 8, cmap
     RTS
 }
 
-\ Logical colour X (0-3) shows physical colour A. In a four-colour mode
-\ each logical colour owns four of the ULA's sixteen palette entries: its
-\ bits go to bits 3 and 1 of the entry number, and bits 2 and 0 come from
-\ the next pixel along, so all four must be written.
+\ Logical colour X (0-3) shows physical colour A in the room: fill its four
+\ entries of room_ula, which the interrupt writes to the ULA every frame
+\ (irq.6502: logical 1-3 first, then 0).
 .set_logical
 {
     ZA_AUTO1 phys
@@ -55,10 +54,14 @@ ZA_AUTO 8, cmap
     TXA : AND #2 : ASL A : ASL A : STA set_logical_t
     TXA : AND #1 : ASL A : ORA set_logical_t   ; entry number of the first
     ASL A : ASL A : ASL A : ASL A : ORA phys   ; ... in the top nibble
-    STA ula_pal                 ; entries n, n+1, n+4, n+5
-    CLC : ADC #&10 : STA ula_pal
-    ADC #&30 : STA ula_pal
-    ADC #&10 : STA ula_pal
+    PHA
+    \ Where its four go in room_ula: logical 1-3 at 0, 4, 8; 0 at 12.
+    TXA : SEC : SBC #1 : AND #3 : ASL A : ASL A : TAY
+    PLA
+    STA room_ula,Y              ; entries n, n+1, n+4, n+5
+    CLC : ADC #&10 : STA room_ula+1,Y
+    ADC #&30 : STA room_ula+2,Y
+    ADC #&10 : STA room_ula+3,Y
     RTS
 }
 .set_logical_t EQUB 0

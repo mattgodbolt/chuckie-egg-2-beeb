@@ -2,11 +2,8 @@
 \ System: the narrowed screen, vsync counting, keyboard.
 \ ***************************************************************************
 
-ZA_AUTO2 old_irq            ; the OS's IRQ1V handler
-ZA_AUTO1 vsyncs             ; frames since start-up
-
 \ Cursor off, the screen narrowed to 256 x 192 at &5000 (decision 1), and
-\ IRQ1V hooked to count vsyncs. !BOOT has already selected MODE 1.
+\ the interrupts taken over (irq.6502). !BOOT has already selected MODE 1.
 .init_system
 {
     \ The cursor off, as VDU 23,1,0 would do it.
@@ -19,18 +16,7 @@ ZA_AUTO1 vsyncs             ; frames since start-up
     \ ESCAPE is an ordinary key.
     LDA #229 : LDX #1 : LDY #0 : JSR osbyte
     LDA #0 : STA vsyncs
-    SEI
-    \ Stop the System VIA's 100Hz timer interrupt: it drives the OS's sound
-    \ processing, which rewrites &0800-&083F (measured: 27 bytes changed in
-    \ a second), and the maps live there. Negative INKEY scans the keyboard
-    \ itself and doesn't need it.
-    LDA #&40 : STA sysvia_ier
-    LDA irq1v : STA old_irq
-    LDA irq1v+1 : STA old_irq+1
-    LDA #LO(our_irq) : STA irq1v
-    LDA #HI(our_irq) : STA irq1v+1
-    CLI
-    RTS
+    JMP install_irq
 }
 
 \ Register, value pairs. R2 and R7 move with the narrower, shorter picture
@@ -42,28 +28,10 @@ ZA_AUTO1 vsyncs             ; frames since start-up
     EQUB 7, 34 - (32 - SCREEN_ROWS) / 2
     EQUB 12, HI(screen / 8)
     EQUB 13, LO(screen / 8)
+    \ No interlace: with it, VSync moves half a line in alternate fields, and
+    \ the palette split (irq.6502) has to land in a 32us blank.
+    EQUB 8, 0
 .crtc_end
-
-\ The OS has saved A at &FC; X and Y must be left alone. The System VIA's
-\ CA1 flag is vsync.
-.our_irq
-{
-    ZA_INTERRUPT
-    LDA sysvia_ifr : AND #2 : BEQ chain
-    INC vsyncs
-.chain
-    JMP (old_irq)
-    ZA_CANJUMP &DE89            ; the OS handler
-}
-
-\ Wait for the next vsync.
-.wait_vsync
-{
-    LDA vsyncs
-.wait
-    CMP vsyncs : BEQ wait
-    RTS
-}
 
 \ Is a key down? X = internal key number EOR &FF (the negative INKEY
 \ value). Z clear (BNE) if it is.

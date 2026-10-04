@@ -1,0 +1,82 @@
+\ ***************************************************************************
+\ The interrupt handler. It owns IRQ1V outright (after the port kit's
+\ lib/irq.6502): nothing goes to the OS, so the OS's 100Hz tick, sound and
+\ keyboard interrupt stop, and its sound workspace at &0800 stays still.
+\
+\ Two sources: VSync (System VIA CA1) and the User VIA's T1, which splits
+\ the palette between the status bar (rows 0-1) and the room (rows 2-23).
+\ At VSync the status bar's palette goes in and T1 is started; when it
+\ fires, during the last scanline of row 1, the room's goes in. That
+\ scanline is blank in the status bar's font, so the room's logical colours
+\ 1-3 can change anywhere along it; logical 0 is written last, to land in
+\ the horizontal blank before row 2 (timing measured in docs/journal.md).
+\ ***************************************************************************
+
+ZA_AUTO1 vsyncs             ; frames since start-up
+
+\ The status bar's colours, logical 0-3 (physical: black, white, yellow,
+\ cyan; to be settled when the status bar is drawn).
+STATUS_COLOURS = {STATUS_PAPER, 7, 3, 6}
+
+\ Values for &FE21 in the order they're written: logical 1-3, then 0. In a
+\ four-colour mode each logical colour owns four palette entries: its bits
+\ go to bits 3 and 1 of the entry number, bits 2 and 0 come from the next
+\ pixel along.
+FUNCTION ula_entry(l, e, phys) = ((l AND 2) * 4 + (l AND 1) * 2 + e) * 16 + (phys EOR 7)
+.room_ula   SKIP 16
+.status_ula
+    FOR l = {1, 2, 3, 0}
+        FOR e = {0, 1, 4, 5}
+            EQUB ula_entry(l, e, STATUS_COLOURS[l])
+        NEXT
+    NEXT
+
+.irq_handler
+{
+    ZA_INTERRUPT
+    TXA : PHA
+    LDA usrvia_ifr : AND #&40 : BEQ not_t1
+    LDA usrvia_t1cl             ; acknowledge
+    FOR i = 0..15
+        LDA room_ula + i : STA ula_pal
+    NEXT
+    JMP done
+.not_t1
+    LDA sysvia_ifr : AND #2 : BEQ done
+    STA sysvia_ifr              ; acknowledge
+    INC vsyncs
+    LDA #LO(SPLIT_T1) : STA usrvia_t1cl
+    LDA #HI(SPLIT_T1) : STA usrvia_t1ch     ; starts the count
+    LDX #15
+.status
+    LDA status_ula,X : STA ula_pal
+    DEX : BPL status
+.done
+    PLA : TAX
+    LDA &FC                     ; the interrupted A, saved by the OS
+    RTI
+}
+
+\ Put irq_handler on IRQ1V: VSync and User VIA T1 (one-shot) only.
+.install_irq
+{
+    SEI
+    LDA #&7F : STA sysvia_ier : STA usrvia_ier  ; anything we don't service
+                                                ; would hold IRQ asserted
+    LDA #LO(irq_handler) : STA irq1v
+    LDA #HI(irq_handler) : STA irq1v+1
+    LDA usrvia_acr : AND #&3F : STA usrvia_acr  ; T1 one-shot
+    LDA #&82 : STA sysvia_ier                   ; CA1: VSync
+    LDA #&C0 : STA usrvia_ier                   ; T1
+    CLI
+    RTS
+}
+
+\ Wait for the next vsync.
+.wait_vsync
+{
+    LDA vsyncs
+.wait
+    CMP vsyncs : BEQ wait
+    RTS
+}

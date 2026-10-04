@@ -22,7 +22,8 @@ build output (`code &0E00-&xxxx (N bytes free)`), never from this file.
 | `&0D00-&0DEB` | 236 | `LowState`: monsters, objects, machines, checkpoint, score, lives |
 | `&0E00-&4FFF` | 16,896 | code and data (copied down from `&1900`) |
 | `&5000-&7FFF` | 12,288 | screen: 256 x 192, MODE 1 pixels (decision 1) |
-| `&8000-&BFFF` | 16,384 | sideways RAM: the mailbox, packed rooms, sprites, the font (decisions 8, 13) |
+| `&8000-&BFFF` | 16,384 | sideways RAM: the mailbox, packed rooms, sprites (decisions 8, 13) |
+| `&C000-&C2FF` | 768 | OS 1.20's font, read in place for text (decisions 4, 14) |
 
 Between games (decision 13): `MENU` runs at `&1900-&27FF` in MODE 7 (screen
 `&7C00`), loading `CE2DATA` at `&3000` to copy into the bank when the bank

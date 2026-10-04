@@ -21,8 +21,7 @@ take/drop, **S** save, **0** abort. The menu's bottom line (and `*TYPE
 !BOOT`) shows when the disc was built and from which commit.
 
 It needs a BBC Model B with 16K of sideways RAM; the browser link above
-provides one. (A Master runs the game, but its return to the menu after a
-game doesn't work yet.)
+provides one. It doesn't run on a Master (decision 14).
 
 See [docs/journal.md](docs/journal.md) for the story so far,
 [docs/research.md](docs/research.md) for what the original is, and

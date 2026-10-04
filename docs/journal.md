@@ -650,3 +650,12 @@ gathers any number of one ingredient (and makes jumps lower).
   35 rooms the fixed scenarios never visit; 3 skipped, where the start was
   deadly and the original's game ended before there was anything to
   compare.
+
+### The font from the OS ROM
+
+- The game read text from a 512-byte copy of the MOS font in sideways RAM,
+  made at start-up so that a Master (whose font isn't at `&C000`) would
+  work too. But the Master's reset doesn't come back to `MENU`, and Matt's
+  target was a Beeb first. Decision 14: a Model B, text straight from OS
+  1.20's ROM at `&C000`. Sideways RAM: 689 bytes free; main RAM 322 (the
+  copy routine went too). Rooms, scenarios and the front end all pass.

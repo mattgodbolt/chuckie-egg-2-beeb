@@ -28,28 +28,3 @@
 \ The magic, in main memory to compare with: data_magic is the copy in the bank.
 .magic EQUS DATA_MAGIC, build_stamp
 .magic_end
-
-\ Copy the OS's character definitions 32-95 into text_font, through
-\ OSWORD 10, which works wherever the MOS keeps its font (OS 1.20 at &C000,
-\ elsewhere on a Master). Before the interrupts are taken over.
-.copy_font
-{
-    ZA_AUTO2 dst
-    LDA #LO(text_font) : STA dst
-    LDA #HI(text_font) : STA dst+1
-    LDA #32 : STA font_block
-.char
-    LDA #10 : LDX #LO(font_block) : LDY #HI(font_block) : JSR osword
-    LDY #7
-.byte
-    LDA font_block+1,Y : STA (dst),Y
-    DEY : BPL byte
-    CLC : LDA dst : ADC #8 : STA dst
-    BCC no_carry
-    INC dst+1
-.no_carry
-    INC font_block
-    LDA font_block : CMP #96 : BNE char
-    RTS
-}
-.font_block SKIP 9              ; OSWORD 10: the character, then its 8 bytes

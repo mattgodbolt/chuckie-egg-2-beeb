@@ -53,5 +53,6 @@ things parked for discussion. The reasoning for each is in
    tables then, so the reset that follows may misbehave. CTRL-BREAK, then
    SHIFT-BREAK, gets back to the menu. Making BREAK return to the menu
    cleanly would mean keeping `&0258` and `&027F-&029B` free of tables.
-11. **The Master**: the game's reset doesn't come back to `MENU` there yet
-   (MOS 3.20's start-up options and workspace differ from OS 1.20's).
+11. **The Master** isn't a target (decision 14): its MOS keeps the font
+   elsewhere, and its reset doesn't come back to `MENU`. Bringing it back
+   means 512 bytes for a font copy and a Master-specific way back.

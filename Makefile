@@ -3,8 +3,8 @@
 #   make          assemble build/ce2.ssd
 #   make run      boot it in jsbeeb and grab a screenshot
 #   make rooms    check every room the BBC draws against the original's
-#   make wip      copy the built disc to chuckie-egg-2-wip.ssd, which the
-#                 README links for playing in the browser
+#   make wip      rebuild from a clean tree and copy the disc to
+#                 chuckie-egg-2-wip.ssd, which the README links
 #   make fetch    download the Spectrum original into original/
 #   make zx       load the original's tape into build/ce2.z80 (SkoolKit)
 #   make venv     the Python tools' environment (.venv with SkoolKit, Pillow)
@@ -14,6 +14,10 @@ PYTHON  ?= .venv/bin/python
 TARGET   = build/ce2.ssd
 SYMBOLS  = build/symbols.json
 SOURCES  = $(wildcard src/*.6502 src/data/*)
+WIP      = chuckie-egg-2-wip.ssd
+# Stamped into !BOOT, so a disc says what it is: UTC build time and the
+# commit, with + if the tree (the WIP disc itself aside) had changes.
+BUILD   := $(shell date -u '+%Y-%m-%d %H:%M UTC') $(shell git rev-parse --short HEAD 2>/dev/null || echo NOGIT)$(shell git diff --quiet HEAD -- . ':(exclude)$(WIP)' 2>/dev/null || echo +)
 
 .PHONY: all run rooms wip fetch zx venv clean
 
@@ -21,7 +25,7 @@ all: $(TARGET)
 
 # The symbol dump is how the test tools find the game's variables.
 $(TARGET): $(SOURCES) | build
-	$(BARON) -o $(TARGET) --title CHUCKIE2 --opt 3 --warn 2 --symbols $(SYMBOLS) -v -log0 build/listing.txt src/main.6502
+	$(BARON) -D 'BUILD="$(BUILD)"' -o $(TARGET) --title CHUCKIE2 --opt 3 --warn 2 --symbols $(SYMBOLS) -v -log0 build/listing.txt src/main.6502
 	@grep -E '^code &' build/listing.txt || true
 
 build:
@@ -42,8 +46,12 @@ build/rooms/room_120.bin: build/zx_start.z80
 build/zx_start.z80: build/ce2.z80
 	$(PYTHON) tools/zx.py '3,SPACE:tap,1,SPACE:tap,1,SPACE:tap,1,P:tap,3,>start' build/zx_ --snap build/ce2.z80
 
-wip: $(TARGET)
-	cp $(TARGET) chuckie-egg-2-wip.ssd
+# Always from a clean tree, so the stamp names the commit the disc holds.
+wip:
+	@git diff --quiet HEAD -- . ':(exclude)$(WIP)' || { echo "commit first: the stamp would say +"; exit 1; }
+	rm -f $(TARGET)
+	$(MAKE) $(TARGET)
+	cp $(TARGET) $(WIP)
 
 fetch:
 	tools/fetch_original.sh

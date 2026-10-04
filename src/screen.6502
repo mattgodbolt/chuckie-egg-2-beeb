@@ -45,23 +45,37 @@ ZA_AUTO 8, cmap
 }
 
 \ Logical colour X (0-3) shows physical colour A in the room: fill its four
-\ entries of room_ula, which the interrupt writes to the ULA every frame
-\ (irq.6502: logical 1-3 first, then 0).
+\ entries of room_ula (irq.6502), which the interrupt writes to the ULA
+\ every frame. Entry = l1 n1 l0 n0, n the "neighbour" (irq.6502): beside
+\ n = 1 sets value bit 4, beside n = 2 bit 6. Logical 2 and 3 go at 0-7;
+\ logical 0 and 1 put their entries beside 2 at 8-9, and beside 0, 1 and 3
+\ (the six the status bar shows) at 10-15, logical 1 first.
 .set_logical
 {
     ZA_AUTO1 phys
+    ZA_AUTO1 base
     EOR #7 : STA phys           ; the ULA wants the physical colour EOR 7
     TXA : AND #2 : ASL A : ASL A : STA set_logical_t
-    TXA : AND #1 : ASL A : ORA set_logical_t   ; entry number of the first
-    ASL A : ASL A : ASL A : ASL A : ORA phys   ; ... in the top nibble
-    PHA
-    \ Where its four go in room_ula: logical 1-3 at 0, 4, 8; 0 at 12.
-    TXA : SEC : SBC #1 : AND #3 : ASL A : ASL A : TAY
-    PLA
-    STA room_ula,Y              ; entries n, n+1, n+4, n+5
-    CLC : ADC #&10 : STA room_ula+1,Y
-    ADC #&30 : STA room_ula+2,Y
-    ADC #&10 : STA room_ula+3,Y
+    TXA : AND #1 : ASL A : ORA set_logical_t
+    ASL A : ASL A : ASL A : ASL A : ORA phys   ; beside colour 0
+    STA base
+    CPX #2 : BCC low
+    \ Logical 2, 3: all four together, at (l - 2) * 4.
+    TXA : SEC : SBC #2 : ASL A : ASL A : TAY
+    LDA base : STA room_ula,Y              ; beside 0
+    ORA #&10 : STA room_ula+1,Y            ; beside 1
+    ORA #&40 : STA room_ula+2,Y            ; beside 3
+    AND #&EF : STA room_ula+3,Y            ; beside 2
+    RTS
+.low
+    \ Logical 0, 1: beside 2 at 8 + (1 - l); beside 0, 1, 3 at
+    \ 10 + 3 * (1 - l).
+    TXA : EOR #1 : TAY
+    LDA base : ORA #&40 : STA room_ula+8,Y ; beside 2
+    TYA : STA set_logical_t : ASL A : ADC set_logical_t : TAY
+    LDA base : STA room_ula+10,Y           ; beside 0
+    ORA #&10 : STA room_ula+11,Y           ; beside 1
+    ORA #&40 : STA room_ula+12,Y           ; beside 3
     RTS
 }
 .set_logical_t EQUB 0
@@ -83,12 +97,10 @@ ZA_AUTO 8, cmap
 \ Draw the 8 bytes at glyph into cell `cell` in the colours of Spectrum
 \ attribute A: set bits in its ink, clear ones in its paper.
 ZA_AUTO2 glyph              ; the tile's 8 bytes
+ZA_AUTO1 paper              ; a byte of four paper pixels
+ZA_AUTO1 diff               ; ink pixels EOR paper pixels
 .draw_glyph
 {
-    ZA_AUTO2 scr
-    ZA_AUTO2 scr8
-    ZA_AUTO1 paper              ; a byte of four paper pixels
-    ZA_AUTO1 diff               ; ink pixels EOR paper pixels
     PHA
     LSR A : LSR A : LSR A : AND #7 : TAX
     LDA cmap,X
@@ -98,6 +110,13 @@ ZA_AUTO2 glyph              ; the tile's 8 bytes
     LDA cmap,X
     ZA_INDEXEDBY 0..7
     TAX : LDA colour_bytes,X : EOR paper : STA diff
+    \ Fall into draw_glyph_pd.
+}
+\ The same with paper and diff already set.
+.draw_glyph_pd
+{
+    ZA_AUTO2 scr
+    ZA_AUTO2 scr8
     \ scr = screen + 16 * cell
     LDA cell : ASL A : ASL A : ASL A : ASL A : STA scr
     ORA #8 : STA scr8

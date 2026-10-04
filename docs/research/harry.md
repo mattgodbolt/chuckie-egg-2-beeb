@@ -45,11 +45,11 @@ lift (`&A52C`); the sprite code (`&7FC9` erase, `&8063` draw) reads it.
 |---|---|---|---|
 | +00/01 | `&A451` | `&DFA4` | pointer to the current frame's pixel rows (frame header + 2) |
 | +02/03 | `&A453` | `&5A46` | attribute address of the top-left cell, `&5800 + 32·row + col` (row 18, col 6). The maps are at fixed offsets from it: tile map +`&0800`, cell types +`&0B00`, background attributes +`&0500` |
-| +04/05 | `&A455` | `&5046` | screen address of the top pixel line: low byte = +02, high = `&40 | (row & &18) | yf` |
+| +04/05 | `&A455` | `&5046` | screen address of the top pixel line: low byte = +02, high = `&40 + (row AND &18) + yf` |
 | +06 | `&A457` | 2 | frame height in cells (always 2: Harry is 16 lines) |
 | +07 | `&A458` | 1 | frame width in bytes: 1 when xf = 0 or climbing, else 2 |
 | +08 | `&A459` | 1 | momentum: horizontal direction of a jump or slope (-1/0/+1) |
-| +09 | `&A45A` | 6 | ink colour (yellow); `&8063` ORs it into the attributes he covers |
+| +09 | `&A45A` | 6 | ink colour (yellow); `&8063` sets it as the ink of the cells he covers, keeping their paper |
 | +0A | `&A45B` | 0 | xf (0-3); on ladders/ropes the climbing animation phase instead |
 | +0B | `&A45C` | 0 | dx this iteration (-1/0/+1; ±2 for one step when walking off an edge) |
 | +0C | `&A45D` | 0 | dy this iteration, pixels, + = up |
@@ -89,8 +89,11 @@ bytes, row-major, drawn by ORing (`&8063`). 294 bytes at `&DFA2-&E0C7`.
 Animation is therefore position-driven: walking cycles through 0-3 (4-7) as
 xf advances; climbing a ladder shows frame 8 + yf/2 (computed before the
 move, so it lags one step); on a rope the phase is yf & 3 and only changes
-while up is held. Facing is set from dx when walking, starting a jump, and
-riding a lift; it is not changed while falling, jumping or on slopes.
+while up is held. Facing is set from dx when walking, stepping off a
+ladder, starting a jump and riding a lift; getting on a ladder or rope sets
+8, and landing or snapping onto a slope turns 8 back into 0. It does not
+change while falling, jumping or on a slope, so a jump straight up from a
+ladder keeps the climbing frame (verified, [`t_ladder.py`]).
 
 ## 4. States
 
@@ -352,7 +355,9 @@ SetSlopeState(tile) (&87E8):
   if tile is &54/&38 (\):  if mom < 0: state = 5 else: mom = 1;  state = 6
   if tile is &55/&39 (/):  if mom > 0: state = 5 else: mom = -1; state = 6
 SetStanding(t) (&87FD):
-  t &= &21; if t == &01: state = 1 elif t == &20: state = 2   ; &21: unchanged
+  t &= &21; if t == &01: state = 1 elif t == &20: state = 2   ; &00/&21: unchanged
+  ; (a landing on the right-hand column passes mask &2D, so a slope or
+  ;  pipe-end type there lands Harry without changing the state)
 
 SnapSurface (&84C0):                      ; tile &54/&55 under the feet
   xf = 0; SaveOld(); col += c (attr low byte only)
@@ -362,9 +367,32 @@ Snap39 (&84F8):                           ; '/' fill
   xf = 2; SaveOld(); col += c - 1; up one row, yf = 0
   dx = dy = 0; face &= ~8; SetSlopeState(tile); goto MoveNoSave
 Snap38 (&8535):                           ; '\' fill
-  xf = &38 (sic); SaveOld(); col += c; up one row, yf = 0
-  dx = dy = 0; face &= ~8; SetStanding... no: SetSlopeState(tile); goto MoveNoSave
+  xf = &38 (sic: A still holds the tile); SaveOld(); col += c; up one row, yf = 0
+  dx = dy = 0; face &= ~8; SetSlopeState(tile); goto MoveNoSave
   ; ApplyDelta then makes xf = &38 & 3 = 0 and, since &38 >= 4, col += 1
+
+LiftLandCheck (&83FA-&8486):              ; only if a lift is in the room
+  L0 = lift col - 1; L1 = L0 + lift width (&A533, the lift's +07)
+  if col < L0 or (col == L0 and D < 3): no lift (continue at &8489)
+  if col > L1 or (col == L1 and D >= 4): no lift
+  diff = (8*lift_row + lift_yf - 13) - (8*row + E)      ; 8-bit
+  if diff >= 6 (unsigned): no lift
+  dy = 3 - diff; if lift type (&A534) == 1: dy += 2      ; type 1 rises
+  state = 8
+  if fallcnt >= 20: die
+  if T(-&20) & &01: die                   ; no room above the head
+  goto Move
+
+StLift (&876D):                           ; state 8
+  dy = lift dy (&A538)
+  if T(0) & &01: die                      ; crushed
+  if xf == 2 and ((dx > 0 and col == L1) or (dx < 0 and col == L0)):
+      state = 0; cnt = 0; fallcnt = 1; goto VCollide     ; step off the end
+  if dx != 0: face = (1 - dx) * 2
+  E = yf; D = xf + dx + 1; p = cell(row, col); n = 2
+  if face != 0: (left branch of SideWalls, &867C) else (right branch, &8666)
+  ; the branch is chosen by facing even when dx = 0, so a wall beside him
+  ; on the facing side pushes him away
 
 Move (&887E): SaveOld()                   ; &884D
 MoveNoSave (&8881):
@@ -524,9 +552,16 @@ The vertical mapping loses the sub-cell offset (both directions round).
 Slope fix-ups: crossing the right edge in state 5 also moves up a row and to
 col 1, yf 0 (read only); the top edge in state 5 adds 2·dx to col and dx to
 xf, the bottom edge in state 6 adds 3·dx to col and dx to xf [verified,
-`t_diagedge2.py`/`t_diagedge3.py`]. Those leave xf at 4 or -1 for one
-iteration, so the frame index is one off (frame 4 or 3) for that one
-drawing: an original glitch. Left-edge slope crossings get no fix-up.
+`t_diagedge2.py`/`t_diagedge3.py`]. Those leave xf at 4 or -1 until the
+next `ApplyDelta` normalises it (the position is continuous). Left-edge
+slope crossings get no fix-up.
+
+Original glitch: the frame is picked (`&888D`) *before* the edge code
+changes xf, so on the iteration of every room change Harry is drawn with
+the frame for the old xf at the new cell: after a right exit with the xf-0
+frame at x 0 instead of 4, after a left exit 6 px left of where he is, after
+the slope fix-ups 2 px off. One drawing (three frames) later it is right
+again [verified, `t_edgeframe.py`: frame `&DFA4` with xf 2].
 
 After the new room is set up (`&7801`): state 8 becomes a jump; unless the
 move was upwards, the cell under the feet (`T(&40 + xf/2)`) sets state 1/2
@@ -541,15 +576,19 @@ if it is a floor and not a ladder/rope; then the checkpoint rule above.
   (screen high & `&F8`, attr low), which gives yf 7 instead of 0 when it
   crosses a screen third (rows 7/8, 15/16); column moves are 8-bit adds to
   the attribute low byte.
-- `T(off)` is a 16-bit add of an 8-bit offset to the attribute address, so
-  `T(dx)` with dx = -1 at col 0 reads the previous row's col 31 (no wrap
-  check). Harmless in practice (the edge code moves him first).
+- `T(off)` (`&8841`) is a 16-bit add of an unsigned offset, but `WallCheck`
+  adds dx to the attribute low byte only, so dx = -1 at col 0 would read
+  col 31 of the row above (of row+7 at a page start). It never happens: the
+  left edge fires when he reaches col 0 xf 0, before any wall test there.
+- Deaths are `JP &8A29` (the wall tests pop their return address first),
+  and `&8A29` resets the stack, so "die" in the pseudocode never returns.
 
 ## 12. Open questions
 
 - Which objects are `&20-&23` (the heavy ones that shorten jumps and stop
-  mid-air ladder grabs)? Objects agent; they are the hopper ingredients
-  dropped in rooms `&21`, `&33`, `&5F`, `&6E` (`&9752`).
+  mid-air ladder grabs)? For the objects research: `&9752` accepts them when
+  dropped in rooms 33, 51, 95 and 110, the rooms with hoppers, so probably
+  the ingredients.
 - Lift landing window and crush, rope with no rope below at grab time,
   `Snap38`, the right-edge state-5 fix-up and type `&21` landings are read
   from the code, not exercised.

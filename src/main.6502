@@ -13,15 +13,30 @@ INCLUDE "memory.6502"
 \ fires in the last scanline of row 1, so that its last four writes (logical
 \ colour 0) land in the horizontal blank before row 2. Measured on jsbeeb,
 \ see docs/journal.md.
-SPLIT_T1 = 83 * SL - 2 + 46
+\ (-D SPLIT_SWEEP=n overrides it, to measure the window.)
+IF DEFINED(SPLIT_SWEEP)
+    SPLIT_ADJ = SPLIT_SWEEP
+ELSE
+    SPLIT_ADJ = 96              ; the middle of 84-108, the window that works
+ENDIF
+SPLIT_T1 = 83 * SL - 2 + SPLIT_ADJ
 STATUS_PAPER = 0            ; black (1, red, shows where the split lands)
 
 \ MODE 1 is selected by BASIC before the program loads: the program reaches
 \ past &3000 once copied down, so a MODE change after that would wipe it.
 \ The palette is blacked out so nobody sees the file pass through screen
 \ memory on its way in.
+\ The build stamp comes from the Makefile (-D BUILD="date time sha"), so a
+\ disc says what it is: *TYPE !BOOT shows it. A + after the sha means the
+\ tree had uncommitted changes.
+IF DEFINED(BUILD)
+    build_stamp = BUILD
+ELSE
+    build_stamp = "DEV"
+ENDIF
+
 SECTION Boot, filename = "!BOOT", exec = &FFFFFFFF
-    EQUS "*| CHUCKIE EGG 2", 13
+    EQUS "*| CHUCKIE EGG 2 ", build_stamp, 13
     EQUS "MODE 1", 13
     EQUS "FOR I%=0 TO 3:VDU 19,I%,0;0;:NEXT", 13
     EQUS "*RUN CE2", 13
@@ -44,6 +59,7 @@ SECTION Loader, org = &1900, load = &FFFF1900, exec = &FFFF0000 + loader, filena
     INCLUDE "irq.6502"
     INCLUDE "screen.6502"
     INCLUDE "rooms.6502"
+    INCLUDE "status.6502"
     INCLUDE "unpack.6502"
     INCLUDE "viewer.6502"
 

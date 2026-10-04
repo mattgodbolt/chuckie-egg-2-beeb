@@ -9,9 +9,10 @@ That link boots [`chuckie-egg-2-wip.ssd`](chuckie-egg-2-wip.ssd), the latest
 work-in-progress disc, in [jsbeeb](https://github.com/mattgodbolt/jsbeeb).
 
 **Status: early.** Right now the disc is a room viewer: all 120 rooms of the
-factory, drawn on the BBC from the original's room data and checked
-against the original's own output. **Z** and **X** (or the cursor keys) step
-through the rooms. There is no Harry yet.
+factory and the status bar, drawn on the BBC from the original's data and
+checked against the original's own output. **Z** and **X** (or the cursor
+keys) step through the rooms. There is no Harry yet. `*TYPE !BOOT` on the
+disc shows when it was built and from which commit.
 
 See [docs/journal.md](docs/journal.md) for the story so far,
 [docs/research.md](docs/research.md) for what the original is, and

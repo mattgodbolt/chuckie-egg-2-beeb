@@ -1,0 +1,127 @@
+\ ***************************************************************************
+\ The status bar, rows 0-1, as the original's room drawer prints it
+\ (&7982, &A107, &A36E, &A2B9): all in attribute 7, white on black, which
+\ is logical 1 on 0 in the status bar's own palette (irq.6502).
+\
+\   row 0, col 5:   SCORE  CARRYING  LIVES
+\   row 1, col 0:   the score, 10 digits, leading zeros in the first five
+\                   shown as spaces
+\   row 1, col 12:  the name of what Harry carries, 8 characters
+\   row 1, col 22:  min(lives, 9) lives icons (tile &56), then a blank
+\ ***************************************************************************
+
+\ The score, ten digits 0-9, most significant first; lives; and what Harry
+\ carries, an object number 0-10 (0 = nothing).
+.score      SKIP 10
+.lives      EQUB 5
+.carrying   EQUB 0
+
+.draw_status_bar
+{
+    LDA #LO(5) : STA cell : LDA #0 : STA cell+1
+    LDX #0
+.labels
+    LDA status_labels,X : BEQ done
+    STX status_i
+    JSR status_char
+    LDX status_i : INX
+    JMP labels
+.done
+    JSR draw_score
+    JSR draw_carrying
+    JMP draw_lives
+}
+.status_i EQUB 0
+
+.status_labels
+    EQUS "SCORE  CARRYING  LIVES", 0
+
+\ The score at row 1, columns 0-9.
+.draw_score
+{
+    LDA #32 : STA cell : LDA #0 : STA cell+1
+    LDA #&80 : STA status_i     ; bit 7: still in leading zeros
+    LDX #0
+.digit
+    STX status_x
+    LDA score,X
+    CPX #5 : BCS show           ; the last five always show
+    BIT status_i : BPL show
+    CMP #0 : BNE show
+    LDA #32 : JMP put_it        ; a leading zero: a space
+.show
+    LSR status_i                ; out of the leading zeros
+    CLC : ADC #48               ; '0'
+.put_it
+    JSR status_char
+    LDX status_x : INX
+    CPX #10 : BNE digit
+    RTS
+}
+.status_x EQUB 0
+
+\ What Harry carries, at row 1, columns 12-19.
+.draw_carrying
+{
+    LDA #32 + 12 : STA cell : LDA #0 : STA cell+1
+    LDA carrying : ASL A : ASL A : ASL A : TAX
+    LDY #8
+.char
+    STY status_x
+    STX status_i
+    LDA object_names,X
+    JSR status_char
+    LDX status_i : INX
+    LDY status_x : DEY : BNE char
+    RTS
+}
+
+\ The lives icons at row 1, column 22 on: min(lives, 9), then a blank.
+.draw_lives
+{
+    LDA #32 + 22 : STA cell : LDA #0 : STA cell+1
+    LDA lives : CMP #10 : BCC few
+    LDA #9
+.few
+    STA status_x
+.icon
+    LDA status_x : BEQ blank
+    LDA #&56 : JSR status_tile
+    DEC status_x
+    JMP icon
+.blank
+    LDA #&37
+    \ Fall into status_tile.
+}
+\ Tile A, white on black, at `cell`; step right.
+.status_tile
+{
+    SEC : SBC #&20
+    LDX #LO(tiles) : LDY #HI(tiles)
+    JMP status_glyph
+}
+\ Character A (ASCII), white on black, from the MOS font (decision 4), at
+\ `cell`; step right.
+.status_char
+    SEC : SBC #32
+    LDX #LO(mos_font) : LDY #HI(mos_font)
+\ glyph = font (Y:X) + 8 * A; draw in logical 1 on 0.
+.status_glyph
+{
+    STA glyph : LDA #0 : STA glyph+1
+    ASL glyph : ROL glyph+1 : ASL glyph : ROL glyph+1 : ASL glyph : ROL glyph+1
+    TXA : CLC : ADC glyph : STA glyph
+    TYA : ADC glyph+1 : STA glyph+1
+    LDA #cbyte(0) : STA paper
+    LDA #cbyte(1) EOR cbyte(0) : STA diff
+    JSR draw_glyph_pd
+    INC cell : BNE done
+    INC cell+1
+.done
+    RTS
+}
+
+\ The objects' names, 8 characters each (the original's, at &999E).
+.object_names
+    EQUS "NOTHING ", "TOY PART", "  MILK  ", " COCOA  ", " SUGAR  ", "A BONE  "
+    EQUS " GIRDER ", " LADDER ", "THE TOY!", "THE EGG!", " BASKET "

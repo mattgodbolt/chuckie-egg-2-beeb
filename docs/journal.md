@@ -253,3 +253,57 @@ file in `disasm/`. The front-end one came back first
   0, of the form `%101xxxxx` gives a starting egg, a room skip and
   infinite lives; anything else non-zero prints PLEASE TRY AGAIN and
   resets the Spectrum.
+
+### The status bar, and what a MODE 1 palette entry really is
+
+- `src/status.6502` draws the status bar as the original's drawer does
+  (`docs/research/frontend.md` §6): `SCORE  CARRYING  LIVES` on row 0, the
+  score, the carried object's name and the lives icons (tile `&56`) on
+  row 1, all white on black, i.e. logical 1 on 0 in the status palette.
+- **The lives icons' feet came out blue**: the icon uses its eighth line,
+  so row 1's last scanline isn't blank, and the room's logical 1 was being
+  written during it. Fix: change fewer entries at the split, since only
+  the entries the status bar can show need to wait for it.
+- **Then the letters had coloured pixels in them**, which showed my model
+  of the palette entries was wrong. The ULA builds the entry number from
+  bits 7, 5, 3 and 1 of a shift register that moves one bit a pixel. With
+  a byte's bits `p0h p1h p2h p3h p0l p1l p2l p3l`, pixels 0 and 1 take
+  entry bits 2 and 0 from the pixel *two to the right*; pixels 2 and 3
+  take one low bit from two to the left and a 1 shifted in. So white on
+  black uses logical 0 and 1 beside "neighbours" 0, 1 *and 3*: six
+  entries, not four. Now VSync writes the other ten with the room's
+  colours, and T1 writes just the six (24 µs) in the blank before row 2.
+- Swept the timer across the window with a red status paper
+  (`-D SPLIT_SWEEP=n`): the switch is clean from offset 84 to 108 (µs)
+  and late at 112; `SPLIT_ADJ = 96` sits in the middle.
+- Baron: `IF NOT(DEFINED(X)) : X = ...` never settles (the definition
+  flips the test between passes); an override needs its own name.
+
+### Research: Harry
+
+The Harry agent's write-up is `docs/research/harry.md`. The facts the
+engine will be built on:
+
+- Harry updates once every **3 frames** (three HALTs a loop; measured
+  3.000 in quiet rooms, up to 3.1 in busy ones).
+- Walk 2 px an update; fall 4; ladders 2; ropes only slide down (1, 2 or 3
+  px by the keys); slopes 2 across and 2 up or down, climbing only while
+  the uphill key is held; lifts 2.
+- The jump is a table (`&89CF`): 4,4,3,2,1,1,1,0,0,0,0,-1,-1,-1,-2,-3,-4...;
+  16 px high, 36 px long on the flat; the direction is fixed at take-off.
+- A fall kills if the fall counter reaches 15: from rest, 7 cells is safe
+  and 8 kills.
+- Cell-type bits: `&01` solid, `&02` ladder, `&04`/`&08` the two slopes,
+  `&10` rope, `&20` a pipe that only holds you while you walk ("some pipes
+  are more slippery than others"), `&80` deadly.
+- His code is 2,530 bytes on the Spectrum, plus ~290 of helpers and 294 of
+  sprite frames.
+
+### Build stamp
+
+Matt asked for the build date, time and commit in `!BOOT`, to tell old
+discs apart: the Makefile passes `-D BUILD="2026-10-04 14:26 UTC 777ab7a"`
+(a `+` after the SHA if the tree had changes) and `!BOOT`'s first line is
+`*| CHUCKIE EGG 2 <stamp>`, so `*TYPE !BOOT` shows it. `make wip` refuses a
+dirty tree and the disc goes in its own commit, so its stamp names the
+commit holding its code.

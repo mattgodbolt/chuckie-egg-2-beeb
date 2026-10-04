@@ -14,23 +14,28 @@ import re
 import sys
 
 
+def cmap_of(lo, hi):
+    return [(lo >> (2 * i)) & 3 for i in range(4)] + [(hi >> (2 * i)) & 3 for i in range(4)]
+
+
 def palettes():
+    """{room: cmap}: rooms.6502's palettes, each room's chosen by roompal.txt."""
     src = open("src/data/rooms.6502").read()
-    out = {}
+    pals = {}
     for m in re.finditer(r"EQUB &(..), &(..), &(..), &(..)\s+\\\s+(\d+):", src):
-        b = [int(m.group(i), 16) for i in range(1, 5)]
-        cmap = [(b[2] >> (2 * i)) & 3 for i in range(4)] + [(b[3] >> (2 * i)) & 3 for i in range(4)]
-        out[int(m.group(5))] = cmap
-    return out
+        pals[int(m.group(5))] = cmap_of(int(m.group(3), 16), int(m.group(4), 16))
+    numbers = [int(x) for x in open("src/data/roompal.txt").read().split()]
+    return {r: pals[numbers[r - 1]] for r in range(1, 121)}
 
 
 def bands():
     """{room: [(first row, cmap)]} from src/data/bands.6502 (decision 15)."""
+    src = open("src/data/bands.6502").read()
+    maps = {int(m.group(3)): cmap_of(int(m.group(1), 16), int(m.group(2), 16))
+            for m in re.finditer(r"EQUB &(..), &(..)\s+\\\s+(\d+)", src)}
     out = {}
-    for m in re.finditer(r"EQUB (\d+), (\d+) \* 8 \+ (\d+), &(..), &(..)", open("src/data/bands.6502").read()):
-        lo, hi = int(m.group(4), 16), int(m.group(5), 16)
-        cmap = [(lo >> (2 * i)) & 3 for i in range(4)] + [(hi >> (2 * i)) & 3 for i in range(4)]
-        out.setdefault(int(m.group(1)), []).append((int(m.group(2)), cmap))
+    for m in re.finditer(r"EQUB (\d+), (\d+) \* 8 \+ (\d+), (\d+)", src):
+        out.setdefault(int(m.group(1)), []).append((int(m.group(2)), maps[int(m.group(4))]))
     return out
 
 

@@ -344,8 +344,9 @@ ENDIF
     INY : CPY #10 : BNE name
     LDA #'.' : JSR oswrch : JSR oswrch
 .digits
-    LDA (mz_ptr2),Y : ORA #'0' : JSR oswrch
-    INY : CPY #20 : BNE digits
+    LDA (mz_ptr2),Y : LSR A : LSR A : LSR A : LSR A : ORA #'0' : JSR oswrch
+    LDA (mz_ptr2),Y : AND #15 : ORA #'0' : JSR oswrch
+    INY : CPY #HS_ENTRY : BNE digits
     LDA #' ' : JSR oswrch
     LDA #156 : JMP oswrch
 }
@@ -357,7 +358,7 @@ ENDIF
     LDA #HI(M_TABLE) : STA mz_ptr2+1
     LDX mz_i : BEQ done
 .add
-    CLC : LDA mz_ptr2 : ADC #20 : STA mz_ptr2
+    CLC : LDA mz_ptr2 : ADC #HS_ENTRY : STA mz_ptr2
     BCC next
     INC mz_ptr2+1
 .next
@@ -370,34 +371,39 @@ ENDIF
 \ (a tie goes below), the rest move down, and the name is typed in.
 .hiscore_check
 {
+    \ The score two digits to a byte, as the table keeps it.
+    LDX #0 : LDY #0
+.pack
+    LDA M_SCORE,X : ASL A : ASL A : ASL A : ASL A : ORA M_SCORE+1,X : STA hs_score,Y
+    INX : INX : INY : CPY #HS_ENTRY - 10 : BNE pack
     LDA #0 : STA mz_i
 .entry
     JSR entry_ptr
     LDY #10
     LDX #0
 .digit
-    LDA M_SCORE,X : CMP (mz_ptr2),Y : BCC lower : BNE higher
-    INY : INX : CPX #10 : BNE digit
+    LDA hs_score,X : CMP (mz_ptr2),Y : BCC lower : BNE higher
+    INY : INX : CPX #HS_ENTRY - 10 : BNE digit
 .lower
     INC mz_i : LDA mz_i : CMP #10 : BNE entry
     RTS                         ; not on the table
 .higher
     \ Entries mz_i..8 down one, from the bottom (&9E65).
     LDA mz_i : CMP #9 : BEQ moved
-    ASL A : ASL A : STA mz_n
-    ASL A : ASL A : CLC : ADC mz_n : STA mz_n   ; 20 * mz_i
-    LDX #179
+    ASL A : ASL A : ASL A : ASL A : SEC : SBC mz_i : STA mz_n   ; 15 * mz_i
+    ASSERT HS_ENTRY = 15
+    LDX #9 * HS_ENTRY - 1
 .shuffle
-    LDA M_TABLE,X : STA M_TABLE+20,X
+    LDA M_TABLE,X : STA M_TABLE+HS_ENTRY,X
     CPX mz_n : BEQ moved
     DEX : JMP shuffle
 .moved
     \ The score in, the name ten dots.
     LDA mz_i : STA mz_e         ; (drawing the table uses mz_i)
     JSR entry_ptr
-    LDY #19 : LDX #9
+    LDY #HS_ENTRY - 1 : LDX #HS_ENTRY - 11
 .put_score
-    LDA M_SCORE,X : STA (mz_ptr2),Y
+    LDA hs_score,X : STA (mz_ptr2),Y
     DEY : DEX : BPL put_score
     LDA #'.'
 .dots
@@ -582,7 +588,7 @@ ENDIF
 .keys
     LDA SAVE_KEYS,X : STA M_KEYS,X
     DEX : BPL keys
-    LDX #199
+    LDX #HS_LEN - 1
 .table
     LDA SAVE_TABLE,X : STA M_TABLE,X
     DEX : CPX #&FF : BNE table
@@ -616,7 +622,7 @@ ENDIF
 .keys
     LDA M_KEYS,X : STA SAVE_KEYS,X
     DEX : BPL keys
-    LDX #199
+    LDX #HS_LEN - 1
 .table
     LDA M_TABLE,X : STA SAVE_TABLE,X
     DEX : CPX #&FF : BNE table
@@ -650,3 +656,4 @@ ENDIF
 .data_bank  EQUB 0
 .osfile_block SKIP 18
 .mbox       SKIP MAILBOX_LEN
+.hs_score   SKIP HS_ENTRY - 10  ; a score two digits to a byte (hiscore_check)

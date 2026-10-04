@@ -50,10 +50,36 @@ MTF_TYPE = 6
     RTS
 }
 
-\ Row and column, five bits each.
+\ Row (tier coded) and column (five bits).
 .emit_place
-    LDX #5 : JSR emit_bits
+    LDX #TIER_ROW : JSR emit_tiered
     LDX #5 : JMP emit_bits
+
+\ A value in the tier code at X (TIER_ROW, _ENDS, _LEN0 or _LEN1: tools/
+\ packrooms.py's Tiers), emitted; get_tiered returns it in A. '0', '10' or
+\ '11' picks one of the code's three tiers, then its tier_width bits pick
+\ the value in that tier.
+.emit_tiered
+    JSR get_tiered
+    JMP emit
+.get_tiered
+{
+    ZA_AUTO1 tier
+    STX tier
+    LDX #1 : JSR getbits : BEQ got
+    INC tier
+    LDX #1 : JSR getbits : BEQ got
+    INC tier
+.got
+    LDY tier
+    LDA #0 : LDX tier_width,Y : BEQ none
+    JSR getbits
+.none
+    LDY tier : CLC : ADC tier_base,Y : TAY
+    LDA tier_syms,Y
+    RTS
+}
+.len_tier EQUB TIER_LEN0, TIER_LEN1
 
 \ A move-to-front coded value from the list at mtf + X (MTF_ATTR, _TILE or
 \ _TYPE): 0 = the front entry, 10 = the second, 110 = the third, 111 = a
@@ -95,13 +121,25 @@ MTF_TYPE = 6
     JMP emit
 }
 
+\ bp = room A's (1-120) bit stream, which follows rooms 1 to A - 1's.
+.room_stream
+{
+    TAX
+    LDA #LO(packed_rooms) : STA bp
+    LDA #HI(packed_rooms) : STA bp+1
+.skip
+    DEX : BEQ found
+    LDA packed_lengths-1,X : CLC : ADC bp : STA bp
+    BCC skip
+    INC bp+1 : BNE skip         ; (always)
+.found
+    RTS
+}
+
 \ Start unpacking room A (1-120): its first record is the background.
 .unpack_room
 {
-    \ bp = packed_rooms + packed_offsets[room - 1]
-    ASL A : TAX
-    CLC : LDA packed_offsets-2,X : ADC #LO(packed_rooms) : STA bp
-    LDA packed_offsets-1,X : ADC #HI(packed_rooms) : STA bp+1
+    JSR room_stream
     LDA #0 : STA bleft : STA rec_len : STA rec_pos
     \ The lists start empty. (Clearing them shows the allocator, and the
     \ ZA_DISCARD tells it the clearing writes all of them: without it, it
@@ -183,17 +221,18 @@ MTF_TYPE = 6
     LDX #5 : JSR emit_bits      ; rows(5) width(6)
     LDX #6 : JMP emit_bits
 
-\ run: tile attr row col vert len-1 type; capped adds ends(8) before type.
+\ run: tile attr row col vert len-1 type; capped adds ends before type.
 .runs
     LDX #MTF_TILE : JSR emit_mtf
     LDX #MTF_ATTR : JSR emit_mtf
     JSR emit_place
     LDX #1 : JSR getbits
+    TAY : LDX len_tier,Y                ; across or down: its own lengths' code
     LSR A : ROR A : STA unpack_vert     ; to bit 7
-    LDX #5 : JSR getbits
+    JSR get_tiered
     CLC : ADC #1 : ORA unpack_vert : JSR emit
     LDA kind : BEQ type_last
-    LDX #8 : JSR emit_bits
+    LDX #TIER_ENDS : JSR emit_tiered
 .type_last
     LDX #MTF_TYPE : JMP emit_mtf
 

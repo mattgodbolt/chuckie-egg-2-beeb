@@ -29,12 +29,15 @@
 \ start with (decision 7): SPACE, P, O, A, Q, S, 1, 0.
 .mb_keys     EQUB 98, 55, 54, 65, 16, 81, 48, 39
 \ The high-score table (&A56B): ten names of 10 characters, each followed
-\ by 10 digits, most significant first; A&F's to start with.
+\ by its score's 10 digits, most significant first, two to a byte (the
+\ original's has a byte a digit; only MENU reads it); A&F's to start with.
+HS_ENTRY = 15
 .mb_table
 FOR n = 1..10
     EQUS "A&F......."
-    EQUB 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
+    EQUB 0, 0, 0, 0, 0
 NEXT
+HS_LEN = P% - mb_table
 .mb_os       SKIP OS_KEPT_LEN   ; what a soft BREAK keeps of page 2
 .mailbox_end
 

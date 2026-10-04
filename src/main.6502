@@ -61,6 +61,7 @@ SECTION Data, org = &8000, load = &FFFF3000, filename = "CE2DATA", guard = &C000
     INCLUDE "state.6502"
     INCLUDE "bands.6502"
     INCLUDE "data/bands.6502"
+    INCLUDE "data/rooms.6502"       ; the palettes (tools/mkrooms.py)
     \ The rooms, packed by tools/packrooms.py (decision 5).
 .packed_rooms
     INCBIN "data/packed.bin"
@@ -68,6 +69,11 @@ SECTION Data, org = &8000, load = &FFFF3000, filename = "CE2DATA", guard = &C000
     \ The original's sprites: Harry, monsters, truck, train, lifts.
 .sprites
     INCBIN "data/sprites.bin"
+    \ The tile font: constant, so it needn't take main RAM, where every byte
+    \ is wanted for code (the bank is always paged in: reading it here costs
+    \ nothing).
+.tiles
+    INCBIN "data/tiles.bin"
 .data_end
     PRINT "sideways data &8000-&", ~data_end, " (", &C000 - data_end, " bytes free)"
 ENDSECTION
@@ -98,9 +104,7 @@ IF DEFINED(VIEWER)
     INCLUDE "viewer.6502"
 ENDIF
 
-    \ Data from the original: extracted by tools/mkrooms.py, the rooms
-    \ packed by tools/packrooms.py (decision 5).
-    INCLUDE "data/rooms.6502"
+    \ Data from the original (tools/mkgfx.py, tools/mkobjects.py).
     INCLUDE "data/gfx.6502"
 .monster_table
     INCBIN "data/monsters.bin"
@@ -111,8 +115,6 @@ ENDIF
     INCBIN "data/visits.bin"
 .objgfx
     INCBIN "data/objgfx.bin"
-.tiles
-    INCBIN "data/tiles.bin"
 
     .code_end
     PRINT "code &", ~code_start, "-&", ~code_end, " (", screen - code_end, " bytes free)"

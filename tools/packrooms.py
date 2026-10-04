@@ -6,30 +6,41 @@ again to prove the round trip.
 
 The packed form unpacks to the original's bytecode exactly, so the room
 drawer (a transcription of the original's) is unchanged: unpack a room into
-a buffer, draw from the buffer.
+a buffer, draw from the buffer. All but the first byte, the background
+attribute, of which the drawer only takes the paper: here the paper is in
+bits 0-2 and the room's palette number (tools/mkrooms.py, roompal.txt) in
+bits 3-7, where set_room_palette (screen.6502) reads it.
 
 Each room is a stream of bits, most significant first:
 
-    background attribute    8 bits
+    palette * 8 + paper     8 bits
     records, until `end`    a class code, then the class's fields
 
 Class codes (a prefix code, commonest shortest), and fields:
 
-    0       run      tile* attr* row col vert len-1(5) type*
-    100     capped   tile* attr* row col vert len-1(5) ends(8) type*
-    101     single   attr* tile* row col type*
-    1100    diag up      attr* row col len(5) type*
-    1101    diag down    attr* row col len(5) type*
-    11100   text         attr* row col chars(5 each) until 31
-    11101   block        attr* row col h(5) w(5) type*
-    111100  bend         which(2) attr* row col type*   (commands 3-6)
-    111101  hopper       attr* row col rows(5) width(6)
+    0       run      tile* attr* row+ col vert len-1+ type*
+    100     capped   tile* attr* row+ col vert len-1+ ends+ type*
+    101     single   attr* tile* row+ col type*
+    1100    diag up      attr* row+ col len(5) type*
+    1101    diag down    attr* row+ col len(5) type*
+    11100   text         attr* row+ col chars(5 each) until 31
+    11101   block        attr* row+ col h(5) w(5) type*
+    111100  bend         which(2) attr* row+ col type*   (commands 3-6)
+    111101  hopper       attr* row+ col rows(5) width(6)
     11111   end
 
 The fields come in the bytecode's own order, so the unpacker emits each as
 it decodes it.
 
-row is 5 bits, col 5. One run in the whole game (room 33) says column 32
+Fields marked + are tier coded (Tiers): the values the field takes in the
+whole game, commonest first, fall into three tiers, '0', '10' and '11',
+each followed by a fixed number of bits indexing that tier. One code for
+rows, one for the ends of capped runs, and one each for the lengths of
+horizontal and vertical runs. The rest of row is near-flat: col stays 5
+bits. (Rows 1352 bytes plain become 1195, run lengths 1136 become 952,
+ends 232 become 125.)
+
+col is 5 bits. One run in the whole game (room 33) says column 32
 of row 11; the original's arithmetic makes that row 12 column 0, so it is
 packed as that, and the round trip is checked against the room with that
 one record normalised (normalise()). Fields marked * are move-to-front coded, one list
@@ -41,8 +52,10 @@ in as few bits as hold them (attributes 38 values in 6 bits, tiles 49 in
 Text characters index TEXT_CHARS.
 """
 import argparse
+import itertools
 import os
 import sys
+from collections import Counter
 
 ROOMDATA = "src/data/roomdata.bin"
 DATA_START = 0xAA5C
@@ -74,6 +87,12 @@ def load_rooms():
             else:
                 p += 6
         rooms[r] = data[start:p]
+    # The first byte: the paper (the background attribute's bits 3-5) and
+    # the palette number.
+    pals = [int(x) for x in open("src/data/roompal.txt").read().split()]
+    for r in rooms:
+        assert pals[r - 1] < 32
+        rooms[r] = bytes([rooms[r][0] >> 3 & 7 | pals[r - 1] << 3]) + rooms[r][1:]
     return rooms
 
 
@@ -173,16 +192,63 @@ CLASS_CODES = {
     "hopper": "111101", "end": "11111",
 }
 
+# The tier-coded fields; packed.6502 names each one's three bytes of
+# tier_width and tier_base for unpack.6502 (TIER_ROW = 0, TIER_ENDS = 3...).
+TIER_FIELDS = ("row", "ends", "len0", "len1")
+
+
+class Tiers:
+    """One field's tier code: its values commonest first, in three tiers
+    ('0', '10', '11') of 2^width values each, the widths that make the
+    game's whole stream shortest."""
+    def __init__(self, counts):
+        self.syms = sorted(counts, key=lambda v: (-counts[v], v))
+        freq = [counts[v] for v in self.syms]
+        best = None
+        for ws in itertools.product(range(7), repeat=3):
+            if sum(2 ** w for w in ws) < len(freq):
+                continue
+            bits = i = 0
+            for t, w in enumerate(ws):
+                bits += sum(freq[i:i + 2 ** w]) * (min(t + 1, 2) + w)
+                i += 2 ** w
+            if best is None or bits < best[0]:
+                best = (bits, ws)
+        self.widths = best[1]
+        self.bases = [0, 2 ** self.widths[0], 2 ** self.widths[0] + 2 ** self.widths[1]]
+
+    def encode(self, bits, v):
+        i = self.syms.index(v)
+        t = 0 if i < self.bases[1] else 1 if i < self.bases[2] else 2
+        bits.code(("0", "10", "11")[t])
+        bits.put(i - self.bases[t], self.widths[t])
+
+    def decode(self, rd):
+        t = 1 + rd.get(1) if rd.get(1) else 0
+        return self.syms[self.bases[t] + rd.get(self.widths[t])]
+
+
+class TierCount:
+    """The first pass: count a field's values (written plain meanwhile)."""
+    def __init__(self, counts):
+        self.counts = counts
+
+    def encode(self, bits, v):
+        self.counts[v] += 1
+        bits.put(v, 8)
+
 
 def encode_room(room, vocabs=None, seen=None):
-    """vocabs: (attr, tile, type) vocabularies; seen: three sets to collect
-    them into instead."""
+    """vocabs: (attr, tile, type) vocabularies and {field: Tiers}; seen:
+    three sets and {field: Counter} to collect them into instead."""
     room = normalise(room)
     b = Bits()
     if vocabs:
-        attrs, tiles, types = (MTF(v) for v in vocabs)
+        attrs, tiles, types = (MTF(v) for v in vocabs[:3])
+        tiers = vocabs[3]
     else:
-        attrs, tiles, types = (MTF(seen=x) for x in seen)
+        attrs, tiles, types = (MTF(seen=x) for x in seen[:3])
+        tiers = {k: TierCount(c) for k, c in seen[3].items()}
     b.put(room[0], 8)
     p = 1
     while True:
@@ -202,14 +268,14 @@ def encode_room(room, vocabs=None, seen=None):
             b.code(CLASS_CODES["capped" if capped else "run"])
             tiles.encode(b, cmd)
             attrs.encode(b, attr)
-            b.put(row, 5)
+            tiers["row"].encode(b, row)
             b.put(col, 5)
             b.put(ln >> 7, 1)
             n = ln & 0x7F
             assert 1 <= n <= 32, n
-            b.put(n - 1, 5)
+            tiers["len%d" % (ln >> 7)].encode(b, n - 1)
             if capped:
-                b.put(ends, 8)
+                tiers["ends"].encode(b, ends)
             types.encode(b, typ)
         elif c == 10:
             _, attr, tile, row, col, typ = room[p:p + 6]
@@ -217,7 +283,7 @@ def encode_room(room, vocabs=None, seen=None):
             b.code(CLASS_CODES["single"])
             attrs.encode(b, attr)
             tiles.encode(b, tile)
-            b.put(row, 5)
+            tiers["row"].encode(b, row)
             b.put(col, 5)
             types.encode(b, typ)
         elif c in (8, 9):
@@ -226,7 +292,7 @@ def encode_room(room, vocabs=None, seen=None):
             assert 1 <= ln <= 31
             b.code(CLASS_CODES["diag_up" if c == 8 else "diag_down"])
             attrs.encode(b, attr)
-            b.put(row, 5)
+            tiers["row"].encode(b, row)
             b.put(col, 5)
             b.put(ln, 5)
             types.encode(b, typ)
@@ -235,7 +301,7 @@ def encode_room(room, vocabs=None, seen=None):
             p += 4
             b.code(CLASS_CODES["text"])
             attrs.encode(b, attr)
-            b.put(row, 5)
+            tiers["row"].encode(b, row)
             b.put(col, 5)
             while room[p] != 0x80:
                 b.put(TEXT_CHARS.index(chr(room[p])), 5)
@@ -248,7 +314,7 @@ def encode_room(room, vocabs=None, seen=None):
             assert h < 32 and w < 32
             b.code(CLASS_CODES["block"])
             attrs.encode(b, attr)
-            b.put(row, 5)
+            tiers["row"].encode(b, row)
             b.put(col, 5)
             b.put(h, 5)
             b.put(w, 5)
@@ -259,7 +325,7 @@ def encode_room(room, vocabs=None, seen=None):
             b.code(CLASS_CODES["bend"])
             b.put(c - 3, 2)
             attrs.encode(b, attr)
-            b.put(row, 5)
+            tiers["row"].encode(b, row)
             b.put(col, 5)
             types.encode(b, typ)
         elif c == 7:
@@ -268,7 +334,7 @@ def encode_room(room, vocabs=None, seen=None):
             assert rows < 32 and width < 64
             b.code(CLASS_CODES["hopper"])
             attrs.encode(b, attr)
-            b.put(row, 5)
+            tiers["row"].encode(b, row)
             b.put(col, 5)
             b.put(rows, 5)
             b.put(width, 6)
@@ -286,15 +352,16 @@ def read_class(rd):
 
 
 def make_vocabs(rooms):
-    seen = (set(), set(), set())
+    seen = (set(), set(), set(), {k: Counter() for k in TIER_FIELDS})
     for room in rooms.values():
         encode_room(room, seen=seen)
-    return tuple(sorted(x) for x in seen)
+    return tuple(sorted(x) for x in seen[:3]) + ({k: Tiers(c) for k, c in seen[3].items()},)
 
 
 def decode_room(data, vocabs):
     rd = Reader(data)
-    attrs, tiles, types = (MTF(v) for v in vocabs)
+    attrs, tiles, types = (MTF(v) for v in vocabs[:3])
+    row = vocabs[3]["row"].decode
     out = [rd.get(8)]
     while True:
         k = read_class(rd)
@@ -302,28 +369,28 @@ def decode_room(data, vocabs):
             out.append(0)
             return bytes(out)
         if k in ("run", "capped"):
-            out += [tiles.decode(rd), attrs.decode(rd), rd.get(5), rd.get(5)]
+            out += [tiles.decode(rd), attrs.decode(rd), row(rd), rd.get(5)]
             vert = rd.get(1)
-            out.append(vert << 7 | (rd.get(5) + 1))
+            out.append(vert << 7 | (vocabs[3][f"len{vert}"].decode(rd) + 1))
             if k == "capped":
-                out.append(rd.get(8))
+                out.append(vocabs[3]["ends"].decode(rd))
             out.append(types.decode(rd))
         elif k == "single":
-            out += [10, attrs.decode(rd), tiles.decode(rd), rd.get(5), rd.get(5), types.decode(rd)]
+            out += [10, attrs.decode(rd), tiles.decode(rd), row(rd), rd.get(5), types.decode(rd)]
         elif k in ("diag_up", "diag_down"):
-            out += [8 if k == "diag_up" else 9, attrs.decode(rd), rd.get(5), rd.get(5), rd.get(5),
+            out += [8 if k == "diag_up" else 9, attrs.decode(rd), row(rd), rd.get(5), rd.get(5),
                     types.decode(rd)]
         elif k == "text":
-            out += [2, attrs.decode(rd), rd.get(5), rd.get(5)]
+            out += [2, attrs.decode(rd), row(rd), rd.get(5)]
             while (ch := rd.get(5)) != 31:
                 out.append(ord(TEXT_CHARS[ch]))
             out.append(0x80)
         elif k == "block":
-            out += [1, attrs.decode(rd), rd.get(5), rd.get(5), rd.get(5), rd.get(5), types.decode(rd)]
+            out += [1, attrs.decode(rd), row(rd), rd.get(5), rd.get(5), rd.get(5), types.decode(rd)]
         elif k == "bend":
-            out += [3 + rd.get(2), attrs.decode(rd), rd.get(5), rd.get(5), types.decode(rd)]
+            out += [3 + rd.get(2), attrs.decode(rd), row(rd), rd.get(5), types.decode(rd)]
         elif k == "hopper":
-            out += [7, attrs.decode(rd), rd.get(5), rd.get(5), rd.get(5), rd.get(6)]
+            out += [7, attrs.decode(rd), row(rd), rd.get(5), rd.get(5), rd.get(6)]
 
 
 def main():
@@ -346,16 +413,33 @@ def main():
         blob = b"".join(packed[r] for r in range(1, 121))
         with open(f"{args.out}/packed.bin", "wb") as f:
             f.write(blob)
-        offs = [0]
-        for r in range(1, 121):
-            offs.append(offs[-1] + len(packed[r]))
+        lens = [len(packed[r]) for r in range(1, 121)]
+        assert max(lens) < 256
         lines = ["\\ Generated by tools/packrooms.py: do not edit.", "",
-                 "\\ Room r's bit stream is at packed_rooms + packed_offsets[r - 1].",
-                 ".packed_offsets"]
-        for i in range(0, 120, 8):
-            lines.append("    EQUW " + ", ".join(f"{o:4d}" for o in offs[i:min(i + 8, 120)]))
+                 "\\ Each room's bit stream's length: room r's follows rooms 1 to r - 1's",
+                 "\\ from packed_rooms (unpack.6502 adds them up).",
+                 ".packed_lengths"]
+        for i in range(0, 120, 12):
+            lines.append("    EQUB " + ", ".join(f"{n:3d}" for n in lens[i:i + 12]))
         lines.append(f"ROOM_BUFFER_SIZE = {max(len(x) for x in rooms.values())}")
+        # The tier codes: three widths and three starts in tier_syms each.
+        tiers = vocabs[3]
+        starts, syms = [], []
+        for k in TIER_FIELDS:
+            starts += [len(syms) + b for b in tiers[k].bases]
+            syms += tiers[k].syms
+        assert len(syms) <= 256
+        lines += ["", "\\ The tier codes (row, ends, horizontal and vertical run lengths - 1):",
+                  "\\ each one's three tiers' widths in bits, and where they start in",
+                  "\\ tier_syms, where each code's values are, commonest first.",
+                  " : ".join(f"TIER_{k.upper()} = {3 * i}" for i, k in enumerate(TIER_FIELDS)),
+                  ".tier_width EQUB " + ", ".join(str(w) for k in TIER_FIELDS for w in tiers[k].widths),
+                  ".tier_base EQUB " + ", ".join(str(s) for s in starts),
+                  ".tier_syms"]
+        for i in range(0, len(syms), 16):
+            lines.append("    EQUB " + ", ".join(f"&{v:02X}" for v in syms[i:i + 16]))
         # The vocabularies, indexed by the unpacker's list bases (0, 3, 6).
+        vocabs = vocabs[:3]
         widths = [MTF(v).width for v in vocabs]
         offs = [0, len(vocabs[0]), len(vocabs[0]) + len(vocabs[1])]
         lines += ["", "\\ The fields' vocabularies (attribute, tile, type) and, by list",

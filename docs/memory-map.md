@@ -25,7 +25,7 @@ build output (`code &0E00-&xxxx (N bytes free)`), never from this file.
 | `&0D00-&0DEF` | 240 | `LowState`: monsters, checkpoint, score, lives, the room's palette bands |
 | `&0E00-&4FFF` | 16,896 | code and data (copied down from `&1900`) |
 | `&5000-&7FFF` | 12,288 | screen: 256 x 192, MODE 1 pixels (decision 1) |
-| `&8000-&BFFF` | 16,384 | sideways RAM: the mailbox, packed rooms, sprites (decisions 8, 13) |
+| `&8000-&BFFF` | 16,384 | sideways RAM: the mailbox, the palettes and bands, packed rooms, sprites, the tile font (decisions 8, 13, 21) |
 | `&C000-&C2FF` | 768 | OS 1.20's font, read in place for text (decisions 4, 14) |
 
 Between games (decision 13): `MENU` runs at `&1900-&27FF` in MODE 7 (screen

@@ -27,9 +27,10 @@ ZA_AUTO1 ctype              ; the type ORed into the type map (E)
     LDA #8 : STA crtc_reg : LDA #0 : STA crtc_data  ; shown (blank from start-up)
     JSR draw_status_bar
     PLA : JSR unpack_room
-    \ The background: its paper as both paper and ink.
-    JSR fetch : AND #&38 : STA bg
-    LSR A : LSR A : LSR A : ORA bg : STA attr
+    \ The background: its paper as both paper and ink. (Packed, the paper
+    \ is in bits 0-2, beside the palette's number: tools/packrooms.py.)
+    JSR fetch : AND #7 : STA bg
+    ASL A : ASL A : ASL A : ORA bg : STA attr
     \ The maps: background attribute, tile &37, type 0.
     LDX #0
 .fill

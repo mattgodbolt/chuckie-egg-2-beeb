@@ -224,7 +224,7 @@ ENDSECTION
 \ so it survives the reset, MENU and the game's reload.
 SAVE_HDR   = &5F00          ; "CE2SAVE" and the build stamp, 40 bytes
 SAVE_KEYS  = &5F28
-SAVE_TABLE = &5F30          ; 200 bytes
+SAVE_TABLE = &5F30          ; 150 bytes (state.6502: HS_LEN)
 STATE      = &6000
 
 \ What a soft BREAK keeps of the OS's page 2 (the reset code clears and

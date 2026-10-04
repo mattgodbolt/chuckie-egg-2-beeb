@@ -17,12 +17,13 @@ ZA_AUTO1 diff               ; ink pixels EOR paper pixels
 .set_room_palette
 {
     PHA
-    \ sb_p = room_palettes + 4 * (A - 1), where setup_bands' map reader
-    \ (bands.6502) can read the colour map too.
-    LDY #0 : STY sb_p+1
-    ASL A : ROL sb_p+1 : ASL A : ROL sb_p+1
-    CLC : ADC #LO(room_palettes - 4) : STA sb_p
-    LDA sb_p+1 : ADC #HI(room_palettes - 4) : STA sb_p+1
+    \ sb_p = room_palettes + 4 * the palette's number, which is in bits 3-7
+    \ of the room's packed first byte (tools/packrooms.py), where setup_bands'
+    \ map reader (bands.6502) can read the colour map too.
+    JSR room_stream
+    LDY #0 : LDA (bp),Y : LSR A : AND #&FC
+    CLC : ADC #LO(room_palettes) : STA sb_p
+    LDA #HI(room_palettes) : ADC #0 : STA sb_p+1
     \ Logical colours 0-3, a nibble each, low nibble first.
     LDX #3
 .logical

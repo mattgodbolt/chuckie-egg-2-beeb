@@ -37,13 +37,15 @@
     ORA #&10 : STA band_ula+1,X
     ORA #&40 : STA band_ula+2,X
     AND #&EF : STA band_ula+3,X
-    \ The map, two bits a colour.
+    \ The map, two bits a colour, from band_maps.
     INC band_count
     LDA band_count : ASL A : ASL A : ASL A : TAX     ; 8k
-    LDY #2 : JSR sb_map
-    LDY #3 : JSR sb_map
+    LDY #2 : LDA (sb_p),Y : ASL A : TAY
+    LDA band_maps+1,Y : PHA
+    LDA band_maps,Y : JSR sb_map_a
+    PLA : JSR sb_map_a
 .next
-    CLC : LDA sb_p : ADC #4 : STA sb_p
+    CLC : LDA sb_p : ADC #3 : STA sb_p
     BCC record
     INC sb_p+1 : JMP record
 .done
@@ -60,9 +62,11 @@
     LDA band_rows+1 : SEC : SBC band_rows : ASL A : SEC : SBC #1 : STA band_t1+3
 .timed
     RTS
-\ Four colours' logical numbers from byte Y of the record into band_cmaps,X.
+\ Four colours' logical numbers from byte Y at sb_p (a palette's), or from
+\ A, into band_cmaps,X.
 .sb_map
     LDA (sb_p),Y
+.sb_map_a
     LDY #4
 .colour
     PHA : AND #3 : STA band_cmaps,X : PLA

@@ -900,3 +900,33 @@ gathers any number of one ingredient (and makes jumps lower).
 - Left: the movement tick still waits out its two cycles (up to 2,900
   cycles in each of the first two stretches while Harry moves), as the
   original's beeper loop does.
+
+### The data packed tighter (decision 21)
+
+- The data agent's patch: main RAM 2,868 bytes free becoming 3,762,
+  sideways RAM 188 becoming 122. Sideways bytes freed, then the tile font
+  (480) moved there out of main RAM; reading it from the bank costs
+  nothing, as the bank is always paged in.
+- Palettes: the 120 rooms' were 26 different ones (480 bytes in main RAM
+  becoming 104 in the bank). A room's number for its palette is in its
+  packed first byte beside the paper, the only part of that byte the
+  drawer ever used. Bands name one of 19 shared colour maps (3 bytes a
+  split, not 4). Packed rooms are found by adding up their lengths (120
+  bytes, not 240 of offsets).
+- Rooms, 7,289 bytes becoming 6,845 (plus 124 of tables): rows, run
+  lengths (one code across, one down) and the ends of capped runs are tier
+  coded, three tiers ('0', '10', '11') of each field's values commonest
+  first, the widths chosen to make the whole game's stream shortest.
+  Drawing all 120 rooms takes 0.8% longer.
+- MENU keeps the high-score table two digits to a byte (200 bytes
+  becoming 150).
+- Not in this patch, as the speed agent is reworking how sprite frames
+  are stored: the frames' empty top and bottom lines (772 bytes) and 15
+  frames that are mirror images of others (639) could go, measured on the
+  row-major frames with identical screens and no room slower. Both work
+  column-major too (a column's lines skipped; a mirror's columns walked
+  backwards, each byte turned over).
+- Checked: make check on the Model B and the Master (rooms, 18 scenarios,
+  the front end); palettes and bands for all 120 rooms and the screens
+  after every third pass of 30 in 95 rooms the same as before;
+  tools/perf.mjs the same in every room.

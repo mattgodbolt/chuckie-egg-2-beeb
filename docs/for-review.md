@@ -6,18 +6,8 @@ things parked for discussion. The reasoning for each is in
 
 ## Open
 
-1. **The developers' cheats** (decision 27), which Matt asked for; the
-   details were my calls:
-   - f0 turns on the room skip and infinite lives together, and f1-f8
-     then choose the starting egg; nothing on the menu mentions them, but
-     the README does.
-   - The banner reads "CHEATS  SHIFT+LEFT/RIGHT  EGG n", flashing red.
-   - -3 (both keys) from rooms 1 and 2 wraps to 118 and 119, where the
-     Spectrum went on to rooms 254 and 255, past its room table.
-   - The original's PLEASE TRY AGAIN, for a malformed cheat byte, is left
-     out (MENU only makes good ones).
-   - A loaded game keeps the cheats it was saved with, as well as the
-     menu's, as the Spectrum never undid a cheat once applied.
+Nothing open.
+
 ## Settled
 
 Matt's verdicts after playing, and calls he has made:
@@ -63,6 +53,12 @@ Matt's verdicts after playing, and calls he has made:
   ([docs/stock-b.md](stock-b.md), exploratory). Ruled out: a B+ edition, a
   ROM edition, the Electron.
 - **No joystick** (decision 17).
+- **The developers' cheats** (decision 27): f0 for the room skip and
+  infinite lives together, f1-f8 the starting egg, a flashing banner;
+  documented in the README though not on the menu; -3 from rooms 1-2
+  wrapping to 118-119; no PLEASE TRY AGAIN; a loaded game keeps its saved
+  cheats; cheat games may enter the high-score table. All kept, and with
+  the cheats on the status bar shows the room number. "All good."
 - **Text in the BBC's own font** (decision 4), read from the MOS ROM, not
   the Spectrum ROM's: the status bar, the room signs and the EGGS
   DELIVERED screen. "Definitely beeb font."

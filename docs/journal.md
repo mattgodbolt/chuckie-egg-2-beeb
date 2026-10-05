@@ -1122,3 +1122,11 @@ gathers any number of one ingredient (and makes jumps lower).
   everything before it was jsbeeb (whose accuracy Matt trusts for timing,
   and it held: the palette splits, the reset handoff and the disc work
   all behaved).
+
+### The cheats reviewed; the room number
+
+- Matt kept every detail of decision 27 as it was, and asked for the room
+  number while the cheats are on: "R" and three digits at the left of the
+  status bar's top row, the only part of the bar that stays blank (row
+  1's left columns take the score's high digits past 99,999). `make
+  front` checks it's there with the cheats and absent without.

@@ -13,8 +13,7 @@ Main RAM has about 2.9K free, sideways RAM about 1.6K.
 
 ## Waiting on Matt
 
-Nothing: what's left in docs/for-review.md is the details of the cheats,
-if Matt wants any changed.
+Nothing: docs/for-review.md has no open items.
 
 Settled after Matt's play: a real Master ("works a treat ... loading and
 saving and all"), the footsteps and the life-lost tune ("now

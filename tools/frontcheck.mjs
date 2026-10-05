@@ -97,6 +97,10 @@ try {
     const before = await b.peek("h_cell");
     await hold("X", 2);                               // walk right, with X now
     check((await b.peek("h_cell")) > before, "X walks Harry right");
+    // The status bar's first cell (screen &5000, 16 bytes) is blank without
+    // the cheats; with them it holds the room number's R (decision 27).
+    const firstCell = async () => (await b.read(0x5000, 16)).some((x) => x);
+    check(!(await firstCell()), "no room number in the status bar");
 
     // The save key (V now) in play: the save screen (decision 23), the
     // disc listed and the last name offered. ESCAPE: no save, the game
@@ -244,6 +248,7 @@ try {
     await b.run(0.5);
     const room = await b.peek("room");
     check(room > 1, `... SHIFT and right skip rooms (room ${room})`);
+    check(await firstCell(), "... the room number in the status bar");
 } finally {
     await b.close();
 }

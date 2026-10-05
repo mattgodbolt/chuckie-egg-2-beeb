@@ -8,6 +8,9 @@
 \                   shown as spaces
 \   row 1, col 12:  the name of what Harry carries, 8 characters
 \   row 1, col 22:  min(lives, 9) lives icons (tile &56), then a blank
+\
+\ With the developers' cheats on, the port adds the room number at row 0,
+\ col 0, where the original's bar is blank (decision 27).
 \ ***************************************************************************
 
 \ The score, lives and the carried name are in LowState (memory.6502):
@@ -25,10 +28,33 @@
     LDX status_i : INX
     BNE labels                  ; (always)
 .done
+    JSR draw_room_number
     JSR draw_score
     JSR visit_bonus
     JSR draw_carrying
     JMP draw_lives
+}
+
+\ With the developers' cheats on, "R" and the room's three digits at row
+\ 0, columns 0-3 (decision 27: Matt, finding his way with the room skip).
+.draw_room_number
+{
+    LDA cheat : BEQ done
+    LDA #0 : JSR status_at
+    LDA #'R' : JSR status_char
+    LDA room : LDX #'0' - 1
+.hundreds
+    INX : SEC : SBC #100 : BCS hundreds
+    ADC #100 : STA status_x         ; (carry clear) what's left
+    TXA : JSR status_char
+    LDA status_x : LDX #'0' - 1
+.tens
+    INX : SEC : SBC #10 : BCS tens
+    ADC #10 : STA status_x
+    TXA : JSR status_char
+    LDA status_x : ORA #'0' : JMP status_char
+.done
+    RTS
 }
 
 \ A room's first visit this egg (&A139): its value x egg hundreds.

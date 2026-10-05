@@ -43,7 +43,8 @@ disc and ask for a filename, offering the last one used.
 
 The original's hidden developers' cheats are here too: **f0** on the menu
 turns them on (SHIFT with left or right changes room, and lives never run
-out), and **f1**-**f8** then choose the starting egg.
+out, with the room number shown at the top left), and **f1**-**f8** then
+choose the starting egg.
 
 <img src="docs/images/menu.png" alt="The menu, with the high-score table" width="462">
 

@@ -6,11 +6,7 @@ things parked for discussion. The reasoning for each is in
 
 ## Open
 
-1. **A run on a real Master** (decision 16): checked only in jsbeeb, with
-   DFS and with ADFS. If a ROM on Matt's Master claims HAZEL
-   `&D000-&D6FF`, the reset snapshot will need to move (to shadow RAM,
-   driven from HAZEL).
-2. **The developers' cheats** (decision 27), which Matt asked for; the
+1. **The developers' cheats** (decision 27), which Matt asked for; the
    details were my calls:
    - f0 turns on the room skip and infinite lives together, and f1-f8
      then choose the starting egg; nothing on the menu mentions them, but
@@ -58,6 +54,9 @@ Matt's verdicts after playing, and calls he has made:
 - **Checkpoints**: the original takes one only when Harry enters a room
   walking or on a ladder, so a room entered by a jump or a fall sends him
   back further on a death. Kept: "I must have misremembered".
+- **The Master** (decision 16): played on Matt's real Master, "works a
+  treat ... loading and saving and all". (If a ROM there ever claims
+  HAZEL `&D000-&D6FF`, the reset snapshot would need to move.)
 - **What it runs on** (decisions 8 and 16): a Model B with 16K of sideways
   RAM, or a Master 128. A stock-B edition is parked for the future as
   [issue #1](https://github.com/mattgodbolt/chuckie-egg-2-beeb/issues/1)

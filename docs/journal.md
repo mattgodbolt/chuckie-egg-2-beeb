@@ -1114,3 +1114,11 @@ gathers any number of one ingredient (and makes jumps lower).
 - docs/for-review.md is now split into what's open (the train's rumble,
   a run on a real Master, the details of the cheats, the MOS font),
   what Matt has settled, and figures for information.
+
+### On a real Master
+
+- Matt played it on his Master 128 on a CRT: "works a treat on a real
+  master, loading and saving and all". The first run on real hardware;
+  everything before it was jsbeeb (whose accuracy Matt trusts for timing,
+  and it held: the palette splits, the reset handoff and the disc work
+  all behaved).

@@ -13,9 +13,11 @@ Main RAM has about 2.9K free, sideways RAM about 1.6K.
 
 ## Waiting on Matt
 
-1. **A run on a real Master** (for-review).
+Nothing: what's left in docs/for-review.md is the details of the cheats,
+if Matt wants any changed.
 
-Settled after Matt's play: the footsteps and the life-lost tune ("now
+Settled after Matt's play: a real Master ("works a treat ... loading and
+saving and all"), the footsteps and the life-lost tune ("now
 perfect"), the train's rumble ("passable for now"), the keys, Harry white where he is, the checkpoints (the
 original's rule stays), room 1's ladder, saving and loading.
 

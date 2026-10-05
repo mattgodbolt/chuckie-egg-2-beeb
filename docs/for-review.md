@@ -22,9 +22,6 @@ things parked for discussion. The reasoning for each is in
      out (MENU only makes good ones).
    - A loaded game keeps the cheats it was saved with, as well as the
      menu's, as the Spectrum never undid a cheat once applied.
-3. **Text in the MOS font** (decision 4), not the Spectrum ROM's: the
-   status bar, the room signs and the EGGS DELIVERED screen.
-
 ## Settled
 
 Matt's verdicts after playing, and calls he has made:
@@ -67,6 +64,9 @@ Matt's verdicts after playing, and calls he has made:
   ([docs/stock-b.md](stock-b.md), exploratory). Ruled out: a B+ edition, a
   ROM edition, the Electron.
 - **No joystick** (decision 17).
+- **Text in the BBC's own font** (decision 4), read from the MOS ROM, not
+  the Spectrum ROM's: the status bar, the room signs and the EGGS
+  DELIVERED screen. "Definitely beeb font."
 
 ## For information
 

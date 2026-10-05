@@ -22,10 +22,13 @@ original's rule stays), room 1's ladder, saving and loading.
 
 ## A stock Model B edition? (Matt's moon shot)
 
-[docs/stock-b.md](stock-b.md): not from memory alone (about 2K short even
-with a 1-bit screen), but a disc edition fits with about 1K spare, loading
-each room's data from disc as Harry enters: room changes of about 1.0s, or
-0.4s with the drive kept spinning. Matt's call whether to build it.
+[docs/stock-b.md](stock-b.md), an exploratory study (not current): not
+from memory alone (about 2K short even with a 1-bit screen), but a disc
+edition fits with about 1K spare, loading each room's data from disc as
+Harry enters: room changes of about 1.0s, or 0.4s with the drive kept
+spinning. Parked for the future as
+[issue #1](https://github.com/mattgodbolt/chuckie-egg-2-beeb/issues/1).
+Ruled out: a B+ edition, a ROM edition, the Electron.
 
 ## Worth doing, no decision needed
 

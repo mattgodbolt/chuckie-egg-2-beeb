@@ -1,5 +1,11 @@
 # Chuckie Egg 2 on a stock 32K Model B: what it would take
 
+> **Exploratory, not current.** A feasibility study measured on 2026-10-04
+> against build `25a57fd`. The code has moved on since and the figures
+> will drift; nothing here is planned or built. A stock-B edition is
+> tracked as [issue #1](https://github.com/mattgodbolt/chuckie-egg-2-beeb/issues/1),
+> for the future; re-measure before relying on any of it.
+
 Research for the "moon shot": the game on a Model B with no sideways RAM.
 An exploratory agent measured it on the build of `25a57fd` and in jsbeeb
 2.3.1 (the version `npx jsbeeb-mcp` runs, which models the 8271's step,
@@ -349,6 +355,9 @@ room stays on screen during the load and then the new one is drawn, as
 now.
 
 ## 6. Other machines
+
+Matt has ruled out a B+ edition, a ROM (EPROM) edition and the Electron;
+they're kept here only as the study found them.
 
 - **A 16K EPROM in a free ROM socket of a B** (a stock B has two free
   sockets). Every byte in the bank is constant except the 225-byte

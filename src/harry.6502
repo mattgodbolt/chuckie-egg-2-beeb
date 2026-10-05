@@ -7,8 +7,7 @@
 \ cell (row * 32 + col), a pixel line yf and a 2-pixel step xf, which is
 \ all the logic uses. T(off) is the cell type at his top-left cell + off
 \ (off = 32 a row down + 1 a column right): (hptr),Y, or (hptr_up),Y with
-\ off + 32 for the negative ones. Lifts (state 8 and the landing test) are
-\ not in yet.
+\ off + 32 for the negative ones.
 \ ***************************************************************************
 
 ZA_AUTO1 vE                 ; VCollide's E: yf before the move

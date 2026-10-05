@@ -10,7 +10,7 @@ Writes, all committed (the build never runs this):
     src/data/roomoffsets.txt  where each room starts in roomdata.bin
                             (tools/packrooms.py reads it)
     src/data/rooms.6502     the palettes the rooms use (their first band's),
-                            each once: 25 for 120 rooms
+                            each once: 30 for 120 rooms
     src/data/roompal.txt    each room's palette number in rooms.6502
                             (tools/packrooms.py puts it in the room's
                             first byte, beside its paper)

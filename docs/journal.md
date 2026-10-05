@@ -1100,3 +1100,17 @@ gathers any number of one ingredient (and makes jumps lower).
   bands, monsters and their frames; 1K at most) by OSWORD &7F on entry,
   with the DFS kept just alive: about 1.0s a room change, or 0.4s with the
   drive kept spinning, measured on jsbeeb's 8271.
+
+### A friendly guide, and the review list sorted
+
+- An agent wrote [docs/how-it-works.md](how-it-works.md): an illustrated
+  tour of the factory, the map format (room 51 drawn record by record),
+  Harry, the monsters, the machines, the puzzle (behind a spoiler
+  warning), the main loop, the BBC side and the testing, with twenty
+  pictures made by the repo's own tools (the scripts are in tools/guide/).
+  Its facts were spot-checked against the research and the data before
+  merging; one figure with no source (the original's size) became the
+  measured budget from stock-b.md.
+- docs/for-review.md is now split into what's open (the train's rumble,
+  a run on a real Master, the details of the cheats, the MOS font),
+  what Matt has settled, and figures for information.

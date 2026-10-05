@@ -64,7 +64,7 @@ of the original's room drawer from the original's data, and compared pixel
 for pixel with the Spectrum's own drawing of it (all 120 match). Harry's
 movement, the monsters, the objects, the factory, the truck, the train and
 the lifts are the original's code in 6502, and scripted play is compared
-pass by pass with the original running in SkoolKit's Z80 simulator: 20
+pass by pass with the original running in SkoolKit's Z80 simulator: 22
 scenarios and random walks, identical. The game keeps the original's
 three frames a pass everywhere.
 
@@ -74,6 +74,9 @@ per band, with up to two palette changes down the screen in a room that
 needs more (99.5% of pixels in the original's colour); the sound chip in
 place of the beeper; a MODE 7 front end that saves to disc; and BBC keys.
 
+[docs/how-it-works.md](docs/how-it-works.md) is a friendly, illustrated
+tour of how the game and the port work: the factory, the map format,
+Harry, the monsters, the puzzle (with a spoiler warning) and the BBC side.
 [docs/journal.md](docs/journal.md) is the story of the port;
 [docs/research.md](docs/research.md) is how the original works; and
 [docs/next-steps.md](docs/next-steps.md) is what's left.

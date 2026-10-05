@@ -50,12 +50,18 @@ out), and **f1**-**f8** then choose the starting egg.
 ## What it runs on
 
 A BBC Model B with 16K of sideways RAM, or a Master 128 (from DFS or
-ADFS). A stock Model B without sideways RAM isn't supported;
+ADFS). The game's data fills a sideways RAM bank; the front end finds a
+free one. On real hardware, write `chuckie-egg-2.ssd` to a disc (or put it
+on a Gotek or an MMFS card) and SHIFT-BREAK.
+
+<img src="docs/images/real-master.jpg" alt="The game running on a real BBC Master 128, on a Panasonic CRT: a magenta-brick room with green ladders, hanging chains and Harry, score 04434" width="600">
+
+*On Matt's own Master 128, loading and saving and all.*
+
+A stock Model B without sideways RAM isn't supported;
 [docs/stock-b.md](docs/stock-b.md) is an exploratory study of what it
 would take (a disc edition loading each room as Harry enters it), tracked
-for the future as [issue #1](https://github.com/mattgodbolt/chuckie-egg-2-beeb/issues/1). The game's data fills a sideways RAM bank; the front end finds
-a free one. On real hardware, write `chuckie-egg-2.ssd` to a disc (or put
-it on a Gotek or an MMFS card) and SHIFT-BREAK.
+for the future as [issue #1](https://github.com/mattgodbolt/chuckie-egg-2-beeb/issues/1).
 
 ## How close is it?
 

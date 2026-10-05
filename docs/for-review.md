@@ -6,21 +6,11 @@ things parked for discussion. The reasoning for each is in
 
 ## Open
 
-1. **The train's rumble** (decision 12). The original toggles the beeper
-   from its RNG nine times a pass; the port plays the SN76489's white
-   noise, shifted about 150 times a second, while the train is noisy. The
-   RNG calls stay where they were, so the game's random sequence matches.
-   Is the character close enough? It sounds only while the train is in
-   Harry's room with the power on. The quickest way to hear it: f0 on the
-   menu for the cheats, then SHIFT with left (from room 1) down to room
-   115, jump right past the generator's lever for the power, and skip on
-   to the railway: the train starts each egg in room 74 and moves on a
-   room every 64 passes, about 4 seconds.
-2. **A run on a real Master** (decision 16): checked only in jsbeeb, with
+1. **A run on a real Master** (decision 16): checked only in jsbeeb, with
    DFS and with ADFS. If a ROM on Matt's Master claims HAZEL
    `&D000-&D6FF`, the reset snapshot will need to move (to shadow RAM,
    driven from HAZEL).
-3. **The developers' cheats** (decision 27), which Matt asked for; the
+2. **The developers' cheats** (decision 27), which Matt asked for; the
    details were my calls:
    - f0 turns on the room skip and infinite lives together, and f1-f8
      then choose the starting egg; nothing on the menu mentions them, but
@@ -32,7 +22,7 @@ things parked for discussion. The reasoning for each is in
      out (MENU only makes good ones).
    - A loaded game keeps the cheats it was saved with, as well as the
      menu's, as the Spectrum never undid a cheat once applied.
-4. **Text in the MOS font** (decision 4), not the Spectrum ROM's: the
+3. **Text in the MOS font** (decision 4), not the Spectrum ROM's: the
    status bar, the room signs and the EGGS DELIVERED screen.
 
 ## Settled
@@ -51,6 +41,10 @@ Matt's verdicts after playing, and calls he has made:
   colour; the worst rooms are 106 (94%), 105 (95%) and 70 (96%). More
   colours per split would need more horizontal blank than there is, and
   more splits gained little when measured (Rich TW asked).
+- **The train's rumble** (decision 12): the SN76489's white noise,
+  shifted about 150 times a second while the train is in Harry's room
+  with the power on, for the original's beeper clicks (the RNG calls
+  stay where they were). "Passable for now."
 - **Footsteps and the life-lost tune** (decision 12): once the keyboard
   stopped clearing bit 7 of every sound byte, "footstep sound is now
   perfect. no need to change ... as is the sound for the death".

@@ -13,11 +13,10 @@ Main RAM has about 2.9K free, sideways RAM about 1.6K.
 
 ## Waiting on Matt
 
-1. **A run on a real Master** (for-review 11).
-2. **The train's rumble** (for-review 7): close enough?
+1. **A run on a real Master** (for-review).
 
 Settled after Matt's play: the footsteps and the life-lost tune ("now
-perfect"), the keys, Harry white where he is, the checkpoints (the
+perfect"), the train's rumble ("passable for now"), the keys, Harry white where he is, the checkpoints (the
 original's rule stays), room 1's ladder, saving and loading.
 
 ## A stock Model B edition? (Matt's moon shot)

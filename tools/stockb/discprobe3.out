@@ -1,0 +1,9 @@
+DONE = 3031 "\n\n\n\n\n\n\n\n\n\n\n\n\n\n RUN\n      3031\n>"
+game's interrupts, nothing else: 632ms, result 0, data 20,3, 32 VSyncs taken by the game-like handler
++ zero page &90-&9F, &C0-&E6 filled (the game's scratch the DFS doesn't write): 632ms, result 0, data 20,3, 32 VSyncs taken by the game-like handler
++ page 2 &0206-&0235 filled but IRQ1V: 0ms, result 255, data 170,170, 0 VSyncs taken by the game-like handler
++ page 2 &0206-&020B, &020E-&0235 filled (WORDV kept): 632ms, result 0, data 20,3, 32 VSyncs taken by the game-like handler
++ &0D1B-&0DEF filled (LowState moved up): 632ms, result 0, data 20,3, 32 VSyncs taken by the game-like handler
++ &0E00-&106F, &1081-&10CF, &10E0-&18FF filled (code around the DFS's bytes): 1033ms, result 0, data 20,3, 52 VSyncs taken by the game-like handler
++ &1074-&107F filled: 632ms, result 0, data 20,3, 32 VSyncs taken by the game-like handler
+all of the game's at once (WORDV, &1073, &1080, &10D0-&10DF kept): 1032ms, result 0, data 20,3, 52 VSyncs taken by the game-like handler

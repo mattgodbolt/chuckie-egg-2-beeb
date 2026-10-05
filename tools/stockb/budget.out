@@ -1,0 +1,68 @@
+
+Main RAM code section (&0E00 up)
+  &0E00 system.6502                      32
+  &0E20 irq.6502                        179
+  &0ED3 screen.6502                     380
+  &104F rooms.6502                      803
+  &1372 status.6502                     334
+  &14C0 unpack.6502                     472
+  &1698 sprite.6502                     769
+  &1999 harry.6502                     1857
+  &20DA monsters.6502                  1022
+  &24D8 collide.6502                    558
+  &2706 objects.6502                   1434
+  &2CA0 machines.6502                   752
+  &2F90 sound.6502                      258
+  &3092 handoff.6502                    202
+  &315C game.6502                       629
+  &33D1 data/gfx.6502                   328
+  &3519 data/monsters.bin              1024
+  &3919 data/objects.6502               146
+  &39AB data/things.bin                1024
+  &3DAB data/visits.bin                 121
+  &3E24 data/thingtypes.bin             201
+  &3EED data/montypes.bin               325
+  &4032 data/objgfx.bin                1157
+  total                               14007
+  free below &5000: 2889
+
+Sideways bank
+  &8000 magic                            35
+  &8023 state.6502                      225
+  &8104 bands.6502                      210
+  &81D6 data/bands.6502                 176
+  &8286 data/rooms.6502                 120
+  &82FE data/packed.bin                6845
+  &9DBB data/packed.6502                353
+  &9F1C data/sprites.bin               6339
+  &B7DF data/tiles.bin                  480
+  total                               14783
+  free in bank: 1601
+
+Data inside the code section
+  harry_frames     &33D1     24
+  sprite_frames    &33E9    304
+  monster_table    &3519   1170
+  things           &39AB   1024
+  visits           &3DAB    121
+  thing_types      &3E24    201
+  mon_types        &3EED    208
+  death_notes      &3FBD     48
+  death_notes_end  &3FED      0
+  band_cmaps       &3FED     69
+  objgfx           &4032   1157
+
+Other
+  page1            &0100
+  page1_end        &01C0
+  page2            &0206
+  page2_end        &0236
+  loader           &50A7
+  loader_end       &52D5
+  menu             &1900
+  mailbox          &8023
+  mailbox_end      &8104
+  packed_rooms     &82FE
+  sprites          &9F1C
+  tiles            &B7DF
+  data_end         &B9BF

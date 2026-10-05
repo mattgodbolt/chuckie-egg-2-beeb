@@ -1,0 +1,5 @@
+game's interrupts, nothing else: 632ms, result 0, data 20,3, 32 VSyncs taken by the game-like handler
+&300-&3FF filled: 632ms, result 0, data 20,3, 32 VSyncs taken by the game-like handler
+&236-&2FF filled: FAILED at pc 0xF99C ({"cycles_run":20000002,"completed":true,"output":{"elements":[{"x":1,"y":16,"text":"CALL &3000","foreground":7,"background":0,"mode":7},{"x":0,"y":17,"text":"F","foreground":7,"background":0,"mode":7}) vs 242,147,220,1
+&D9F-&DEF filled: 632ms, result 0, data 20,3, 32 VSyncs taken by the game-like handler
+&DF0-&DFF filled: 0ms, result 255, data 170,170, 0 VSyncs taken by the game-like handler

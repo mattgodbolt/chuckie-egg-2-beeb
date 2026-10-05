@@ -1,0 +1,27 @@
+main RAM &0E00-&4FFF: 16896; used 14007; free 2889
+bank: 14783 (tiles 480, sprites 6339 incl. Harry 294, packed rooms 6845, lengths 120, unpack tables 233, palettes 120, bands 148+28, bands code 210, mailbox 225, magic 35)
+shortfall if everything stays resident: 11894
+
+Plan: per-room records from disc (OSWORD &7F), MODE 1 screen as now
+  +   480  tile font (bank -> main)
+  +   294  Harry's frames (bank -> main)
+  +   210  setup_bands (bank -> main)
+  +    28  band colour maps (bank -> main)
+  +   233  unpacker's tier and vocabulary tables (bank -> main)
+  +  1024  record buffer (largest record, room 120: 1,017)
+  +   250  ~ record loader: OSWORD &7F block and call, retry, pointer patching, monster entries
+  +   120  record start sectors (a byte a room)
+  +    45  mailbox the game keeps: keys, RNG, flags, the OS bytes a BREAK keeps
+  +   170  high-score table and filename (or MENU keeps them on disc: 0)
+  +     2  WORDV (&020C) left to the MOS: a 2-byte hole in page 2's tables (measured: the rest may hold tables)
+  +    32  page-1 tables out of the stack's way (the DFS call takes 50 bytes of stack)
+  +     0  LowState up to &0D1B-&0DB9, over the B's extended vectors (measured: the read still works): 0
+  +    48  the DFS's bytes in page &10 (&1073, &1080-&108F, &10D6) kept clear of code: ~48
+  -  1014  monster table (each room's entries go in its record; the dog's swap and the egg's limit become flags)
+  -    15  ~ the bank's paging (system.6502)
+  net 1907 against 2889 free: 982 left
+  options:
+    -  188  monster types into the records too (a room's 4 at most)
+    -  170  high-score table kept on disc by MENU instead
+    -   90  start sectors as 2 bits a room (sectors per record) instead of a byte
+  with all of them: 1430 left

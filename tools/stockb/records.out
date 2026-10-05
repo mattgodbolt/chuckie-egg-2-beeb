@@ -1,0 +1,15 @@
+Biggest records: bytes (room, sprites, frames, monsters)
+  room 120:  1017 = room 47 + sprites 956 (2 frames) + ...; 1 monster entries
+  room 111:   990 = room 58 + sprites 854 (22 frames) + ...; 2 monster entries
+  room   1:   962 = room 70 + sprites 815 (22 frames) + ...; 1 monster entries
+  room   2:   925 = room 56 + sprites 842 (5 frames) + ...; 2 monster entries
+  room  89:   854 = room 51 + sprites 708 (24 frames) + ...; 4 monster entries
+  room  66:   836 = room 62 + sprites 691 (20 frames) + ...; 4 monster entries
+  room   7:   677 = room 78 + sprites 539 (16 frames) + ...; 2 monster entries
+  room  92:   674 = room 52 + sprites 558 (16 frames) + ...; 3 monster entries
+total 43848 bytes; 228 sectors if each record starts a sector (23 tracks)
+sectors a record: 1: 42 rooms, 2: 54 rooms, 3: 18 rooms, 4: 6 rooms
+monster entries in rooms: max 4
+split-room counts: 35 rooms with splits, 49 splits
+room-order layout: tracks between neighbouring rooms: max 3, mean 1.0; same track 96 of 229
+records: 228 sectors; every room's frames, packed as a set, unpack as the original's

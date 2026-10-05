@@ -1,0 +1,14 @@
+model B-DFS1.2
+  OSWORD &7F needs &10d6
+DFS's 8271 parameters: step &c, settle &a, load/unload &c8
+warm-up read t13: 463ms (result 0, data 13,0)
+after 5s idle, t13: 764ms (result 0, data 13,0)
+head kept loaded: read t13: 145ms (result 0, data 13,0)
+head kept loaded, after 2s idle, t13 s5: 174ms (result 0, data 13,5)
+head kept loaded, after 5s idle, t13 s5: 74ms (result 0, data 13,5)
+head kept loaded, t14 s0: 175ms (result 0, data 14,0)
+head kept loaded, t16 s0: 275ms (result 0, data 16,0)
+head kept loaded, t13 x4: 334ms (result 0, data 13,0)
+faster step, t30 s0: 285ms (result 0, data 30,0)
+faster step, t13 s0: 275ms (result 0, data 13,0)
+head kept loaded, same track, sectors 0-9 after varied waits: 105 153 183 213 43 73 103 133 162 192ms

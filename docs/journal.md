@@ -1089,3 +1089,14 @@ gathers any number of one ingredient (and makes jumps lower).
   address, which wraps within a third of the screen; the port carried into
   the high byte. apply_delta now steps the low byte of `h_cell` only (its
   low byte is the same row-in-third and column), and `wall-wrap` matches.
+
+### Could it fit a stock Model B?
+
+- Matt's moon shot, explored by an agent: [docs/stock-b.md](stock-b.md),
+  with its measuring scripts in tools/stockb/. Not from memory: off the
+  screen the game needs about 32.4K against a stock B's 20.5K, and even a
+  1-bit screen with every packing idea leaves it about 2K short. As a disc
+  edition it fits, loading each room's records (packed room, palette and
+  bands, monsters and their frames; 1K at most) by OSWORD &7F on entry,
+  with the DFS kept just alive: about 1.0s a room change, or 0.4s with the
+  drive kept spinning, measured on jsbeeb's 8271.

@@ -1,0 +1,146 @@
+room                  99.50% of pixels in their own colour (mean over rooms)
+room+yellow           98.87% of pixels in their own colour (mean over rooms)
+row(paper,yellow)     99.59% of pixels in their own colour (mean over rooms)
+row(paper)            99.95% of pixels in their own colour (mean over rooms)
+worst rooms for a per-room palette:
+  room 106:  92.5%  ['black', 'green', 'blue', 'yellow']
+  room 105:  94.5%  ['black', 'red', 'green', 'white']
+  room  48:  95.7%  ['black', 'magenta', 'white', 'blue']
+  room 115:  96.1%  ['red', 'magenta', 'blue', 'yellow']
+  room  70:  96.8%  ['black', 'magenta', 'yellow', 'red']
+  room  73:  97.5%  ['black', 'red', 'white', 'yellow']
+  room  53:  97.6%  ['magenta', 'blue', 'green', 'white']
+  room  79:  98.0%  ['black', 'red', 'white', 'yellow']
+  room 101:  98.1%  ['blue', 'yellow', 'red', 'black']
+  room  71:  98.1%  ['black', 'red', 'white', 'yellow']
+  room  72:  98.3%  ['black', 'red', 'white', 'yellow']
+  room  74:  98.3%  ['black', 'red', 'white', 'yellow']
+room   1: mono  86.8  room  94.7  row1  99.0  row2  99.0  bands3  99.0
+room   2: mono  88.0  room  95.0  row1  99.7  row2  99.7  bands3  99.7
+room   3: mono  70.7  room  94.9  row1  99.9  row2  99.9  bands3  99.9
+room   4: mono  90.8  room  91.0  row1  95.5  row2  96.0  bands3  95.5
+room   5: mono  79.8  room  79.8  row1  84.4  row2  84.4  bands3  84.4
+room   6: mono  87.6  room  96.0  row1  97.3  row2  97.3  bands3  96.8
+room   7: mono  12.5  room  97.0  row1  97.3  row2  97.3  bands3  97.3
+room   8: mono  14.2  room  95.7  row1  95.7  row2  95.7  bands3  95.7
+room   9: mono   7.8  room  95.4  row1  97.2  row2  97.2  bands3  96.8
+room  10: mono  11.4  room  96.8  row1  97.4  row2  97.4  bands3  97.4
+room  11: mono  70.5  room  84.4  row1  93.7  row2  94.1  bands3  90.7
+room  12: mono   2.0  room  88.9  row1  93.2  row2  93.2  bands3  92.8
+room  13: mono  88.3  room  97.4  row1  97.5  row2  97.5  bands3  97.5
+room  14: mono  89.0  room  98.3  row1  98.3  row2  98.3  bands3  98.3
+room  15: mono  89.7  room  98.8  row1  98.8  row2  98.8  bands3  98.8
+room  16: mono  87.8  room  97.1  row1  97.2  row2  97.2  bands3  97.2
+room  17: mono  10.7  room  95.7  row1  96.0  row2  96.0  bands3  95.9
+room  18: mono  12.1  room  98.5  row1  98.5  row2  98.5  bands3  98.5
+room  19: mono  11.3  room  96.6  row1  97.1  row2  97.1  bands3  97.1
+room  20: mono   6.7  room  95.8  row1  96.5  row2  96.5  bands3  96.1
+room  21: mono   2.1  room  89.4  row1  92.6  row2  93.2  bands3  92.6
+room  22: mono   1.6  room  89.9  row1  93.6  row2  93.7  bands3  93.6
+room  23: mono   7.9  room  98.3  row1  98.3  row2  98.3  bands3  98.3
+room  24: mono   8.2  room  98.5  row1  98.5  row2  98.5  bands3  98.5
+room  25: mono   9.9  room  98.3  row1  98.6  row2  98.6  bands3  98.5
+room  26: mono  10.5  room  99.0  row1  99.0  row2  99.0  bands3  99.0
+room  27: mono  99.3  room  99.3  row1  99.3  row2  99.3  bands3  99.3
+room  28: mono  98.9  room  98.9  row1  99.4  row2  99.4  bands3  99.4
+room  29: mono  98.9  room  98.9  row1  98.9  row2  98.9  bands3  98.9
+room  30: mono  87.3  room  94.1  row1  95.1  row2  95.1  bands3  95.1
+room  31: mono   1.6  room  91.0  row1  94.1  row2  94.1  bands3  94.1
+room  32: mono   2.4  room  89.5  row1  93.2  row2  93.2  bands3  93.2
+room  33: mono   7.6  room  92.4  row1  97.8  row2  97.8  bands3  97.8
+room  34: mono   8.3  room  98.8  row1  98.8  row2  98.8  bands3  98.8
+room  35: mono  10.1  room  98.5  row1  98.6  row2  98.6  bands3  98.6
+room  36: mono  11.4  room  98.3  row1  98.3  row2  98.3  bands3  98.3
+room  37: mono  98.8  room  98.8  row1  98.8  row2  98.8  bands3  98.8
+room  38: mono  82.8  room  85.7  row1  92.5  row2  93.9  bands3  93.9
+room  39: mono  98.3  room  98.3  row1  98.3  row2  98.3  bands3  98.3
+room  40: mono  85.0  room  92.6  row1  93.6  row2  93.6  bands3  93.4
+room  41: mono   1.3  room  92.3  row1  96.1  row2  96.1  bands3  96.1
+room  42: mono   2.4  room  88.3  row1  90.2  row2  90.4  bands3  90.3
+room  43: mono   7.4  room  96.0  row1  97.7  row2  97.7  bands3  97.1
+room  44: mono  10.1  room  97.3  row1  98.3  row2  98.3  bands3  97.9
+room  45: mono   7.8  room  97.3  row1  97.8  row2  97.8  bands3  97.5
+room  46: mono   7.3  room  97.8  row1  98.0  row2  98.0  bands3  97.9
+room  47: mono  98.7  room  98.7  row1  98.7  row2  98.7  bands3  98.7
+room  48: mono  77.2  room  80.5  row1  88.3  row2  89.8  bands3  89.8
+room  49: mono  98.3  room  98.3  row1  98.4  row2  98.4  bands3  98.3
+room  50: mono  85.7  room  92.9  row1  92.9  row2  92.9  bands3  92.9
+room  51: mono   8.1  room  85.4  row1  92.1  row2  95.9  bands3  93.9
+room  52: mono   3.4  room  89.5  row1  91.6  row2  92.5  bands3  92.3
+room  53: mono   5.6  room  87.2  row1  91.7  row2  94.1  bands3  91.7
+room  54: mono  98.6  room  98.6  row1  98.6  row2  98.6  bands3  98.6
+room  55: mono  99.1  room  99.1  row1  99.1  row2  99.1  bands3  99.1
+room  56: mono   4.2  room  93.4  row1  96.1  row2  96.1  bands3  95.0
+room  57: mono   1.4  room  96.3  row1  97.5  row2  97.5  bands3  97.4
+room  58: mono   0.0  room  98.4  row1  98.4  row2  98.4  bands3  98.4
+room  59: mono   2.7  room  96.4  row1  97.0  row2  97.0  bands3  96.9
+room  60: mono  90.5  room  93.9  row1  93.9  row2  93.9  bands3  93.9
+room  61: mono  98.9  room  98.9  row1  98.9  row2  98.9  bands3  98.9
+room  62: mono  98.9  room  98.9  row1  98.9  row2  98.9  bands3  98.9
+room  63: mono  98.0  room  98.0  row1  98.0  row2  98.0  bands3  98.0
+room  64: mono  98.4  room  98.4  row1  98.4  row2  98.4  bands3  98.4
+room  65: mono  98.5  room  98.5  row1  98.6  row2  98.6  bands3  98.6
+room  66: mono   0.5  room  97.7  row1  98.0  row2  98.0  bands3  98.0
+room  67: mono   0.0  room  98.0  row1  98.1  row2  98.1  bands3  98.1
+room  68: mono   0.0  room  99.0  row1  99.0  row2  99.0  bands3  99.0
+room  69: mono   1.8  room  96.3  row1  96.4  row2  96.4  bands3  96.4
+room  70: mono  75.3  room  83.5  row1  88.1  row2  90.1  bands3  90.1
+room  71: mono  90.1  room  92.9  row1  96.8  row2  99.8  bands3  98.1
+room  72: mono  88.9  room  92.3  row1  96.0  row2  99.1  bands3  96.4
+room  73: mono  88.7  room  91.8  row1  95.7  row2  98.8  bands3  96.5
+room  74: mono  90.4  room  92.5  row1  96.6  row2  99.2  bands3  97.3
+room  75: mono  89.3  room  92.5  row1  96.2  row2  98.5  bands3  96.3
+room  76: mono  80.8  room  92.9  row1  96.3  row2  99.4  bands3  96.7
+room  77: mono  87.5  room  90.6  row1  95.4  row2  98.6  bands3  97.4
+room  78: mono  78.1  room  92.9  row1  96.1  row2  99.1  bands3  96.7
+room  79: mono  89.1  room  92.3  row1  96.2  row2  99.2  bands3  96.7
+room  80: mono  88.8  room  89.5  row1  93.7  row2  95.9  bands3  95.3
+room  81: mono   1.7  room  96.4  row1  97.9  row2  97.9  bands3  97.9
+room  82: mono  84.2  room  90.9  row1  93.9  row2  93.9  bands3  93.9
+room  83: mono  83.5  room  90.5  row1  93.5  row2  93.6  bands3  93.5
+room  84: mono  86.1  room  98.1  row1  98.1  row2  98.1  bands3  98.1
+room  85: mono  93.3  room  98.6  row1  98.6  row2  98.6  bands3  98.6
+room  86: mono  92.0  room  94.1  row1  98.3  row2  98.3  bands3  98.0
+room  87: mono  90.4  room  98.5  row1  98.6  row2  98.6  bands3  98.6
+room  88: mono  89.3  room  97.0  row1  97.1  row2  97.1  bands3  97.1
+room  89: mono  89.5  room  98.5  row1  99.2  row2  99.2  bands3  99.1
+room  90: mono  89.6  room  89.8  row1  94.1  row2  94.1  bands3  94.1
+room  91: mono   2.5  room  94.8  row1  97.0  row2  97.0  bands3  96.3
+room  92: mono  84.0  room  91.0  row1  94.0  row2  94.0  bands3  94.0
+room  93: mono  82.8  room  89.9  row1  92.9  row2  92.9  bands3  92.9
+room  94: mono  88.0  room  91.1  row1  95.0  row2  96.4  bands3  96.2
+room  95: mono  75.3  room  87.3  row1  94.3  row2  96.4  bands3  95.7
+room  96: mono  90.2  room  91.2  row1  93.9  row2  95.5  bands3  94.2
+room  97: mono  89.7  room  97.7  row1  98.5  row2  98.5  bands3  98.3
+room  98: mono  91.3  room  99.1  row1  99.4  row2  99.4  bands3  99.4
+room  99: mono  90.5  room  99.3  row1  99.3  row2  99.3  bands3  99.3
+room 100: mono  89.7  room  91.6  row1  93.1  row2  93.8  bands3  93.4
+room 101: mono   3.4  room  94.4  row1  96.2  row2  96.2  bands3  96.0
+room 102: mono   0.0  room  98.2  row1  98.6  row2  98.6  bands3  98.5
+room 103: mono   2.0  room  97.0  row1  98.6  row2  98.6  bands3  98.6
+room 104: mono  85.9  room  90.3  row1  92.7  row2  93.0  bands3  92.7
+room 105: mono  80.2  room  84.2  row1  92.4  row2  95.4  bands3  91.2
+room 106: mono  72.2  room  86.1  row1  90.9  row2  92.2  bands3  91.4
+room 107: mono  87.7  room  94.2  row1  98.1  row2  98.1  bands3  98.1
+room 108: mono  90.2  room  94.4  row1  98.9  row2  98.9  bands3  98.7
+room 109: mono  91.2  room  97.5  row1  98.8  row2  98.8  bands3  98.8
+room 110: mono  93.2  room  93.2  row1  96.1  row2  96.9  bands3  96.3
+room 111: mono   0.1  room  97.5  row1  97.6  row2  97.6  bands3  97.6
+room 112: mono   2.0  room  95.5  row1  97.7  row2  97.7  bands3  97.4
+room 113: mono   0.0  room  98.9  row1  99.0  row2  99.0  bands3  99.0
+room 114: mono   0.0  room  93.6  row1  97.2  row2  98.9  bands3  98.9
+room 115: mono   3.6  room  84.5  row1  92.6  row2  95.7  bands3  93.6
+room 116: mono   0.0  room  93.3  row1  96.1  row2  98.6  bands3  97.9
+room 117: mono   0.0  room  92.6  row1  95.5  row2  98.2  bands3  98.1
+room 118: mono   0.7  room  96.1  row1  99.1  row2  99.8  bands3  99.7
+room 119: mono   1.3  room  95.6  row1  98.6  row2  99.9  bands3  99.9
+room 120: mono   0.9  room  89.1  row1  92.9  row2  96.1  bands3  92.5
+
+Ink (set) pixels in their own colour: room 70.5%, row1 82.4%
+
+All 120 rooms, playfield pixels in their own colour:
+  mono    51.65%   worst room 58 at 0.0%
+  room    94.27%   worst room 5 at 79.8%
+  row1    96.38%   worst room 5 at 84.4%
+  row2    96.95%   worst room 5 at 84.4%
+  bands3  96.52%   worst room 5 at 84.4%

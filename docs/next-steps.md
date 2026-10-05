@@ -20,6 +20,13 @@ Settled after Matt's play: the footsteps and the life-lost tune ("now
 perfect"), the keys, Harry white where he is, the checkpoints (the
 original's rule stays), room 1's ladder, saving and loading.
 
+## A stock Model B edition? (Matt's moon shot)
+
+[docs/stock-b.md](stock-b.md): not from memory alone (about 2K short even
+with a 1-bit screen), but a disc edition fits with about 1K spare, loading
+each room's data from disc as Harry enters: room changes of about 1.0s, or
+0.4s with the drive kept spinning. Matt's call whether to build it.
+
 ## Worth doing, no decision needed
 
 - **More pass-by-pass coverage.** `make fuzz` (random walks in random

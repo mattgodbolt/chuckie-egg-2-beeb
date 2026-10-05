@@ -1,0 +1,20 @@
+(discprobe4.mjs, run twice with different region lists; the output of each run, copied)
+
+Run 1: page &0E-&18 by region
+game's interrupts, nothing else: 632ms, result 0, data 20,3, 32 VSyncs taken by the game-like handler
+&E00-&FFF filled: 632ms, result 0, data 20,3, 32 VSyncs taken by the game-like handler
+&1000-&106F filled: 632ms, result 0, data 20,3, 32 VSyncs taken by the game-like handler
+&1081-&10CF filled: 1033ms, result 0, data 20,3, 52 VSyncs taken by the game-like handler
+&10E0-&10FF filled: 632ms, result 0, data 20,3, 32 VSyncs taken by the game-like handler
+&1100-&18FF filled: 632ms, result 0, data 20,3, 32 VSyncs taken by the game-like handler
+
+Run 2: &1081-&10CF by 16 bytes
+game's interrupts, nothing else: 632ms, result 0, data 20,3, 32 VSyncs taken by the game-like handler
+&1081-&108F filled: 1032ms, result 0, data 20,3, 52 VSyncs taken by the game-like handler
+&1090-&109F filled: 632ms, result 0, data 20,3, 32 VSyncs taken by the game-like handler
+&10A0-&10AF filled: 632ms, result 0, data 20,3, 32 VSyncs taken by the game-like handler
+&10B0-&10BF filled: 632ms, result 0, data 20,3, 32 VSyncs taken by the game-like handler
+&10C0-&10CF filled: 632ms, result 0, data 20,3, 32 VSyncs taken by the game-like handler
+
+(Something in &1081-&108F is the DFS's idea of where the head is: with it
+spoiled the read still works, but 400ms slower, as if from track 0.)

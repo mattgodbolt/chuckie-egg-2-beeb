@@ -1,0 +1,41 @@
+model B-DFS1.2
+OSWORD &7F t20 s3, no fill: 712ms, result 0, data 20,3, stack from &1fd down to &1cc
+  wrote: &a7 &b1 &b8 &bc-&bd &e7 &ec &ef-&f1 &fa-&fc &1cc-&1fd &240 &242 &248 &24c &251 &283 &296 &29b &2a0 &2be &2ca &d09 &d0d-&d1a &1073 &1080
+OSWORD &7F t20 s3, &900-&cff filled: 712ms, result 0, data 20,3, stack from &1fd down to &1cc
+  wrote: &a7 &b1 &b8 &bc-&bd &e7 &ec &ef-&f1 &fa-&fc &1cc-&1fd &240 &242 &248 &24c &251 &283 &296 &29b &2a0 &2be &2ca &d09 &d0d-&d1a &1073 &1080
+OSWORD &7F t20 s3, &d00-&d9e filled: 712ms, result 0, data 20,3, stack from &1fd down to &1cc
+  wrote: &a7 &b1 &b8 &bc-&bd &e7 &ec &ef-&f1 &fa-&fc &1cc-&1fd &240 &242 &248 &24c &251 &283 &296 &29b &2a0 &2be &2ca &d00-&d1a &1073 &1080
+OSWORD &7F t20 s3, &e00-&fff filled: 712ms, result 0, data 20,3, stack from &1fd down to &1cc
+  wrote: &a7 &b1 &b8 &bc-&bd &e7 &ec &ef-&f1 &fa-&fc &1cc-&1fd &240 &242 &248 &24c &251 &283 &296 &29b &2a0 &2be &2ca &d09 &d0d-&d1a &1073 &1080
+OSWORD &7F t20 s3, &1000-&10ff filled: FAILED (CALL &3000 |  |  | >)
+OSWORD &7F t20 s3, &1100-&18ff filled: 712ms, result 0, data 20,3, stack from &1fd down to &1cc
+  wrote: &a7 &b1 &b8 &bc-&bd &e7 &ec &ef-&f1 &fa-&fc &1cc-&1fd &240 &242 &248 &24c &251 &283 &296 &29b &2a0 &2be &2ca &d09 &d0d-&d1a &1073 &1080
+  needs something in &10d0-&10df
+OSFILE SMALL, no fill: 683ms, result null, data 20,0, stack from &1fd down to &1d0
+  wrote: &a7 &b0-&b1 &b6-&b7 &bb-&bd &bf &c1-&c3 &c5-&cc &ce &e7 &ec &ef-&f3 &fa-&fc &1d0-&1fd &240 &242 &248 &24c &251 &296 &29b &2a0 &2be &2ca &1000-&103f &1041 &1044 &1073 &1076-&1077 &1080 &10cd-&10ce &10db-&10dc
+OSFILE SMALL, &d00-&d9e filled: 683ms, result null, data 20,0, stack from &1fd down to &1d0
+  wrote: &a7 &b0-&b1 &b6-&b7 &bb-&bd &bf &c1-&c3 &c5-&cc &ce &e7 &ec &ef-&f3 &fa-&fc &1d0-&1fd &240 &242 &248 &24c &251 &296 &29b &2a0 &2be &2ca &d00-&d16 &d18-&d4d &1000-&103f &1041 &1044 &1073 &1076-&1077 &1080 &10cd-&10ce &10db-&10dc
+OSFILE SMALL, &e00-&fff filled: FAILED (CALL &300B |  | Not found | >)
+OSFILE SMALL, &1000-&10ff filled: FAILED (CALL &300B)
+OSFILE SMALL, &1100-&18ff filled: 683ms, result null, data 20,0, stack from &1fd down to &1d0
+  wrote: &a7 &b0-&b1 &b6-&b7 &bb-&bd &bf &c1-&c3 &c5-&cc &ce &e7 &ec &ef-&f3 &fa-&fc &1d0-&1fd &240 &242 &248 &24c &251 &296 &29b &2a0 &2be &2ca &1000-&103f &1041 &1044 &1073 &1076-&1077 &1080 &10cd-&10ce &10db-&10dc
+warm: track 20 sector 0 x1: 653ms (result 0, data 20,0)
+warm: track 20 sector 5 x1: 172ms (result 0, data 20,5)
+warm: track 21 sector 0 x1: 173ms (result 0, data 21,0)
+warm: track 22 sector 4 x1: 152ms (result 0, data 22,4)
+warm: track 25 sector 0 x1: 193ms (result 0, data 25,0)
+warm: track 30 sector 0 x1: 273ms (result 0, data 30,0)
+warm: track 39 sector 0 x1: 273ms (result 0, data 39,0)
+warm: track 0 sector 2 x1: 1113ms (result 0, data 0,2)
+warm: track 1 sector 0 x1: 233ms (result 0, data 1,0)
+warm: track 1 sector 0 x2: 93ms (result 0, data 1,0)
+warm: track 5 sector 0 x4: 313ms (result 0, data 5,0)
+warm: track 10 sector 0 x10: 392ms (result 0, data 10,0)
+warm: track 11 sector 0 x1: 93ms (result 0, data 11,0)
+warm: track 10 sector 0 x1: 73ms (result 0, data 10,0)
+warm: track 12 sector 3 x1: 133ms (result 0, data 12,3)
+warm: track 12 sector 3 x1: 73ms (result 0, data 12,3)
+after 1s idle: track 13 x1: 212ms
+after 2s idle: track 13 x1: 664ms
+after 3s idle: track 13 x1: 730ms
+after 5s idle: track 13 x1: 764ms

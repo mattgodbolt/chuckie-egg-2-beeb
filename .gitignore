@@ -9,3 +9,4 @@ __pycache__/
 original/*
 !original/README.md
 !original/SHA256SUMS
+tools/stockb/disc.ssd

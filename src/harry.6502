@@ -36,6 +36,9 @@ ZA_AUTO2 pp                 ; SideWalls' column pointer
 \ HarryUpdate (&80B6): once a pass of the main loop.
 .harry_update
 {
+IF DEFINED(VIEWER)
+    ZA_ENTRY                    ; assembled, though the viewer has no game loop to call it
+ENDIF
     JSR harry_ptrs
     LDA h_state : BEQ keys
     LDA #0 : STA h_fall

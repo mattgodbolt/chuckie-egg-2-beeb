@@ -22,8 +22,6 @@
 \ horizontal blank (timing measured in docs/journal.md).
 \ ***************************************************************************
 
-ZA_AUTO1 vsyncs             ; frames since start-up
-
 \ The status bar's colours: logical 0 and 1 (black, white).
 STATUS_COLOURS = {STATUS_PAPER, 7}
 

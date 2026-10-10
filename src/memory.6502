@@ -6,8 +6,8 @@
 \ ***************************************************************************
 
 \ Zero page &00-&27 is baron's allocator pool (ZA_POOL in main.6502): the
-\ game and MENU together use all 40 bytes (measured from the symbols; if a
-\ change needs more, raise ZP_FIXED and move a variable back to LowState).
+\ game uses &00-&1F of it, MENU none (measured from the symbols; if a
+\ change needs more than the 40, raise ZP_FIXED and move a variable back to LowState).
 \ The game's permanent state is here, outside it: death resets the stack
 \ and jumps back into the main loop, as the original does, which the
 \ allocator would read as recursion. The most used of LowState's variables
@@ -90,6 +90,9 @@ SECTION ZeroPage, org = ZP_FIXED, guard = DATA_BANK_ZP, virtual = TRUE
 .l_ocell    SKIP 2
 .l_oyf      SKIP 1
 .l_oframe   SKIP 2
+\ Frames since start-up: counted by the interrupt (irq.6502), read by every
+\ wait for VSync.
+.vsyncs     SKIP 1
 ENDSECTION
 
 \ The game's other state, in the DFS's NMI page (free once the disc is done).

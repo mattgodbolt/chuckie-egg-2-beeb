@@ -7,7 +7,7 @@ build output (`code &0E00-&xxxx (N bytes free)`), never from this file.
 
 | Range | Size | Use |
 |---|---|---|
-| `&0000-&0027` | 40 | zero page, baron's allocator (`ZA_POOL`): the game and `MENU` use all of it |
+| `&0000-&0027` | 40 | zero page, baron's allocator (`ZA_POOL`): the game uses `&00-&1F` (`MENU` keeps to `&70-&78`, which the OS leaves it) |
 | `&0028-&008E` | 103 | zero page, the game's permanent state and LowState's most used variables (`memory.6502`) |
 | `&008F` | 1 | the data bank's number, from `MENU` |
 | `&0090-&00FB` | 108 | zero page, the game's scratch variables (`Scratch`): the OS's until the game owns the interrupts; `&00D0` (a Master's VDU status) is left alone for a soft BREAK (decision 22) |

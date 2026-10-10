@@ -1148,3 +1148,14 @@ gathers any number of one ingredient (and makes jumps lower).
   push and pull request (.github/workflows/check.yml): baron built at the
   pinned release, the original fetched by `make fetch` and cached, its
   hashes checked.
+- The viewer disc had been warning all along, unseen: only the release
+  disc's build asked for `--warn 2`, and the viewer has no game loop, so
+  harry_update's zero-page variables sat in code nothing reached (baron
+  named the line after the routine, `.key_dx`, which is data). Now the
+  viewer declares harry_update an entry, and vsyncs, the frame count the
+  interrupt keeps, moved from baron's pool to the fixed zero page: it is
+  long-lived state, read by every wait, and the pool's allocator saw it as
+  an input to that entry. All three discs build with `--warn 2`, and
+  tools/asm.sh fails a build that warns.
+- Measured while there: the game uses &00-&1F of the 40-byte pool and MENU
+  none (it keeps to &70-&78), not "all 40" as memory.6502 said.

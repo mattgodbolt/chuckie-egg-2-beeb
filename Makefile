@@ -18,6 +18,8 @@
 #   make venv     the Python tools' environment (.venv with SkoolKit, Pillow)
 
 BARON   ?= $(firstword $(wildcard ../baron/build/src/baron) baron)
+# Baron, failing on a warning too (all three discs build with --warn 2).
+ASM      = BARON=$(BARON) tools/asm.sh
 # The jsbeeb model the test tools use (tools/beeb.mjs reads CE2_MODEL).
 MODEL   ?= B-DFS1.2
 export CE2_MODEL = $(MODEL)
@@ -38,7 +40,7 @@ all: $(TARGET) $(TEST)
 # The symbol dump is how the test tools find the game's variables.
 $(TARGET): $(SOURCES) | build
 	@python3 tools/lint_labels.py > /dev/null || python3 tools/lint_labels.py
-	$(BARON) -D 'BUILD="$(BUILD)"' -o $(TARGET) --title CHUCKIE2 --opt 3 --warn 2 --symbols $(SYMBOLS) -v -log0 build/listing.txt src/main.6502
+	$(ASM) -D 'BUILD="$(BUILD)"' -o $(TARGET) --title CHUCKIE2 --opt 3 --warn 2 --symbols $(SYMBOLS) -v -log0 build/listing.txt src/main.6502
 	@grep -E '^(code|sideways) ' build/listing.txt || true
 
 build:
@@ -64,7 +66,7 @@ fuzz: $(TEST) build/ce2.z80 build/rooms/room_120.bin
 # The tests' disc: MENU built with -D DIRECT=1 goes straight into a game,
 # so the tools reach the main loop without the front end.
 $(TEST): $(SOURCES) | build
-	$(BARON) -D DIRECT=1 -D 'BUILD="$(BUILD) test"' -o $(TEST) --title CHUCKIE2 --opt 3 --symbols build/test.json src/main.6502
+	$(ASM) -D DIRECT=1 -D 'BUILD="$(BUILD) test"' -o $(TEST) --title CHUCKIE2 --opt 3 --warn 2 --symbols build/test.json src/main.6502
 
 passes: $(TEST) build/ce2.z80
 	tools/passcheck.sh
@@ -73,7 +75,7 @@ passes: $(TEST) build/ce2.z80
 # the rooms instead of playing.
 VIEWER = build/viewer.ssd
 $(VIEWER): $(SOURCES) | build
-	$(BARON) -D VIEWER=1 -D 'BUILD="$(BUILD) viewer"' -o $(VIEWER) --title CHUCKIE2 --opt 3 --symbols build/viewer.json src/main.6502
+	$(ASM) -D VIEWER=1 -D 'BUILD="$(BUILD) viewer"' -o $(VIEWER) --title CHUCKIE2 --opt 3 --warn 2 --symbols build/viewer.json src/main.6502
 
 rooms: $(VIEWER) build/rooms/room_120.bin
 	node tools/roomcheck.mjs

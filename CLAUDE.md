@@ -126,6 +126,9 @@ handoff, the front end or anything paged.
   `loadSymbols` (tools/beeb.mjs), which flattens it.
 - The workspace sections in `memory.6502` are `virtual = TRUE`: they hand
   out addresses and keep no bytes.
+- Every disc builds with `--warn 2`, and `tools/asm.sh` fails the build on
+  a warning. A warning can name the wrong line: an unreachable routine was
+  reported at the label after it.
 - `ASSERT` is built in (0.4.2): don't define the port kit's macro.
 - `FOR n = 0..15` (inclusive), not BeebASM's `FOR n, 0, 15`.
 - A zero-page array is `ZA_AUTO 8, name`, indexed with `ZA_INDEXEDBY` after

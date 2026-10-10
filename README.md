@@ -90,7 +90,7 @@ Harry, the monsters, the puzzle (with a spoiler warning) and the BBC side.
 
 ## Building
 
-Needs [baron](https://github.com/waitingforvsync/baron) (looked for at
+Needs [baron](https://github.com/waitingforvsync/baron) 0.5 (looked for at
 `../baron/build/src/baron`, else on the PATH), node, and for the Python tools
 [uv](https://github.com/astral-sh/uv).
 
@@ -107,6 +107,10 @@ make check      # every room, the play scenarios, the front end and the
 `make fetch` downloads the original's tape and checks its hash; the tools
 in `tools/` extract the rooms, graphics and text from it into `src/data/`
 (committed, so a build needs only baron).
+
+GitHub Actions runs `make check` on both machines for every push and pull
+request ([.github/workflows/check.yml](.github/workflows/check.yml)), with
+baron built at the release it pins.
 
 ## Licence
 

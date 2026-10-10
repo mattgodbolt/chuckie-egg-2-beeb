@@ -7,7 +7,19 @@ Run from the repository root after `make`: python3 <this>.
 """
 import json
 
-s = json.load(open("build/symbols.json"))["src/main.6502"]
+def load_symbols(path="build/symbols.json"):
+    """Baron 0.5's --symbols (format 2), flattened to {name: value}."""
+    out = {}
+    for assembly in json.load(open(path))["assemblies"]:
+        for section in assembly["sections"]:
+            for kind in section.values():
+                if isinstance(kind, dict):
+                    out.update((k, v["value"]) for k, v in kind.items()
+                               if isinstance(v, dict) and "value" in v and "@" not in k)
+    return out
+
+
+s = load_symbols()
 MAIN = 0x5000 - 0x0E00                       # code and data under the screen
 used = s["code_end"] - 0x0E00
 free = 0x5000 - s["code_end"]

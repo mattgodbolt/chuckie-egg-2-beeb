@@ -1130,3 +1130,21 @@ gathers any number of one ingredient (and makes jumps lower).
   status bar's top row, the only part of the bar that stays blank (row
   1's left columns take the score's high digits past 99,999). `make
   front` checks it's there with the cheats and absent without.
+
+### Baron 0.5, and CI
+
+- Rich released baron 0.5. The discs it assembles are byte for byte the
+  ones 0.4.2 did (all three, built with the same stamp by both). Its one
+  breaking change is the `--symbols` format: version 2 groups the symbols
+  by section and kind, each with its source line. `loadSymbols` in
+  tools/beeb.mjs, which every test tool uses, reads it now, and gives the
+  same 1,372 names and values as before; the stock-B budget scripts too.
+- New in 0.5: virtual sections, which give addresses and keep no bytes.
+  memory.6502's ZeroPage, LowState, Maps and Scratch are now declared so.
+  The only byte that moved is !BOOT's load address in the catalogue
+  (&0A30 to 0): with no org of its own it followed the default section,
+  which those sections no longer take room in, and *EXEC never reads it.
+- GitHub Actions now runs `make check` on the B and the Master for every
+  push and pull request (.github/workflows/check.yml): baron built at the
+  pinned release, the original fetched by `make fetch` and cached, its
+  hashes checked.

@@ -1,7 +1,8 @@
 \ ***************************************************************************
 \ Memory outside the code: every table is laid out here, in guarded
 \ sections, so baron places them and refuses an overlap. Never hand-place
-\ an address.
+\ an address. The sections are virtual: they hand out addresses and keep
+\ no bytes.
 \ ***************************************************************************
 
 \ Zero page &00-&27 is baron's allocator pool (ZA_POOL in main.6502): the
@@ -14,7 +15,7 @@
 \ block with an index), as zero page saves a byte on every access.
 ZP_FIXED = &28
 NM = 5                      ; monsters in a room, at most
-SECTION ZeroPage, org = ZP_FIXED, guard = DATA_BANK_ZP
+SECTION ZeroPage, org = ZP_FIXED, guard = DATA_BANK_ZP, virtual = TRUE
 \ Harry (docs/research/harry.md). The original keeps addresses; the logic
 \ needs only the cell (row * 32 + col), yf and xf.
 .h_cell     SKIP 2          ; top-left cell
@@ -94,7 +95,7 @@ ENDSECTION
 \ The game's other state, in the DFS's NMI page (free once the disc is done).
 \ (Up to &0D9F only: a Master's extended vectors, which its soft BREAK
 \ trusts, follow; decision 22.)
-SECTION LowState, org = &0D00, guard = &0D9F
+SECTION LowState, org = &0D00, guard = &0D9F, virtual = TRUE
 \ The checkpoint (&A46B): Harry as he entered the room, for a death.
 .checkpoint SKIP 16
 \ The monsters (&A490, docs/research/monsters.md 2.2): parallel arrays,
@@ -130,7 +131,7 @@ ENDSECTION
 \ cassette and serial buffers (&0900-&0AFF), soft keys (&0B00) and
 \ user-defined characters (&0C00). Page-aligned: a map's address is its
 \ page plus the cell number.
-SECTION Maps, org = &0400, guard = &0D00
+SECTION Maps, org = &0400, guard = &0D00, virtual = TRUE
 .attr_map   SKIP 768        ; the attribute of each cell (Spectrum format)
 .tile_map   SKIP 768        ; the tile drawn there; bit 7 set for text
 .type_map   SKIP 768        ; the cell type: what Harry can stand on, climb...
@@ -139,7 +140,7 @@ ENDSECTION
 \ Scratch variables in zero page &90-&FB: the OS's, but the game makes no
 \ OS calls once it owns the interrupts (decision 11), and the OS's IRQ entry
 \ only uses &FC. Nothing here is used before install_irq.
-SECTION Scratch, org = &90, guard = &FC
+SECTION Scratch, org = &90, guard = &FC, virtual = TRUE
 \ (irq.6502)
 .room_ula      SKIP 16
 \ (screen.6502)

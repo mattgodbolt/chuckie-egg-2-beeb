@@ -32,7 +32,9 @@ make zx         # load the tape into build/ce2.z80
 make venv       # .venv with SkoolKit and Pillow (needs uv)
 ```
 
-Baron is expected at `../baron/build/src/baron` or on the PATH.
+Baron 0.5 is expected at `../baron/build/src/baron` or on the PATH. CI
+(`.github/workflows/check.yml`) builds it at the tag in `BARON_VERSION` and
+runs `make check` on the B and the Master: move that pin with the local one.
 
 ## Testing
 
@@ -119,6 +121,11 @@ handoff, the front end or anything paged.
 
 ## Baron gotchas met so far
 
+- `--symbols` is format 2 from 0.5: assemblies, sections, then labels,
+  assignments, za_autos ... each `{value, source, line}`. Read it through
+  `loadSymbols` (tools/beeb.mjs), which flattens it.
+- The workspace sections in `memory.6502` are `virtual = TRUE`: they hand
+  out addresses and keep no bytes.
 - `ASSERT` is built in (0.4.2): don't define the port kit's macro.
 - `FOR n = 0..15` (inclusive), not BeebASM's `FOR n, 0, 15`.
 - A zero-page array is `ZA_AUTO 8, name`, indexed with `ZA_INDEXEDBY` after

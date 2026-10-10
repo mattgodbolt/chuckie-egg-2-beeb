@@ -4,7 +4,19 @@ build/symbols.json. Run from the repository root after `make`."""
 import json
 import re
 
-sym = json.load(open("build/symbols.json"))["src/main.6502"]
+def load_symbols(path="build/symbols.json"):
+    """Baron 0.5's --symbols (format 2), flattened to {name: value}."""
+    out = {}
+    for assembly in json.load(open(path))["assemblies"]:
+        for section in assembly["sections"]:
+            for kind in section.values():
+                if isinstance(kind, dict):
+                    out.update((k, v["value"]) for k, v in kind.items()
+                               if isinstance(v, dict) and "value" in v and "@" not in k)
+    return out
+
+
+sym = load_symbols()
 lines = open("build/listing.txt").read().splitlines()
 
 

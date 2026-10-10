@@ -16,14 +16,25 @@ const MCP = process.env.JSBEEB_MCP
 const text = (r) => r.content.find((c) => c.type === "text")?.text ?? "";
 const image = (r) => r.content.find((c) => c.type === "image");
 
-// Baron's --symbols output: { "src/main.6502": { "label": value, ... } }.
-// Flattened, so callers can ask for sym("angle") without caring which file.
+// Baron's --symbols output (format 2, baron 0.5): assemblies of sections,
+// each with its labels, assignments, za_autos and so on as
+// { name: { value, source, line } }. Flattened, so callers can ask for
+// sym("angle") without caring which section or kind. Names with "@" are
+// anonymous scopes (loop variables, macro parameters).
 export function loadSymbols(path = "build/symbols.json") {
     if (!existsSync(path)) return {};
     const all = JSON.parse(readFileSync(path, "utf8"));
+    if (all.format !== 2) throw new Error(`${path}: symbol format ${all.format}, expected 2 (baron 0.5)`);
     const out = {};
-    for (const file of Object.values(all)) {
-        for (const [k, v] of Object.entries(file)) if (!k.includes("@")) out[k] = v;
+    for (const assembly of all.assemblies) {
+        for (const section of assembly.sections) {
+            for (const kind of Object.values(section)) {
+                if (kind === null || typeof kind !== "object" || Array.isArray(kind)) continue;
+                for (const [k, v] of Object.entries(kind)) {
+                    if (!k.includes("@") && typeof v === "object" && v && "value" in v) out[k] = v.value;
+                }
+            }
+        }
     }
     return out;
 }

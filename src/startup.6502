@@ -125,6 +125,9 @@ ENDIF
 \ or the one at STATE carried on.
 .init_game
 {
+IF DEFINED(VIEWER)
+    ZA_ENTRY                    ; assembled, though the viewer never starts the game
+ENDIF
     LDA #0 : STA dbg_room : STA noise_flag : STA save_armed : STA o_yf
     LDA mb_start : BEQ fresh
     LDA #0 : STA mb_start

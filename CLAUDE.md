@@ -32,7 +32,7 @@ make zx         # load the tape into build/ce2.z80
 make venv       # .venv with SkoolKit and Pillow (needs uv)
 ```
 
-Baron 0.5 is expected at `../baron/build/src/baron` or on the PATH. CI
+Baron 0.5.1 is expected at `../baron/build/src/baron` or on the PATH. CI
 (`.github/workflows/check.yml`) builds it at the tag in `BARON_VERSION` and
 runs `make check` on the B and the Master: move that pin with the local one.
 
@@ -127,8 +127,9 @@ handoff, the front end or anything paged.
 - The workspace sections in `memory.6502` are `virtual = TRUE`: they hand
   out addresses and keep no bytes.
 - Every disc builds with `--warn 2`, and `tools/asm.sh` fails the build on
-  a warning. A warning can name the wrong line: an unreachable routine was
-  reported at the label after it.
+  a warning. Before 0.5.1 the unreachable-code warning could name a data
+  label instead of the code (baron #19), and `ZA_CANJUMP`/`ZA_CANCALL`
+  targets in another section were lost (#18, which could give wrong code).
 - `ASSERT` is built in (0.4.2): don't define the port kit's macro.
 - `FOR n = 0..15` (inclusive), not BeebASM's `FOR n, 0, 15`.
 - A zero-page array is `ZA_AUTO 8, name`, indexed with `ZA_INDEXEDBY` after

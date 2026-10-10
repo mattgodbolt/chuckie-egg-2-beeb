@@ -1159,3 +1159,16 @@ gathers any number of one ingredient (and makes jumps lower).
   tools/asm.sh fails a build that warns.
 - Measured while there: the game uses &00-&1F of the 40-byte pool and MENU
   none (it keeps to &70-&78), not "all 40" as memory.6502 said.
+
+### Baron 0.5.1
+
+- The two baron bugs met above went to Rich as issues (#18, #19) and pull
+  requests, and he merged both into 0.5.1: the unreachable-code warning
+  now names the code rather than a data label before it, and
+  `ZA_CANJUMP`, `ZA_CANCALL` and `ZA_RETURNTO` find their targets in other
+  sections (`ZA_CANCALL` across sections could put a caller's live
+  variable and the callee's on the same byte; the port has no such call).
+  The three discs are byte for byte what 0.5.0 made.
+- With the warning naming the right line, the viewer build's unreachable
+  code starts at `init_game`, the game's start, so the viewer's `ZA_ENTRY`
+  moved there from `harry_update`. No byte of any disc changed.

@@ -1297,9 +1297,10 @@ gathers any number of one ingredient (and makes jumps lower).
 - `make check` passes on both editions and both machines, the Master's
   front end included, for the first time for real.
 
-### The cache, as Matt found it on his Master, and a 1770 race
+### The cache, as Matt found it, and a 1770 race
 
-Matt played CE2S on his Master: every room change read the disc, even
+Matt played the published disc in jsbeeb (not, as first assumed here,
+on his Master): every room change read the disc, even
 going back to the room just left, and dying read the room again; room 5
 read over and over as Harry walked about in it. Then, dropping down
 towards the factory floor after skipping rooms, Harry's frames and the
@@ -1331,7 +1332,9 @@ tiles turned to noise.
   straight away, so a real 1770 could look done before the read began,
   the stale page taken as the room and the sector's bytes landing later
   where that page had moved on. `w_command` waits ~70us after each 1770
-  command. Not yet confirmed on Matt's machine.
+  command. But Matt saw the corruption in jsbeeb, which makes the status
+  valid at once: this race, real as it is on hardware, isn't what he saw.
+  That's still to find.
 - The 8271's head now never unloads (as the prototype had it): idle, it
   unloaded and the next read waited for the drive to be ready again.
 - Misses still take 0.5-0.9s, and the trace says why: a room's body and

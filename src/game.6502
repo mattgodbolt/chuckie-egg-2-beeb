@@ -18,7 +18,9 @@
 .harry
     LDA egg_harry,X : STA h_cell,X
     DEX : BPL harry
-    LDA #0 : STA ctrl : STA room_delta : STA o_sel : STA dl_count
+    \ (ctrl, o_sel and dl_count need no clearing here: read_keys,
+    \ room_things and setup_monsters set them before anything reads them.)
+    INX : STX room_delta            ; (X = 0)
     JSR save_checkpoint
     JSR egg_init
     \ The truck backs in, then room 1 is set up as on entering it.
@@ -70,18 +72,25 @@
     JSR draw_frame
     \ Part 3: contact, drop, falling.
     JSR contact_pass
+IF DEFINED(DIRECT)
     LDA dbg_room : BEQ game_loop
     \ Fall into teleport.
+ELSE
+    JMP game_loop
+ENDIF
 }
-\ For the tests (tools/beeb.mjs's teleport, for passlog.mjs --start): they
-\ set dbg_room, and when the pass ends here they put Harry, his frame and
-\ the room in place; the room is then entered as the original's set-up
-\ would (tools/passlog.py calls the original's &7913 at the same point).
+IF DEFINED(DIRECT)
+\ For the tests (tools/beeb.mjs's teleport, for passlog.mjs --start), on
+\ the tests' disc only: they set dbg_room, and when the pass ends here they
+\ put Harry, his frame and the room in place; the room is then entered as
+\ the original's set-up would (tools/passlog.py calls the original's &7913
+\ at the same point).
 .teleport
     LDA #0 : STA dbg_room
     JSR enter_room
     JSR save_checkpoint
     JMP game_loop
+ENDIF
 
 \ At the next frame, the monsters that moved and the current thing (the
 \ original's interrupt).
@@ -98,9 +107,8 @@
 
 \ Draw the room (&7913). Nothing of Harry is on screen.
 .show_room
-    LDA room : JSR draw_room
     LDA #0 : STA drawn
-    RTS
+    LDA room : JMP draw_room
 
 \ Draw the room and set it up (&7913).
 .enter_room
@@ -121,16 +129,17 @@
 \ Leaving a room (&77CF-&7856).
 .change_room
 {
-    \ Rooms 80 and 71 are joined left to right.
-    LDA room : CMP #80 : BNE not80
-    LDA room_delta : CMP #1 : BNE not80
-    LDA #71 : BNE set               ; (always)
-.not80
-    CMP #71 : BNE add
-    LDA room_delta : CMP #&FF : BNE add
-    LDA #80 : BNE set               ; (always)
-.add
+    \ Rooms 80 and 71 are joined left to right: 81 from 80 going right
+    \ is 71, 70 from 71 going left 80. (room_delta is 1, -1, 10 or -10.)
     LDA room : CLC : ADC room_delta
+    LDX room_delta
+    CMP #81 : BNE not81
+    DEX : BNE set                   ; (X = 1: right)
+    LDA #71 : BNE set               ; (always)
+.not81
+    CMP #70 : BNE set
+    INX : BNE set                   ; (X = -1: left)
+    LDA #80
 .set
     STA room
     JSR enter_room
@@ -143,14 +152,16 @@
     \ Unless he went up, a floor under the feet sets walking or pipe.
     LDA room_delta : CMP #&F6 : BEQ take_checkpoint
     JSR harry_ptrs
-    LDA h_xf : LSR A : ORA #&40 : TAY      ; (xf < 128: the ORA adds)
+    \ (An ADD, as the original's: a slope's edge leaves xf unnormalised,
+    \ 255 sliding left off a room's bottom, which reads T(&BF).)
+    LDA h_xf : LSR A : CLC : ADC #&40 : TAY
     LDA (hptr),Y : AND #&12 : BNE take_checkpoint
     LDA (hptr),Y : JSR set_standing
 .take_checkpoint
     LDA #0 : STA room_delta
     \ The take_checkpoint only if he came in walking or on a ladder.
-    LDA h_state : AND #&FD : CMP #1 : BEQ save_checkpoint  ; states 1 and 3
-    RTS
+    LDA h_state : AND #&FD : CMP #1 : BNE save_checkpoint.done  ; states 1 and 3
+    \ Fall into save_checkpoint.
 }
 
 \ The checkpoint (&7838, &A46B): Harry, the room and the state.
@@ -162,6 +173,7 @@ CHECKPOINT_VARS = h_frame + 2 - h_cell    ; h_cell .. h_frame
     LDA h_cell,X : STA checkpoint,X
     DEX : BPL copy
     LDA room : STA checkpoint + CHECKPOINT_VARS
+.done
     RTS
 }
 
@@ -176,7 +188,9 @@ CHECKPOINT_VARS = h_frame + 2 - h_cell    ; h_cell .. h_frame
     LDA checkpoint,X : STA h_cell,X
     DEX : BPL copy
     LDA checkpoint + CHECKPOINT_VARS : STA room
-    LDA #0 : STA h_cnt : STA h_fall : STA ctrl : STA room_delta
+    \ (room_delta is already 0: set only by harry_update's last step, the
+    \ edges, and cleared by change_room straight after.)
+    INX : STX h_cnt : STX h_fall : STX ctrl     ; (X = 0)
     \ What he carried goes back where it came from (the toy and the egg
     \ he keeps).
     LDX carried : CPX #&27 : BCS kept
@@ -235,14 +249,13 @@ CHECKPOINT_VARS = h_frame + 2 - h_cell    ; h_cell .. h_frame
 .wait_key
 {
     LDA #35 : STA ed_n
-.held
+.frame
     JSR wait_vsync
-    JSR any_key : BEQ press
-    DEC ed_n : BNE held
-    RTS
-.press
-    JSR wait_vsync
-    JSR any_key : BEQ press
+    JSR any_key : BNE down
+    LDA #1 : STA ed_n               ; up: the next frame with a key down ends it
+    BNE frame                       ; (always)
+.down
+    DEC ed_n : BNE frame
     RTS
 }
 \ (delivered_text is in page 1: pages.6502; yellow_char in status.6502.)
@@ -254,9 +267,10 @@ CHECKPOINT_VARS = h_frame + 2 - h_cell    ; h_cell .. h_frame
     BIT drawn : BPL fresh
     LDX #d_cell : JSR sp_erase_at
 .fresh
-    LDA h_cell : STA d_cell
-    LDA h_cell+1 : STA d_cell+1
-    LDA h_yf : STA d_yf
+    LDX #2
+.copy
+    LDA h_cell,X : STA d_cell,X     ; d_cell, d_yf
+    DEX : BPL copy
     LDA h_frame : STA d_frame
     LDA h_frame+1 : STA d_frame+1
     LDA #&80 : STA drawn
@@ -297,12 +311,12 @@ CHECKPOINT_VARS = h_frame + 2 - h_cell    ; h_cell .. h_frame
 .actions
     \ Abort and save go to the front end at once (&7902). A save needs a
     \ fresh press: the key may still be down when the game carries on.
-    BIT ctrl : BPL no_abort
-    LDA #MB_ABORT : JMP handoff
-.no_abort
+    LDA #MB_ABORT : BIT ctrl : BMI handoff_a
     LDA ctrl : AND #&20 : BEQ save_up
     LDA save_armed : BEQ done
-    LDA #MB_SAVE : JMP handoff
+    LDA #MB_SAVE
+.handoff_a
+    JMP handoff
 .save_up
     LDA #1 : STA save_armed
 .done

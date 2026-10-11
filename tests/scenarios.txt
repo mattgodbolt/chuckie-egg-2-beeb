@@ -29,3 +29,4 @@ checkpoint-fall | right:5-134                            | 135 | 3,21,20,0,0,1,0
 egg-delivery | left:5-40,jump:60-64                      | 120 | 111,19,12,0,0,1,0 | --carry 0x28
 cheat-skip  | shift:10-14,right:10-14,shift:20,left:20,shift:30,left:30,right:30,right:40-60 | 80 | 1,21,20,0,0,1,0 | --cheat 0xB8
 cheat-lives | right:20-300,jump:75                     | 260 |  | --cheat 0xB0
+slope-slide-off | up:5-18,jump:5,down:20-23,jump:22,left:20-21,up:28-35,jump:33,jump:39-48,down:53-58,jump:57,right:53-55,right:64-71,jump:71,up:64-67,jump:73-82,down:82-88,jump:86,up:93-115,down:117-130,down:117-123,right:130-145,jump:130-137 | 150 | 30,15,27,0,0,0,0

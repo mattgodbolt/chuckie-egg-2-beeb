@@ -7,6 +7,16 @@
 
 \ (noise is in monsters.6502, falling into rng.)
 
+\ `cell` a row down; C clear. (Also collide's.)
+.cell_down
+{
+    CLC : LDA cell : ADC #32 : STA cell
+    BCC done
+    INC cell+1 : CLC
+.done
+    RTS
+}
+
 \ Repaint X cells down from row A, column Y from the maps (&8FA5).
 .restore_cells
 {
@@ -16,10 +26,7 @@
 .loop
     JSR cell_looks
     JSR draw_glyph_pd
-    CLC : LDA cell : ADC #32 : STA cell
-    BCC next
-    INC cell+1
-.next
+    JSR cell_down
     DEC rc_b : BNE loop
     RTS
 }
@@ -32,11 +39,10 @@
 .step
     LDA #16 : SEC : SBC ta_b : LSR A : STA ds_b   ; strips showing
     LDA #&83 : BCS shifted
-    LDA #&8A                                      ; the aligned set
+    LDA #&8A + 1                                  ; the aligned set (C clear: - 1)
 .shifted
-    SEC : SBC ds_b : STA ds_c
-    LDA #0 : STA ds_d
-    JSR truck_strips                              ; (room 1)
+    SBC ds_b : STA ds_c
+    LDX #0 : JSR truck_strips                     ; (room 1)
     JSR wait10 : BNE step
     RTS
 }
@@ -58,11 +64,11 @@
     LDA #14 : STA ta_b
 .step
     LDA ta_b : LSR A : STA ds_b : PHP
-    LDA #&8A : BCC aligned
+    LDA #&8A + 1 : BCC aligned      ; (C clear: - 1)
     LDA #&83
 .aligned
-    SEC : SBC ds_b : STA ds_c
-    LDA #0 : STA ds_d
+    SBC ds_b : STA ds_c
+    LDX #0 : STX ds_d               ; (none drawn: column 0 to repaint)
     LDA ds_b : BEQ none
     JSR truck_strips                ; (room 111; ds_d steps on to ds_b)
 .none
@@ -73,6 +79,14 @@
     JSR wait10 : BNE step
     RTS
 }
+
+\ The truck, drawn on entering room 1 or 111 (&9011): strips &7C-&82 at
+\ columns 0-6, row 16 (room 1) or 17 (room 111).
+.truck_draw
+    LDX #0
+    LDA #7 : STA ds_b
+    LDA #&7C : STA ds_c
+    BNE truck_strips                ; (always)
 
 \ The machines, once a pass (&8EE8): the train moves with the power on, and
 \ is drawn in its room, the front poking into the next; or the truck
@@ -88,11 +102,74 @@
 .set_room
     STX train_room
 .still
-    LDA room : CMP #1 : BEQ truck
-    CMP #111 : BNE not_truck
-.truck
-    JMP truck_refresh
-.not_truck
+    LDA room : CMP #1 : BEQ truck_refresh
+    CMP #111 : BNE train
+    \ Fall into truck_refresh.
+}
+
+\ Every pass in those rooms (&8FED): one strip repainted, in turn.
+.truck_refresh
+{
+    LDX truck_strip : INX : CPX #7 : BCC ok
+    LDX #0
+.ok
+    STX truck_strip
+    TXA : CLC : ADC #&7C : STA ds_c
+    LDA #1 : STA ds_b
+    \ Fall into truck_strips.
+}
+
+\ Truck strips C.. (B of them) from column X, in yellow, at the truck's
+\ row in this room: 16 in room 1, 17 in room 111.
+.truck_strips
+    STX ds_d
+    LDA room : CMP #2 : LDA #16 : ADC #0 : STA ds_e    ; (C: room 111)
+    LDA #6
+    \ Fall into draw_strips.
+
+\ Paint strip frames C, C+1, ... (B of them) from column D, row E, a column
+\ each, in Spectrum colour A (&8FC1, &7F4F): each strip copied over the
+\ cells, its set pixels in the colour and the rest in the cell's paper.
+.draw_strips
+{
+    STA ds_ink
+.strip
+    \ glyph 8 before the strip's first cell (its header + 2), and on 8
+    \ before each: the header is at glyph + 6.
+    LDA ds_c : JSR sprite_frame
+    SEC : SBC #6 : STA glyph
+    BCS no_borrow
+    DEX
+.no_borrow
+    STX glyph+1
+    LDY #6 : LDA (glyph),Y : STA ds_rows
+    LDY ds_d : LDA ds_e : JSR row_col_cell
+    STA cell : STY cell+1
+.cell_loop
+    CLC : LDA glyph : ADC #8 : STA glyph
+    BCC paper_ink
+    INC glyph+1
+.paper_ink
+    \ The paper from the attribute map, the ink the strip's: an attribute.
+    \ (attr_map + cell: its page patched in, as cell_colours does)
+    LDA cell+1 : ORA #HI(attr_map) : STA map+2    ; (cell+1 is 0-2)
+    LDY cell
+.map
+    LDA attr_map,Y
+    AND #&38 : ORA ds_ink
+    JSR draw_glyph
+    JSR cell_down
+    DEC ds_rows : BNE cell_loop
+    INC ds_d : INC ds_c
+    DEC ds_b : BNE strip
+.done
+    RTS
+}
+ASSERT LO(attr_map) = 0 AND (HI(attr_map) AND 3) = 0  ; (the ORA adds)
+
+\ The train (machines, A = room): in this room, or just gone, or poking in.
+.train
+{
     CMP train_room : BEQ here
     \ Just left this room: repaint column 31, rows 5-7.
     LDA train_pos : BEQ before
@@ -101,8 +178,6 @@
 .next_ok
     CPX train_room : BNE before
     LDY #31 : LDA #5 : LDX #3 : JMP restore_cells
-.done
-    RTS
 .before
     \ The front poking in from the room before.
     LDX room : DEX : CPX #80 : BEQ done
@@ -112,10 +187,10 @@
     CPX train_room : BNE done
     LDA train_pos : CMP #&37 : BCC done
     SBC #&35 : LSR A : STA ds_b                     ; (carry set)
-    LDA #&4C : BCC parity
+    LDA #&4C + 1 : BCC parity       ; (C clear: - 1)
     LDA #&51
 .parity
-    SEC : SBC ds_b : STA ds_c
+    SBC ds_b : STA ds_c
     LDA #0 : STA ds_d
     BEQ draw_train                  ; (always)
 .here
@@ -129,6 +204,7 @@
 .few
     STA ds_b
     \ Fall into draw_train.
+done = draw_strips.done             ; (its RTS)
 }
 \ (&8F7F) The column before the train repainted, then its strips at row 5
 \ in cyan; with the power on, the noise.
@@ -143,76 +219,10 @@
     JMP noise
 }
 
-\ The truck, drawn on entering room 1 or 111 (&9011): strips &7C-&82 at
-\ columns 0-6, row 16 (room 1) or 17 (room 111).
-.truck_draw
-    LDA #0 : STA ds_d
-    LDA #7 : STA ds_b
-    LDA #&7C : STA ds_c
-    BNE truck_strips                ; (always)
-
-\ Every pass in those rooms (&8FED): one strip repainted, in turn.
-.truck_refresh
-{
-    LDX truck_strip : INX : CPX #7 : BCC ok
-    LDX #0
-.ok
-    STX truck_strip
-    STX ds_d
-    TXA : CLC : ADC #&7C : STA ds_c
-    LDA #1 : STA ds_b
-    \ Fall into truck_strips.
-}
-
-\ Truck strips C.. (B of them) from column D, in yellow, at the truck's
-\ row in this room: 16 in room 1, 17 in room 111.
-.truck_strips
-    LDA room : CMP #2 : LDA #16 : ADC #0 : STA ds_e    ; (C: room 111)
-    LDA #6
-    \ Fall into draw_strips.
-
-\ Paint strip frames C, C+1, ... (B of them) from column D, row E, a column
-\ each, in Spectrum colour A (&8FC1, &7F4F): each strip copied over the
-\ cells, its set pixels in the colour and the rest in the cell's paper.
-.draw_strips
-{
-    STA ds_ink
-.strip
-    LDA ds_c : JSR sprite_frame
-    STA glyph : STX glyph+1
-    LDY #0 : LDA (glyph),Y : STA ds_rows
-    CLC : LDA glyph : ADC #2 : STA glyph
-    BCC header
-    INC glyph+1
-.header
-    LDY ds_d : LDA ds_e : JSR row_col_cell
-    STA cell : STA ds_p : STY cell+1
-    TYA : ORA #HI(attr_map) : STA ds_p+1    ; (cell+1 is 0-2)
-.cell_loop
-    \ The paper from the attribute map, the ink the strip's: an attribute.
-    LDY #0 : LDA (ds_p),Y : AND #&38 : ORA ds_ink
-    JSR draw_glyph
-    CLC : LDA glyph : ADC #8 : STA glyph
-    BCC down
-    INC glyph+1
-.down
-    CLC : LDA cell : ADC #32 : STA cell : STA ds_p
-    BCC next
-    INC cell+1 : INC ds_p+1
-.next
-    DEC ds_rows : BNE cell_loop
-    INC ds_d : INC ds_c
-    DEC ds_b : BNE strip
-    RTS
-}
-ZA_AUTO2 ds_p
-ASSERT (HI(attr_map) AND 3) = 0                 ; (the ORA adds)
-
-\ The lifts (&9090, table &90E0): room, row, column, type.
+\ The lifts (&9090, table &90E0): room, row, column (the type: setup_lift).
 .lift_room EQUB 26, 55, 34, 104
 .lift_row  EQUB 23, 23, 4, 4
 .lift_col  EQUB 7, 23, 15, 17
-.lift_type EQUB 1, 1, 2, 2
 
 \ SetupLift (&9088), on entering a room.
 .setup_lift
@@ -226,11 +236,14 @@ ASSERT (HI(attr_map) AND 3) = 0                 ; (the ORA adds)
 .found
     LDA lift_col,X : STA l_scol
     LDY lift_row,X : STY l_srow
-    LDA lift_type,X : STA l_type
-    CMP #2 : BNE placed
-    LDA factory : LSR A : BCS placed
+    \ The type (&90E0's fourth column): 1 for the first two, 2 for the rest.
+    LDA #1 : CPX #2 : BCC placed
+    LDA factory : LSR A : BCS type2
     INY                             ; type 2: a row lower without power
+.type2
+    LDA #2
 .placed
+    STA l_type
     TYA : JSR lift_at
     STA l_dy                        ; (lift_at leaves A = 0)
 .frame                              ; (and resume_room: game.6502)
@@ -252,6 +265,11 @@ ASSERT (HI(attr_map) AND 3) = 0                 ; (the ORA adds)
 .run_lift
 {
     LDA l_type : BEQ lift_none
+    \ l_ocell .. l_oframe := l_cell .. l_frame, for the erase.
+    LDX #4
+.save_old
+    LDA l_cell,X : STA l_ocell,X
+    DEX : BPL save_old
     LDA factory : LSR A : BCC stop  ; no power
     LDA #2 : STA l_dy               ; up 2, unless ridden
     LDA l_type : LSR A : BCC type2
@@ -259,7 +277,6 @@ ASSERT (HI(attr_map) AND 3) = 0                 ; (the ORA adds)
     LDA l_yf : BNE go
     LDA l_cell+1 : BNE go           ; rows 8 and up
     LDA l_cell : BMI go             ; rows 4-7 go on; rows 0-3 is the top
-    JSR l_save_old
     LDA l_srow : JSR lift_at
     BEQ step                        ; (always)
 .type2
@@ -270,7 +287,8 @@ ASSERT (HI(attr_map) AND 3) = 0                 ; (the ORA adds)
     LDA l_cell+1 : CMP #2 : BNE below
     LDA l_cell : CMP #LO(23 * 32) : BCS stop
 .below
-    LDA l_cell : CLC : ADC #32 : STA lp
+    \ (C clear: the CMP #2 met a high byte of 0 or 1, or the BCS fell through.)
+    LDA l_cell : ADC #32 : STA lp
     LDA l_cell+1 : ADC #HI(type_map) : STA lp+1
     LDY #6
 .cells
@@ -284,7 +302,6 @@ ASSERT (HI(attr_map) AND 3) = 0                 ; (the ORA adds)
 .stop
     LDA #0 : STA l_dy
 .go
-    JSR l_save_old
 .step
     \ Down or up dy lines (the original's &8E94, across 0).
     LDA l_yf : SEC : SBC l_dy : TAX
@@ -305,13 +322,3 @@ ASSERT (HI(attr_map) AND 3) = 0                 ; (the ORA adds)
     LDA #6 : LDX #l_cell : JMP sp_draw_ink
 }
 ZA_AUTO2 lp
-
-\ l_ocell .. l_oframe := l_cell .. l_frame.
-.l_save_old
-{
-    LDX #4
-.copy
-    LDA l_cell,X : STA l_ocell,X
-    DEX : BPL copy
-    RTS
-}

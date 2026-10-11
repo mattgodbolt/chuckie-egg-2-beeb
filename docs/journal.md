@@ -1296,3 +1296,50 @@ gathers any number of one ingredient (and makes jumps lower).
   up in ADFS. So the tables went back to main RAM (decision 33), 48 bytes.
 - `make check` passes on both editions and both machines, the Master's
   front end included, for the first time for real.
+
+### The cache, as Matt found it on his Master, and a 1770 race
+
+Matt played CE2S on his Master: every room change read the disc, even
+going back to the room just left, and dying read the room again; room 5
+read over and over as Harry walked about in it. Then, dropping down
+towards the factory floor after skipping rooms, Harry's frames and the
+tiles turned to noise.
+
+- `tools/cachetrace.mjs` traces the cache in play: every room entered,
+  item read, sector. Entering a room kept only that room's items, so the
+  last room was gone, and a death's redraw dropped what had been read
+  ahead and read it again. The reading ahead dropped one neighbour to read
+  another as Harry turned (room 5: rooms 4 and 6 in turn).
+- The cache now keeps items by when they were last used (decision 34).
+  Entering a room `arrange` sorts them, the room's own first, the oldest
+  last, through the screen (blanked: the room's drawing clears it), and
+  room is made by dropping from the top. Nothing the game points into
+  ever moves while it plays, so moving pointers (tried first: 311 bytes,
+  too many) isn't needed. What the reading ahead finds or reads is kept
+  for the visit, so it can't drop it again for another room. Two bugs
+  on the way: `rb` read after `arrange` had moved the body (garbage group
+  numbers, endless reads), and the room's own body, read first, on top
+  where nothing below it could make room (room 2's dog never read: the
+  viewer drew 92 rooms wrong). Every blocking read arranges first now.
+- The corruption: `tools/watchwrite.mjs` (write breakpoints on Harry's
+  frames and the tiles, random play with the room skip, B and Master)
+  saw nothing in jsbeeb. Page &3F holds Harry's later frames and the
+  first tiles, and his first frames, below it, looked fine: one sector
+  read into the wrong place, or a sprite drawn at a wrapped row from a
+  room read wrongly. A suspect jsbeeb can't show: a WD1770's status isn't
+  valid for some microseconds after a command, and the reader polled it
+  straight away, so a real 1770 could look done before the read began,
+  the stale page taken as the room and the sector's bytes landing later
+  where that page had moved on. `w_command` waits ~70us after each 1770
+  command. Not yet confirmed on Matt's machine.
+- The 8271's head now never unloads (as the prototype had it): idle, it
+  unloaded and the next read waited for the drive to be ready again.
+- Misses still take 0.5-0.9s, and the trace says why: a room's body and
+  its groups are read one at a time from wherever they are on the disc
+  (room 55: tracks 4, 7, 8, 8), each a seek and on average half a
+  revolution. Next: each room's record together on the disc (45K of the
+  800-sector disc's 589 free sectors).
+- The pop on entering a room from the right (Matt: room 2 to room 1) is
+  older, and every room change does it: the port draws Harry on the pass
+  that changes room, where the original draws nothing (issue #2).
+

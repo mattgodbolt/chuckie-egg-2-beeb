@@ -35,6 +35,20 @@ FDC_SLOT = 112
 fdc_read = fdc_slot
 fdc_poll = fdc_slot + 3
 
+\ Give the 1770 command A. Its status isn't valid for a while after (the
+\ WD1770's data sheet), and a poll straight away would find it not busy, the
+\ command done before it's begun: a read taken as read before a byte came,
+\ its bytes landing later in a page that's moved on. (jsbeeb takes a command
+\ at once, which hid it; a real Master doesn't.) Some 70us.
+.w_command
+{
+    STA W_COMMAND
+    LDX #28
+.wait
+    DEX : BNE wait
+    RTS
+}
+
 \ Aim the NMI routine at the page and arm it, for the read command.
 .arm
 {
@@ -150,11 +164,16 @@ SCREEN_STAGE = screen + &2E00
 }
 
 \ From wait_vsync's wait: the loader on, or if it's idle, reading ahead.
+\ (The viewer, which only draws rooms, doesn't read ahead.)
 .disc_tick
+IF DEFINED(VIEWER)
+    JMP disc_step
+ELSE
     JSR disc_step : BCS ticked
     JMP prefetch
 .ticked
     RTS
+ENDIF
 
 \ Wait for the loader to finish its item.
 .disc_wait
@@ -209,13 +228,15 @@ SCREEN_STAGE = screen + &2E00
     RTS
 }
 
-\ Start reading item A at item_top, if it fits: carry clear if it does,
-\ set if not.
+\ Start reading item A at item_top: carry clear if it fits, or fits once
+\ the items at the top go (the oldest, after arrange), but never one this
+\ visit to the room uses (it_use = epoch); carry set if not.
 .item_add
 {
     ZA_AUTO2 end
     STA ia_id
     JSR item_where
+.try
     LDX it_n : CPX #NI : BCS full
     CLC : LDA item_top : ADC fe_len : STA end
     LDA item_top+1 : ADC fe_len+1 : STA end+1
@@ -234,6 +255,7 @@ SCREEN_STAGE = screen + &2E00
     STY stage_alt
 .fits
     LDA ia_id : STA it_id,X
+    LDA epoch : STA it_use,X
     LDA fe_len : STA it_nlo,X
     LDA fe_len+1 : STA it_nhi,X
     LDA item_top : STA it_lo,X : STA fe_dst
@@ -242,89 +264,120 @@ SCREEN_STAGE = screen + &2E00
     LDA end+1 : STA item_top+1
     INC it_n
     LDA #1 : STA ld_on          ; (carry clear)
+    RTS
 .full
+    LDX it_n : DEX : BMI cant
+    LDA it_use,X : CMP epoch : BEQ cant
+    STX it_n
+    LDA it_lo,X : STA item_top
+    LDA it_hi,X : STA item_top+1
+    JMP try
+.cant
+    SEC
     RTS
 }
 
-\ Mark item A to keep (it_keep), if it's here.
-.keep_id
-    JSR item_find : BCC no_item
-    LDA #1 : STA it_keep,X
-.no_item
-    RTS
-
-\ Mark the body at item X and its groups to keep.
-.keep_room
+\ Copy fe_len bytes from fe_pos to fe_dst (with nothing being read: the
+\ loader's pointers). X is kept.
+.mem_copy
 {
-    ZA_AUTO2 bp2
-    ZA_AUTO1 g
-    LDA #1 : STA it_keep,X
-    LDA it_lo,X : STA bp2
-    LDA it_hi,X : STA bp2+1
-    LDY #1 : LDA (bp2),Y : STA g
-.group
-    DEC g : BMI done
-    INY : LDA (bp2),Y : ORA #&80
-    STY gy
-    JSR keep_id
-    LDY gy
-    JMP group
+    TXA : PHA
+    LDY #0
+    LDX fe_len+1 : BEQ part
+.page
+    LDA (fe_pos),Y : STA (fe_dst),Y
+    INY : BNE page
+    INC fe_pos+1 : INC fe_dst+1
+    DEX : BNE page
+.part
+    LDX fe_len : BEQ done
+.byte
+    LDA (fe_pos),Y : STA (fe_dst),Y
+    INY : DEX : BNE byte
 .done
+    PLA : TAX
     RTS
 }
 
-\ Keep the items marked, moved down to the arena's start in their order,
-\ and drop the rest; the marks are cleared. (Never while one is being
-\ read: it would move.)
-.compact
+\ Put the items in the order they were last used, the latest first (this
+\ visit's, then the last's ...), so the oldest are at the top, where
+\ item_add drops them, and the room being entered is at the bottom, where
+\ nothing reading ahead moves it. The bytes go through the screen, the
+\ display blanked (the room's drawing clears it), and come back packed.
+ARR_BUF = screen
+.arrange
 {
-    ZA_AUTO2 src
-    ZA_AUTO2 len
     ZA_AUTO1 j
+    ZA_AUTO1 best
+    ZA_AUTO1 latest
+    LDA #8 : STA crtc_reg : LDA #CRTC_BLANK : STA crtc_data
+    \ The table sorted: for each place, the item after it used latest
+    \ (it_use - epoch - 1 the largest, 255 this visit's), swapped in.
+    LDX #0
+.sort
+    STX j
+    CPX it_n : BCS sorted
+    STX best
+    LDA it_use,X : CLC : SBC epoch : STA latest
+.scan
+    INX : CPX it_n : BCS scanned
+    LDA it_use,X : CLC : SBC epoch
+    CMP latest : BEQ scan : BCC scan
+    STA latest : STX best
+    JMP scan
+.scanned
+    LDX j : LDY best
+    JSR swap
+    LDX j : INX
+    JMP sort
+.sorted
+    \ Their bytes in that order into the buffer, at item_top's place in it.
     LDA #LO(arena) : STA item_top
     LDA #HI(arena) : STA item_top+1
-    LDX #0 : STX j
+    LDX #0
 .item
-    CPX it_n : BEQ done
-    LDA it_keep,X : BEQ next
-    LDA #0 : STA it_keep,X
-    \ Item X becomes item j, at item_top.
-    LDY j : INC j
-    LDA it_id,X : STA it_id,Y
-    LDA it_lo,X : STA src
-    LDA it_hi,X : STA src+1
-    LDA item_top : STA it_lo,Y
-    LDA item_top+1 : STA it_hi,Y
-    LDA it_nlo,X : STA it_nlo,Y : STA len
-    LDA it_nhi,X : STA it_nhi,Y : STA len+1
-    \ Its bytes down (item_top <= src, so from the first up); item_top
-    \ moves on past them.
-    LDY #0
-.byte
-    LDA (src),Y : STA (item_top),Y
-    INC src : BNE s_on
-    INC src+1
-.s_on
-    INC item_top : BNE t_on
-    INC item_top+1
-.t_on
-    LDA len : BNE l_on
-    DEC len+1
-.l_on
-    DEC len
-    LDA len : ORA len+1 : BNE byte
-.next
-    INX : BNE item              ; (always)
-.done
-    LDA j : STA it_n
+    CPX it_n : BEQ packed
+    LDA it_lo,X : STA fe_pos
+    LDA it_hi,X : STA fe_pos+1
+    LDA item_top : STA it_lo,X
+    CLC : ADC #LO(ARR_BUF - arena) : STA fe_dst
+    LDA item_top+1 : STA it_hi,X
+    ADC #HI(ARR_BUF - arena) : STA fe_dst+1
+    CLC : LDA it_nlo,X : STA fe_len : ADC item_top : STA item_top
+    LDA it_nhi,X : STA fe_len+1 : ADC item_top+1 : STA item_top+1
+    JSR mem_copy
+    INX
+    JMP item
+.packed
+    LDA #LO(ARR_BUF) : STA fe_pos
+    LDA #HI(ARR_BUF) : STA fe_pos+1
+    LDA #LO(arena) : STA fe_dst
+    LDA #HI(arena) : STA fe_dst+1
+    SEC : LDA item_top : SBC #LO(arena) : STA fe_len
+    LDA item_top+1 : SBC #HI(arena) : STA fe_len+1
+    JMP mem_copy
+}
+
+\ Swap items X and Y's places in the table (it_id to it_use, NI apart).
+.swap
+{
+    ZA_AUTO1 n
+    LDA #6 : STA n
+.field
+    LDA it_id,X : PHA
+    LDA it_id,Y : STA it_id,X
+    PLA : STA it_id,Y
+    TXA : CLC : ADC #NI : TAX
+    TYA : ADC #NI : TAY
+    DEC n : BNE field
     RTS
 }
 
 \ --- Entering a room --------------------------------------------------------
 
-\ rb = room A's body, its groups all here too: what's already in the cache
-\ stays, the rest of the cache goes, and what's missing is read now, with
-\ the game waiting.
+\ rb = room A's body, its groups all here too. The cache keeps what it has;
+\ the room's items become this visit's, and those missing are read now,
+\ the game waiting, in place of the items used longest ago.
 .find_body
 {
     STA fb_room
@@ -332,41 +385,57 @@ SCREEN_STAGE = screen + &2E00
     LDA #0 : STA ia_ahead
     LDA #HI(SCREEN_STAGE) : STA stage_p+1
     LDA #HI(SCREEN_STAGE) + 1 : STA stage_alt
+    INC epoch
     LDA fb_room : SEC : SBC #1 : STA fb_id
-    JSR item_find : BCS have_body
-    \ Not here: the cache emptied, and the body read.
-    JSR compact                 ; (nothing marked: all go)
+    JSR body_here : BCS here
     LDA fb_id : JSR read_now
-    LDA fb_id : JSR item_find
-.have_body
-    \ Keep it and its groups, at the start; read the groups missing.
-    JSR keep_room
-    JSR compact
-    LDA fb_id : JSR item_find
+.here
+    JSR body_here               ; (rb again: arrange moves it)
+    \ Its groups: the first missing read, then all again.
+    LDA #0 : STA fb_n
+.group
+    LDY #1 : LDA fb_n : CMP (rb),Y : BCS all
+    INC fb_n : ADC #2 : TAY
+    LDA (rb),Y : ORA #&80
+    JSR item_find : BCS group
+    JSR read_now
+    JMP here
+.all
+    \ This visit's at the bottom, where reading ahead won't move them.
+    JSR arrange
+    JSR body_here
+    LDA fb_room : STA pf_cur
+    RTS
+}
+
+\ If fb_id's body is here: rb = it, carry set, and it and its groups
+\ here are this visit's. Carry clear if not.
+.body_here
+{
+    LDA fb_id : JSR item_find : BCC none
+    LDA epoch : STA it_use,X
     LDA it_lo,X : STA rb
     LDA it_hi,X : STA rb+1
     LDY #1 : LDA (rb),Y : STA fb_n
 .group
     DEC fb_n : BMI done
-    INY : STY gy
-    LDA (rb),Y : ORA #&80
-    JSR item_find : BCS got
-    JSR read_now
-.got
-    LDY gy
+    INY : LDA (rb),Y : ORA #&80
+    JSR item_find : BCC group
+    LDA epoch : STA it_use,X
     JMP group
 .done
-    LDA fb_room : STA pf_cur
-    LDA #0 : STA pf_room
+    SEC
+.none
     RTS
 }
 
-\ Read item A now, the game waiting, with the display blanked (the
-\ sectors go through the screen).
+\ Read item A now, the game waiting, with the display blanked (arrange
+\ does it: the sectors go through the screen). This visit's items go to
+\ the bottom first, so it fits in place of any of the rest (item_add drops
+\ from the top).
 .read_now
-    PHA
-    LDA #8 : STA crtc_reg : LDA #CRTC_BLANK : STA crtc_data
-    PLA : JSR item_add
+    PHA : JSR arrange : PLA
+    JSR item_add
     JMP disc_wait
 
 \ gp = group X, which find_body has seen to.
@@ -376,24 +445,26 @@ SCREEN_STAGE = screen + &2E00
     LDA it_hi,X : STA gp+1
     RTS
 
+IF NOT(DEFINED(VIEWER))
 \ --- Reading ahead ----------------------------------------------------------
 
 \ With nothing being read: the room Harry is likeliest to go to next, and
-\ the next item of it the cache lacks, if it fits (dropping what was read
-\ ahead for another room).
+\ the next item of it the cache lacks, if there's room. What it finds or
+\ reads becomes this visit's, so reading ahead for another room won't drop
+\ it, and Harry turning about doesn't read two rooms over and over.
 .prefetch
 {
     ZA_AUTO2 pf_p
     LDA #1 : STA ia_ahead
     LDA pf_cur : BEQ done       ; (before the first room)
-    JSR next_room : STA pf_room
-    BEQ done
+    JSR next_room : BEQ done
     SEC : SBC #1 : STA fb_id
     JSR item_find : BCS have_body
-    LDA fb_id : JSR room_item
+    LDA fb_id : JMP item_add
 .done
     RTS
 .have_body
+    LDA epoch : STA it_use,X
     \ Its groups: the first missing.
     LDA it_lo,X : STA pf_p
     LDA it_hi,X : STA pf_p+1
@@ -402,43 +473,11 @@ SCREEN_STAGE = screen + &2E00
     DEC fb_n : BMI done
     INY
     LDA (pf_p),Y : ORA #&80
-    JSR item_find : BCS group
-    LDA (pf_p),Y : ORA #&80
-    \ Fall into room_item.
-}
-\ Read item A ahead, if it fits, or fits once whatever isn't this room's
-\ or the next's is dropped.
-.room_item
-{
-    PHA
-    JSR item_add : BCC started
-    \ Too big: keep only the two rooms' items, if that frees anything.
-    LDA pf_cur : SEC : SBC #1 : JSR item_find
-    BCC no_cur
-    JSR keep_room
-.no_cur
-    LDA fb_id : JSR item_find : BCC no_next
-    JSR keep_room
-.no_next
-    LDX it_n : LDA #0
-.count
-    DEX : BMI counted
-    CLC : ADC it_keep,X
-    JMP count
-.counted
-    CMP it_n : BEQ stuck            ; all kept: it can't fit
-    JSR compact
-    PLA : JMP item_add
-.stuck
-    LDX it_n
-.unmark
-    DEX : BMI unmarked
-    LDA #0 : STA it_keep,X
-    JMP unmark
-.unmarked
-.started
-    PLA
-    RTS
+    JSR item_find : BCC missing
+    LDA epoch : STA it_use,X
+    JMP group
+.missing
+    JMP item_add
 }
 
 \ The room through the exit Harry is nearest, or heading for: 0 if none.
@@ -509,3 +548,4 @@ SCREEN_STAGE = screen + &2E00
 .not
     RTS
 }
+ENDIF

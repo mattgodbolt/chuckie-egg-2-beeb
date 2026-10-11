@@ -22,6 +22,7 @@ const rand = () => ((seed = (seed * 1103515245 + 12345) & 0x7fffffff) / 0x800000
 const b = await startBeeb({ disc: "build/test.ssd", symbols: "build/test.json", bootUntil: "game_loop" });
 const CHANGE = b.addr("change_room"), LOOP = b.addr("game_loop");
 const READ = "read_now" in b.syms ? b.addr("read_now") : 0;
+const SECTOR = READ ? b.addr("sector_start") : 0;
 const moves = [[KEYS.right], [KEYS.left], [KEYS.right, KEYS.jump], [KEYS.left, KEYS.jump], [KEYS.up], [KEYS.down]];
 const changes = [];
 let held = [];
@@ -57,18 +58,20 @@ try {
             if (JSON.parse(await b.regs()).pc !== CHANGE) break;
             const from = await b.peek("room");
             // (The streaming edition: a stop at read_now means a miss.)
-            let cycles = 0, miss = false;
+            let cycles = 0, miss = false, sectors = 0;
             for (;;) {
                 await b.breakpoint(LOOP);
-                if (READ) await b.breakpoint(READ);
+                if (READ) await b.breakpoint(READ), await b.breakpoint(SECTOR);
                 const w = await b.run(10);
                 await b.clearBreakpoints();
                 cycles += w.cycles_run;
-                if (JSON.parse(await b.regs()).pc !== READ || !READ) break;
-                miss = true;
+                const pc = JSON.parse(await b.regs()).pc;
+                if (!READ || (pc !== READ && pc !== SECTOR)) break;
+                if (pc === READ) miss = true;
+                else sectors++;
                 await b.cycles(1);
             }
-            changes.push({ from, to: await b.peek("room"), ms: cycles / 2000, miss });
+            changes.push({ from, to: await b.peek("room"), ms: cycles / 2000, miss, sectors });
             left -= cycles / 2e6;
         }
     }
@@ -77,7 +80,7 @@ try {
 }
 const ms = changes.map((c) => c.ms).sort((a, b) => a - b);
 const pct = (p) => ms[Math.min(ms.length - 1, Math.floor(p * ms.length))].toFixed(0);
-console.log(changes.map((c) => `${c.from}->${c.to} ${c.ms.toFixed(0)}${c.miss ? " miss" : ""}`).join("  "));
+console.log(changes.map((c) => `${c.from}->${c.to} ${c.ms.toFixed(0)}${c.miss ? ` miss/${c.sectors}` : ""}`).join("  "));
 console.log(`${process.env.CE2_STREAM ? "streaming" : "sideways RAM"}: ${changes.length} room changes, ` +
     `median ${pct(0.5)}ms, 90% ${pct(0.9)}ms, worst ${ms[ms.length - 1].toFixed(0)}ms, ` +
     `over 400ms: ${ms.filter((m) => m > 400).length}` + (READ ? `, read while waiting: ${changes.filter((c) => c.miss).length}` : ""));

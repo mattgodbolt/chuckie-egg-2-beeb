@@ -199,12 +199,13 @@ IF DEFINED(STREAM)
     \ the file (stream_init sets it up).
     SECTION Cache, org = code_end, guard = CODE_TOP, virtual = TRUE
     NI = 10                     ; items at most: two rooms' (a body, 4 groups)
+    \ (it_id to it_use in this order: disc.6502's swap.)
 .it_id      SKIP NI             ; 0-119 a room's body (room - 1), &80 + n group n
 .it_lo      SKIP NI             ; where
 .it_hi      SKIP NI
 .it_nlo     SKIP NI             ; how long
 .it_nhi     SKIP NI
-.it_keep    SKIP NI             ; (compact's marks)
+.it_use     SKIP NI             ; the visit (epoch) that last used it
 .it_n       SKIP 1
 .ld_on      SKIP 1              ; an item is being read
 .ia_id      SKIP 1
@@ -213,9 +214,9 @@ IF DEFINED(STREAM)
 .fb_room    SKIP 1
 .fb_id      SKIP 1
 .fb_n       SKIP 1
+.epoch      SKIP 1              ; on one at each room entered
 .gy         SKIP 1
 .pf_cur     SKIP 1              ; the room the cache was set up for
-.pf_room    SKIP 1              ; the room being read ahead
 .arena
     SKIP CODE_TOP - P%
 .arena_end

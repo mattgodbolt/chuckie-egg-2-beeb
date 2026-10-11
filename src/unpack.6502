@@ -9,7 +9,12 @@
 \ each is emitted as it is decoded.
 \ ***************************************************************************
 
-ZA_AUTO2 bp                 ; the next byte of the bit stream
+ZA_AUTO2 bp                 ; the next byte of the bit stream, less BP_SKIP
+IF DEFINED(STREAM)
+    BP_SKIP = 4             ; (the room's palette first: bands.6502's set_room_palette)
+ELSE
+    BP_SKIP = 0
+ENDIF
 \ The byte being read, used bits shifted out and a 1 shifted in behind
 \ them: when only that 1 is left, an ASL leaves 0 (as it does from 0, the
 \ start), and the next byte is read.
@@ -22,10 +27,12 @@ MTF_TILE = 3
 MTF_TYPE = 6
 
 \ Start unpacking the room (bp set by rooms.6502's room_load): its first
-\ record is the background.
+\ byte, the background's, returned in A (getbits: X = 0). The commands
+\ follow, a record at a time (fetch: rec_len 0 has it unpack one first,
+\ whatever rec_pos is).
 .unpack_room
 {
-    LDA #0 : STA bbyte : STA rec_len : STA rec_pos
+    LDA #0 : STA bbyte : STA rec_len
     \ The lists start empty, but needn't be cleared: the packer codes a hit
     \ only on an entry this room has put there, and the shifts keep those
     \ at the front, so what was there before only shifts down unused. The
@@ -35,7 +42,7 @@ MTF_TYPE = 6
     ZA_DISCARD mtf
     LDX #8 : STA mtf,X
     ZA_INDEXEDBY 8
-    BNE emit_bits               ; (always: X) the background
+    BNE getbits                 ; (always: X) the background
 }
     \ (The allocator also follows the BNE on, into emit_tiered: harmless.)
 
@@ -71,7 +78,7 @@ MTF_TYPE = 6
 .loop
     ASL bbyte : BNE have
     PHA
-    LDY #0 : LDA (bp),Y
+    LDY #BP_SKIP : LDA (bp),Y
     INC bp : BNE refilled
     INC bp+1
 .refilled
@@ -101,7 +108,8 @@ MTF_TYPE = 6
     RTS
 }
 
-\ The next byte of the room's bytecode (the drawer's fetch).
+\ The next byte of the room's bytecode (the drawer's fetch). Returns Z
+\ clear (the INX: rooms.6502's cmd_diag).
 .fetch
 {
     LDX rec_pos : CPX rec_len : BCC have

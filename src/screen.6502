@@ -21,49 +21,14 @@ FOR n = 0..15
     EQUB n * &11
 NEXT
 \ The same with the nibble turned over (its leftmost pixel in bit 0), for
-\ drawing a mirror image (sprite.6502's sprite_mode patches it in).
+\ drawing a mirror image (sprite.6502's sprite_start patches it in).
 .spread_rev
 FOR n = 0..15
     EQUB ((n AND 1) * 8 + (n AND 2) * 2 + (n AND 4) DIV 2 + (n AND 8) DIV 8) * &11
 NEXT
-\ Which of them sprite.6502 spreads an image's nibbles with: a frame as it
-\ is, and turned over. (sprite_mode patches only the low byte.)
-.mode_spread
-    EQUB LO(spread_lo), LO(spread_rev)
+\ (sprite.6502's sprite_start patches only the low byte of which one an
+\ image's nibbles are spread with.)
     ASSERT HI(spread_lo) = HI(spread_rev) AND HI(spread_lo) = HI(spread_rev + 15)
-
-\ Set the palette and colour maps for the room (rooms.6502's room_load).
-.set_room_palette
-{
-    \ sb_p = room_palettes + 4 * the palette's number, which is in bits 3-7
-    \ of the room's packed first byte (tools/packrooms.py), where setup_bands'
-    \ map reader (bands.6502) can read the colour map too.
-IF DEFINED(STREAM)
-    \ (The streaming edition's body has the palette itself, just before the
-    \ packed room.)
-    LDA bp : SEC : SBC #4 : STA sb_p
-    LDA bp+1 : SBC #0 : STA sb_p+1
-ELSE
-    LDY #0 : LDA (bp),Y : AND #&F8 : LSR A     ; (carry clear; bp: room_load)
-    ADC #LO(room_palettes) : STA sb_p
-    LDA #HI(room_palettes) : ADC #0 : STA sb_p+1
-ENDIF
-    \ Logical colours 0-3, a nibble each, low nibble first.
-    LDX #3
-.logical
-    TXA : LSR A : TAY
-    LDA (sb_p),Y
-    BCC low
-    LSR A : LSR A : LSR A : LSR A
-.low
-    AND #15 : JSR set_logical
-    DEX : BPL logical
-    \ The colour map, two bits a colour, as a band's.
-    INX                         ; X = 0 (set_logical keeps X)
-    LDY #2 : JSR setup_bands.sb_map
-    LDY #3 : JSR setup_bands.sb_map
-    JMP setup_bands
-}
 
 \ Logical colour X (0-3) shows physical colour A in the room: fill its four
 \ entries of room_ula (irq.6502), which the interrupt writes to the ULA
@@ -73,8 +38,7 @@ ENDIF
 \ 0, 1 and 3 (the six the status bar shows) at 10-15, logical 1 first.
 \ X is kept.
 .set_logical
-    EOR #7                      ; the ULA wants the physical colour EOR 7
-    ORA logical_bits,X          ; beside colour 0
+    EOR logical_bits,X          ; beside colour 0 (A < 16: the bits don't meet)
     LDY beside013,X
     STA room_ula,Y              ; beside 0
     ORA #&10 : STA room_ula+1,Y ; beside 1
@@ -83,23 +47,24 @@ ENDIF
     AND #&EF : STA room_ula,Y   ; beside 2
     RTS
 .logical_bits
-    EQUB &00, &20, &80, &A0     ; l0 at bit 5, l1 at bit 7
+    EQUB &07, &27, &87, &A7     ; l0 at bit 5, l1 at bit 7; the ULA wants the colour EOR 7
 .beside013
     EQUB 13, 10, 0, 4
 .beside2
     EQUB 9, 8, 3, 7
 
 \ Fill the whole screen with zero (logical colour 0).
+\ Returns A = 0 (draw_room).
 .cls
 {
-    ZA_AUTO2 p
-    LDY #0 : STY p              ; (LO(screen) = 0: cell_screen)
-    LDA #HI(screen) : STA p+1
-    TYA
+    LDA #HI(screen) : STA page+2    ; (LO(screen) = 0: cell_screen)
+    LDY #0 : TYA
 .loop
-    STA (p),Y
+.page
+    STA screen,Y
     INY : BNE loop
-    INC p+1 : BPL loop
+    INC page+2 : BPL loop           ; (to the top of main RAM, &8000)
+    ASSERT screen + SCREEN_ROWS * ROW_BYTES = &8000
     RTS
 }
 
@@ -142,28 +107,29 @@ ENDIF
     \ glyph = 8 * the code + its font_lo/hi entry, by its top three bits.
     TAY
     LSR A : LSR A : LSR A : LSR A : LSR A : TAX
-    TYA : ASL A : ASL A : ASL A
-    CLC : ADC font_lo,X : STA glyph
+    TYA : ASL A : ASL A : ASL A     ; (C = the code's bit 5, X's bit 0: font_lo)
+    ADC font_lo,X : STA glyph
     LDA font_hi,X : ADC #0 : STA glyph+1
     RTS
 }
 
 \ cell_glyph's glyph addresses, by a code's top three bits: 256 * those bits
 \ (their share of 8 * the code) plus the font less 8 * its first code. Tiles
-\ start at &20; text, bit 7 set, at &A0 in the OS's font (decision 4).
+\ start at &20; text, bit 7 set, at &A0 in the OS's font (decision 4). Less
+\ the carry the ADC adds, which is the bits' lowest (code_glyph).
 .font_lo
 FOR x = 0..3
-    EQUB LO(x * 256 + tiles - 8 * &20)
+    EQUB LO(x * 256 - (x AND 1) + tiles - 8 * &20)
 NEXT
 FOR x = 4..7
-    EQUB LO(x * 256 + text_font - 8 * &A0)
+    EQUB LO(x * 256 - (x AND 1) + text_font - 8 * &A0)
 NEXT
 .font_hi
 FOR x = 0..3
-    EQUB HI(x * 256 + tiles - 8 * &20)
+    EQUB HI(x * 256 - (x AND 1) + tiles - 8 * &20)
 NEXT
 FOR x = 4..7
-    EQUB HI(x * 256 + text_font - 8 * &A0)
+    EQUB HI(x * 256 - (x AND 1) + text_font - 8 * &A0)
 NEXT
 
 \ A = the row of the cell whose low byte is A and high byte X.

@@ -1481,3 +1481,9 @@ the map keeps only what the OS and hardware fix.
   the assembler works out; a number the port chooses is a named constant
   (`STACK_BASE`, `SAVE_HDR_LEN`). The rule is in CLAUDE.md and
   `docs/optimising.md`, for every agent.
+- The rooms, bands, screen, sprite and unpack agent's patch went in third,
+  cleanly: `erase_image`'s blank-line case was the tiled path with tile
+  byte 0, `room_load` and `setup_bands` both walked the bands, the run
+  commands shared a prefix, and the command table became offsets. Rooms
+  draw about 3% faster. The unpacker's `BRK` on a command the packer
+  never writes went with it.

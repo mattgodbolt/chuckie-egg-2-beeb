@@ -64,7 +64,7 @@ ZA_AUTO1 sp_yl              ; (erase_image's Y, kept through a look-up)
 .line
     LDA (sp_p),Y : BEQ next
     LSR A : LSR A : LSR A : LSR A : BEQ right
-    TAX                         ; the left four pixels (sprite_mode patches
+    TAX                         ; the left four pixels (sprite_start patches
                                 ; the spread_lo of .dl, .dr for a mirror)
     LDA (sp_scr),Y : EOR sp_colour
 .dl AND spread_lo,X
@@ -98,6 +98,28 @@ ZA_AUTO1 sp_yl              ; (erase_image's Y, kept through a look-up)
     \ A cell is looked up only if the column has a pixel in it.
     LDA (sp_p),Y : BNE found
     DEY : BPL column
+.column_done
+    JSR sprite_left : BPL column
+    JSR sprite_down : BNE each_row
+    RTS
+.clear
+    \ Paper 0 and ink the same, as in most of a room: the room's pixels
+    \ here are all 0, so the image's pixels are cleared (AND NOT spread(n)
+    \ is AND spread(n EOR 15)).
+    LDY sp_yl
+.clear_line
+    LDA (sp_p),Y : BEQ clear_next
+    \ (sprite_start patches the spread_lo of .cl to .tr for a mirror.)
+    LSR A : LSR A : LSR A : LSR A : EOR #15 : TAX
+    LDA (sp_scr),Y
+.cl AND spread_lo,X
+    STA (sp_scr),Y
+    LDA (sp_p),Y : AND #15 : EOR #15 : TAX
+    LDA (sp_scr8),Y
+.cr AND spread_lo,X
+    STA (sp_scr8),Y
+.clear_next
+    DEY : BPL clear_line
     BMI column_done                 ; (always)
 .found
     \ The cell: the row's first plus the column (past column 31 the next
@@ -118,55 +140,15 @@ ZA_AUTO1 sp_yl              ; (erase_image's Y, kept through a look-up)
     LDA (sp_p),Y : BEQ next
     LDA (glyph),Y
 .to_tiled
-    BNE tiled                       ; (tiled_m for a mirror: sprite_mode)
-    ZA_CANJUMP tiled, tiled_m
-    \ The tile's line is blank: the room's pixels here are paper.
-    LDA (sp_p),Y : LSR A : LSR A : LSR A : LSR A : BEQ plain_right
-    TAX
-    LDA (sp_scr),Y : EOR paper
-.pl AND spread_lo,X
-    EOR (sp_scr),Y : STA (sp_scr),Y
-.plain_right
-    LDA (sp_p),Y : AND #15 : BEQ next
-    TAX
-    LDA (sp_scr8),Y : EOR paper
-.pr AND spread_lo,X
-    EOR (sp_scr8),Y : STA (sp_scr8),Y
-.next
-    DEY : BPL line
-.column_done
-    JSR sprite_left : BPL column
-    JSR sprite_down : BNE each_row
-    RTS
-.clear
-    \ Paper 0 and ink the same, as in most of a room: the room's pixels
-    \ here are all 0, so the image's pixels are cleared (AND NOT spread(n)
-    \ is AND spread(n EOR 15)).
-    LDY sp_yl
-    LDA (sp_p),Y
-.clear_have
-    \ (sprite_mode patches the spread_lo of .cl to .tr for a mirror.)
-    LSR A : LSR A : LSR A : LSR A : EOR #15 : TAX
-    LDA (sp_scr),Y
-.cl AND spread_lo,X
-    STA (sp_scr),Y
-    LDA (sp_p),Y : AND #15 : EOR #15 : TAX
-    LDA (sp_scr8),Y
-.cr AND spread_lo,X
-    STA (sp_scr8),Y
-.clear_next
-    DEY : BMI column_done
-    LDA (sp_p),Y : BNE clear_have
-    JMP clear_next                  ; (not BEQ: the allocator would see a
-                                    ; way on, through .tiled_m, into .line,
-                                    ; which reads glyph)
+    BNE tiled                       ; (tiled_m for a mirror: sprite_start;
+    ZA_CANJUMP tiled, tiled_m       ; a blank line, 0, is 0 through tiled_m)
 .tiled_m
     \ A mirror's screen halves are the other way round (sp_half), so the
     \ tile's are too: its byte with the nibbles swapped.
     ASL A : ADC #&80 : ROL A : ASL A : ADC #&80 : ROL A
 .tiled
     \ The room's pixels: the tile's line, in the cell's colours (the
-    \ image's pixels by .tl and .tr, which sprite_mode patches; the tile's
+    \ image's pixels by .tl and .tr, which sprite_start patches; the tile's
     \ by spread_lo always).
     STA tb
     LDA (sp_p),Y : LSR A : LSR A : LSR A : LSR A : BEQ tiled_right
@@ -184,7 +166,9 @@ ZA_AUTO1 sp_yl              ; (erase_image's Y, kept through a look-up)
     LDA tb : AND #15 : TAX
     LDA spread_lo,X : AND diff : EOR paper
     EOR (sp_scr8),Y : AND mask : EOR (sp_scr8),Y : STA (sp_scr8),Y
-    JMP next
+.next
+    DEY : BPL line
+    JMP column_done
 }
 
 \ Set up the frame at sp_frame, sp_cell, sp_yf for drawing or erasing, at
@@ -206,19 +190,19 @@ ZA_AUTO1 sp_yl              ; (erase_image's Y, kept through a look-up)
     LSR A : LSR A : LSR A : STA top                             ; the lines left out above
     TXA : AND #&70 : LSR A : LSR A : LSR A : LSR A              ; ... and below
     ADC top : STA sp_h8                                         ; (carry clear)
-    LDA (sp_frame),Y : AND #7 : ASL A : ASL A : ASL A
-    SEC : SBC sp_h8 : STA sp_h8 : STA sp_lines                  ; the lines a column holds
-    \ The first of them is `top` lines down: whole cell rows of 32 cells,
+    \ The first line held is `top` lines down: whole cell rows of 32 cells,
     \ then the line in the cell.
-    LDA top : BEQ moved
-    CLC : ADC sp_yf : STA top
+    LDA top : BEQ lines
+    ADC sp_yf : STA top             ; (carry clear: the ADC above)
     AND #7 : STA sp_yf
-    LDA top : AND #&F8 : BEQ moved
+    LDA top : AND #&F8 : BEQ lines
     ASL A : ASL A                   ; (carry clear: top < 64)
     ADC sp_cell : STA sp_cell
-    BCC moved
+    BCC lines
     INC sp_cell+1
-.moved
+.lines
+    LDA (sp_frame),Y : AND #7 : ASL A : ASL A : ASL A
+    SEC : SBC sp_h8 : STA sp_h8 : STA sp_lines                  ; the lines a column holds
     \ sp_rowp: the first line held of the column drawn first (the screen's
     \ last).
     TXA : BMI mirror
@@ -239,24 +223,35 @@ ZA_AUTO1 sp_yl              ; (erase_image's Y, kept through a look-up)
 .back
     STA sp_rowp : STY sp_rowp+1
     STX sp_step+1                   ; (X = &FF)
-    INX : STX sp_half               ; X = 0: drawn as it is
+    INX : STX sp_half               ; X = 0
     TXA : SEC : SBC sp_h8 : STA sp_step
+    \ Drawn as it is.
+    LDA #LO(spread_lo) : LDY #erase_image.tiled - erase_image.to_tiled - 2
     BCC pixels                      ; (always: 0 - sp_h8 borrows)
 .mirror
     \ A mirror image: its twin's pixels, which its next two bytes say
     \ where, from the header. Each column is the twin's from the other
     \ side, turned over: the first column is the screen's last, the
     \ columns go rightwards, the screen halves are swapped (sp_half), and
-    \ each half's pixels are turned over (sprite_mode).
+    \ each half's pixels are turned over (sprite_start).
     LDY #2 : LDA (sp_frame),Y : CLC : ADC sp_frame : STA sp_rowp
     INY : LDA (sp_frame),Y : ADC sp_frame+1 : STA sp_rowp+1
     LDA sp_h8 : STA sp_step
     LDA #8 : STA sp_half
-    LDX #0 : STX sp_step+1
-    INX                             ; X = 1: turned over
+    LDY #0 : STY sp_step+1
+    \ Turned over: Y = 0, the branch on into tiled_m.
+    ASSERT erase_image.tiled_m - erase_image.to_tiled - 2 = 0
+    LDA #LO(spread_rev)
 .pixels
-    LDA mode_spread,X : CMP draw_sprite.dl+1 : BEQ moded
-    JSR sprite_mode
+    \ Patch draw_sprite and erase_image for drawing frames as they are or
+    \ turned over, when that changes (the code says which way it is): the
+    \ table that spreads the image's nibbles (A), and the way into
+    \ erase_image's tiled path (Y).
+    CMP draw_sprite.dl+1 : BEQ moded
+    STA draw_sprite.dl+1 : STA draw_sprite.dr+1
+    STA erase_image.cl+1 : STA erase_image.cr+1
+    STA erase_image.tl+1 : STA erase_image.tr+1
+    STY erase_image.to_tiled+1
 .moded
     \ The last column's screen address, screen + 16 * (cell + width - 1)
     \ (cell_screen), in the half drawn first.
@@ -268,24 +263,6 @@ ZA_AUTO1 sp_yl              ; (erase_image's Y, kept through a look-up)
     ORA sp_half : STA sp_rowscr : STY sp_rowscr+1
     LDA sp_cell : LDX sp_cell+1 : JSR cell_row : STA sp_row
     RTS
-}
-
-\ Patch draw_sprite and erase_image for drawing frames as they are (X =
-\ 0) or turned over (X = 1): the table that spreads the image's nibbles,
-\ and the way into erase_image's tiled path. (sprite_start calls this only
-\ when it changes: the code says which way it is.)
-.sprite_mode
-{
-    LDA mode_spread,X
-    STA draw_sprite.dl+1 : STA draw_sprite.dr+1
-    STA erase_image.cl+1 : STA erase_image.cr+1
-    STA erase_image.pl+1 : STA erase_image.pr+1
-    STA erase_image.tl+1 : STA erase_image.tr+1
-    LDA mode_tiled,X : STA erase_image.to_tiled+1
-    RTS
-.mode_tiled
-    EQUB erase_image.tiled - erase_image.to_tiled - 2
-    EQUB erase_image.tiled_m - erase_image.to_tiled - 2
 }
 
 \ Start a cell row: its lines are sp_yf on to the cell's foot or the
@@ -335,14 +312,15 @@ ZA_AUTO1 sp_yl              ; (erase_image's Y, kept through a look-up)
     LDA sp_rowp : SEC : ADC sp_top : STA sp_rowp
     BCC next_cell
     INC sp_rowp+1
+    CLC
 .next_cell
-    CLC : LDA sp_cell : ADC #32 : STA sp_cell
+    LDA sp_cell : ADC #32 : STA sp_cell
     BCC screen_row
     INC sp_cell+1
 .screen_row
     ASSERT ROW_BYTES = &200
     INC sp_rowscr+1 : INC sp_rowscr+1
-    LDA #0 : STA sp_yf
+    INY : STY sp_yf                 ; 0 (Y = &FF: the rows' lines counted out)
     INC sp_row                      ; (Z clear: a row below the first)
 .done
     RTS
@@ -357,9 +335,9 @@ ZA_AUTO1 sp_yl              ; (erase_image's Y, kept through a look-up)
     LDY rg_count
 .try
     DEY : BMI none
-    CMP rg_first,Y : BCC try
     CMP rg_end,Y : BCS try
-    ADC rg_base,Y : TAY             ; (carry clear)
+    CMP rg_first,Y : BCC try
+    ADC rg_base,Y : TAY             ; (carry set: room_load's rg_base is one less)
     LDX fr_hi,Y : LDA fr_lo,Y
 .got
 IF DEFINED(DIRECT)
@@ -369,7 +347,12 @@ IF DEFINED(DIRECT)
 ENDIF
     RTS
 .none
-    LDX #0 : BEQ got                ; (always)
+    LDX #0
+IF DEFINED(DIRECT)
+    BEQ got                         ; (always)
+ELSE
+    RTS
+ENDIF
 }
 IF DEFINED(DIRECT)
 .frame_missing

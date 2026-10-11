@@ -9,15 +9,52 @@
 \ This room's bands, set by setup_bands when the room is drawn, are in
 \ LowState and the scratch zero page (memory.6502).
 
-\ The room's bands, from its body (rooms.6502's room_load; set_room_palette
-\ has filled band_cmaps' band 0).
+\ Set the palette and colour maps for the room (rooms.6502's room_load).
+.set_room_palette
+{
+IF DEFINED(STREAM)
+    \ (The streaming edition's body has the palette itself, where bp points
+    \ until the room is unpacked: the packed room follows, unpack.6502's
+    \ getbits reading it BP_SKIP on.)
+ELSE
+    \ sb_p = room_palettes + 4 * the palette's number, which is in bits 3-7
+    \ of the room's packed first byte (tools/packrooms.py), where setup_bands'
+    \ map reader can read the colour map too.
+    LDY #0 : LDA (bp),Y : AND #&F8 : LSR A     ; (carry clear; bp: room_load)
+    ADC #LO(room_palettes) : STA sb_p
+    LDA #HI(room_palettes) : ADC #0 : STA sb_p+1
+ENDIF
+    \ Logical colours 0-3, a nibble each, low nibble first.
+    LDX #3
+.logical
+    TXA : LSR A : TAY
+IF DEFINED(STREAM)
+    LDA (bp),Y
+ELSE
+    LDA (sb_p),Y
+ENDIF
+    BCC low
+    LSR A : LSR A : LSR A : LSR A
+.low
+    AND #15 : JSR set_logical
+    DEX : BPL logical
+    \ The colour map, two bits a colour, as a band's.
+    INX                         ; X = 0 (set_logical keeps X)
+    LDY #2 : JSR setup_bands.sb_map
+    LDY #3 : JMP setup_bands.sb_map
+}
+
+\ The room's bands, from its body (rooms.6502's room_load, which then
+\ finds the fixed things at rb_things; set_room_palette fills band_cmaps'
+\ band 0 after).
 .setup_bands
 {
     LDA #0 : STA band_count
-    LDX #31
-.clear
-    STA band_off,X
-    DEX : BPL clear
+    TAY
+.rows
+    \ Band k from row Y down (band 0, the room's, from row 0).
+    STA band_off,Y
+    INY : CPY #32 : BNE rows
 .record
     \ Band k = band_count: its record at rb_bands + 2k, its ULA values by
     \ entry, then band (band_ula + 2i + k: irq.6502).
@@ -30,53 +67,56 @@ ENDIF
     LDA (rb),Y : BEQ done
     PHA
     \ Logical 2's entries: &80, &90, &D0, &C0 with the colour (EOR 7).
-    AND #7 : EOR #7
-    ORA #&80 : STA band_ula,X
+    AND #7 : EOR #&87 : STA band_ula,X
     ORA #&10 : STA band_ula+2,X
     ORA #&40 : STA band_ula+4,X
     AND #&EF : STA band_ula+6,X
     \ The map, two bits a colour, from band_maps, as band k + 1's at 8(k + 1).
+    TXA : ASL A : ASL A : ASL A : ADC #8 : TAX  ; (carry clear: 8k < 24)
 IF DEFINED(STREAM)
     INY : INY : LDA (rb),Y : PHA
-    DEY : LDA (rb),Y : PHA
-    TXA : ASL A : ASL A : ASL A : ADC #8 : TAX  ; (carry clear: 8k < 24)
-    PLA : JSR sb_map_a
+    DEY : LDA (rb),Y
 ELSE
     INY : LDA (rb),Y : ASL A : TAY
-    TXA : ASL A : ASL A : ASL A : ADC #8 : TAX  ; (carry clear: 8k < 24)
     LDA band_maps+1,Y : PHA
-    LDA band_maps,Y : JSR sb_map_a
+    LDA band_maps,Y
 ENDIF
+    JSR sb_map_a
     PLA : JSR sb_map_a
     \ A split: band k + 1 from its row down.
     INC band_count
     PLA : LSR A : LSR A : LSR A
     LDX band_count : STA band_rows-1,X : TAY
     TXA : ASL A : ASL A : ASL A                 ; 8(k + 1)
-.rows
-    STA band_off,Y
-    INY : CPY #32 : BNE rows
-    BEQ record                                  ; (always)
+    BNE rows                                    ; (always)
 .done
+    INY : STY rb_things                         ; (after the bands' 0)
     \ T1's periods (N + 2 microseconds, free-running): 512 a character row.
     \ Band 1's interrupt runs its four writes BAND_ADJ later than the status
     \ bar's last four, so it fires that much later.
-    LDA #&FF : STA band_t1 : STA band_t1+1 : STA band_t1+2 : STA band_t1+3
-    LDA band_count : BEQ timed
+    LDA #&FF : LDY #3
+.none
+    STA band_t1,Y
+    DEY : BPL none
+    TXA : BEQ timed                             ; (X = band_count: .record)
     LDA #LO(BAND_ADJ - 2) : STA band_t1
     LDA band_rows : ASL A                       ; 2 * (row - 2): 2 * row (the
     ADC #(HI(BAND_ADJ - 2) - 4) AND &FF : STA band_t1+1    ; carry clear) - 4
                                                 ; (BAND_ADJ may be negative)
-    LDA band_count : LSR A : BEQ timed          ; (1 or 2)
-    LDA #&FE : STA band_t1+2
+    DEX : BEQ timed                             ; (1 or 2)
+    DEC band_t1+2                               ; &FE
     LDA band_rows+1 : SEC : SBC band_rows : ASL A
     SBC #0 : STA band_t1+3                      ; - 1 (the carry clear)
 .timed
     RTS
-\ Four colours' logical numbers from byte Y at sb_p (a palette's), or from
-\ A, into band_cmaps,X as bytes of four pixels in them (colour_bytes).
+\ Four colours' logical numbers from byte Y of the palette (set_room_palette),
+\ or from A, into band_cmaps,X as bytes of four pixels in them (colour_bytes).
 .sb_map
+IF DEFINED(STREAM)
+    LDA (bp),Y
+ELSE
     LDA (sb_p),Y
+ENDIF
 .sb_map_a
     JSR two                         ; (two, then two more: four)
 .two

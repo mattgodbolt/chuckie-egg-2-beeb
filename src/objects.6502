@@ -3,13 +3,16 @@
 \ (docs/research/objects.md). 256 things in four parallel arrays: room
 \ (bit 7 set: not in the world), row, column, type. 0-&28 are portable,
 \ &29-&39 machine parts, &3A-&FF bonus items. Only the round robin's
-\ current thing is drawn (every frame) and can be touched.
+\ current thing is drawn (every frame) and can be touched. The machine
+\ parts and bonus items never move, and only thing_load reads where they
+\ are: their rows, columns and types are in their rooms' bodies
+\ (tools/mkrecords.py), and only the portable things' are kept here.
 \ ***************************************************************************
 
 t_room = things
 t_row  = things + &100
-t_col  = things + &200
-t_type = things + &300
+t_col  = t_row + NPORT
+t_type = t_col + NPORT
 
 KIND_FIXED = &40            ; kind bit 6 (with bit 7): a machine part
 
@@ -62,16 +65,36 @@ KIND_FIXED = &40            ; kind bit 6 (with bit 7): a machine part
 \ that thing, whatever the record last had loaded into it.
 .thing_load
 {
-    LDY t_col,X : LDA t_row,X : JSR row_col_cell
+    CPX #NPORT : BCS fixed
+    LDA t_type,X : STA tl_t
+    LDY t_col,X : LDA t_row,X
+.place
+    JSR row_col_cell
     STA o_cell : STY o_cell+1
     LDA #1 : STA o_sel              ; (the original: the attribute's high byte)
-    LDA t_type,X : STA tl_t : ASL A : CLC : ADC tl_t : TAY
+    LDA tl_t : ASL A : CLC : ADC tl_t : TAY
     LDA thing_types,Y : STA o_ink
     LDA thing_types+2,Y : STA tl_kind
     LDA thing_types+1,Y : ASL A : TAY       ; its graphic
     LDA object_frames,Y : STA o_frame
     LDA object_frames+1,Y : STA o_frame+1
     RTS
+.fixed
+    \ A thing that never moves, so in this room (the round robin found it
+    \ here): its row, column and type in the body, by its place among the
+    \ room's (room_load's room_fixed).
+    LDY #0
+.find
+    TXA : CMP room_fixed,Y : BEQ found
+    INY : BNE find                  ; (always: it's there)
+.found
+    STY tl_t : TYA : ASL A : ADC tl_t       ; 3 * its place (carry clear)
+    ADC rb_things : TAY
+    LDA (rb),Y : PHA                        ; row
+    INY : INY : LDA (rb),Y : STA tl_t       ; type
+    DEY : LDA (rb),Y : TAY                  ; column
+    PLA
+    JMP place
 }
 
 \ The cell at row A, column Y: its low byte in A, its high byte in Y. X is

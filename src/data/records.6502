@@ -20,85 +20,87 @@
 \ Each room's body's length: room r's follows rooms 1 to r - 1's from
 \ records (rooms.6502 adds them up).
 .body_len
-    EQUB  84,  72,  73,  61, 108,  58,  94,  78,  71,  67,  80,  50
-    EQUB  72,  58,  62,  78,  82,  83,  86, 104,  65,  69,  70,  73
-    EQUB  71,  83,  61,  59,  93,  42,  67,  60,  83,  63,  71,  92
-    EQUB  88, 196,  82,  68,  35,  91,  82,  76,  64,  66, 103, 126
-    EQUB  90,  73,  43,  99,  78, 100,  80, 103,  80,  82,  84,  49
-    EQUB  83,  90,  98,  84,  92,  89,  73,  80,  80, 161,  45,  47
-    EQUB  50,  45,  46,  62,  54,  67,  47,  48,  81,  67,  67,  98
-    EQUB  66,  83,  77,  82,  79,  51, 100,  73,  70,  74,  78,  48
-    EQUB  70,  60,  73,  81,  96,  91,  99,  57,  68, 116,  47,  72
-    EQUB  33,  50,  75,  63,  84,  56,  88,  58,  53,  27,  25,  58
+    EQUB  81,  69,  70,  64, 108,  61,  97,  78,  74,  70,  83,  50
+    EQUB  78,  64,  68,  81,  85,  86,  89, 107,  68,  66,  76,  73
+    EQUB  77,  89,  64,  62,  99,  39,  67,  60,  86,  63,  71,  92
+    EQUB  88, 202,  82,  68,  35,  91,  82,  79,  67,  69, 109, 126
+    EQUB  96,  76,  43,  99,  78, 103,  83, 106,  83,  85,  84,  49
+    EQUB  86,  93, 104,  90,  95,  95,  79,  80,  83, 161,  45,  50
+    EQUB  53,  45,  49,  59,  57,  67,  50,  51,  90,  73,  73, 101
+    EQUB  69,  83,  77,  85,  79,  51, 103,  73,  73,  74, 102,  48
+    EQUB  70,  63,  76,  84, 102,  94,  99,  57,  77, 113,  50,  75
+    EQUB  36,  50,  75,  69,  87,  56, 103,  58,  53,  27,  25,  58
 
 GROUPS = 30
 \ Each graphics group's offset from records (its monster graphic's
 \ base frame, or the machine), then the records' end.
 .group_lo
-    EQUB LO(&22D4)   \  0: &00
-    EQUB LO(&23D8)   \  1: &04
-    EQUB LO(&26AD)   \  2: &0C
-    EQUB LO(&2733)   \  3: &0D
-    EQUB LO(&287C)   \  4: &15
-    EQUB LO(&2981)   \  5: &19
-    EQUB LO(&2A52)   \  6: &1D
-    EQUB LO(&2B40)   \  7: &21
-    EQUB LO(&2C19)   \  8: &25
-    EQUB LO(&2CB2)   \  9: &29
-    EQUB LO(&2E5F)   \ 10: &31
-    EQUB LO(&2EBB)   \ 11: &35
-    EQUB LO(&2F0C)   \ 12: &37
-    EQUB LO(&32CF)   \ 13: &3B
-    EQUB LO(&3330)   \ 14: &3F
-    EQUB LO(&335A)   \ 15: &43
-    EQUB LO(&3386)   \ 16: &51
-    EQUB LO(&3436)   \ 17: &54
-    EQUB LO(&3471)   \ 18: &58
-    EQUB LO(&3532)   \ 19: &60
-    EQUB LO(&3559)   \ 20: &64
-    EQUB LO(&3584)   \ 21: &68
-    EQUB LO(&3696)   \ 22: &70
-    EQUB LO(&3708)   \ 23: &78
-    EQUB LO(&372F)   \ 24: &8A
-    EQUB LO(&3770)   \ 25: &8E
-    EQUB LO(&38D9)   \ 26: bar
-    EQUB LO(&38E7)   \ 27: platform
-    EQUB LO(&3910)   \ 28: train
-    EQUB LO(&3A33)   \ 29: truck
-    EQUB LO(&3CA2)   \ (the end, for the last's length)
+    EQUB LO(&23F1)   \  0: &00
+    EQUB LO(&24F5)   \  1: &04
+    EQUB LO(&27CA)   \  2: &0C
+    EQUB LO(&2850)   \  3: &0D
+    EQUB LO(&2999)   \  4: &15
+    EQUB LO(&2A9E)   \  5: &19
+    EQUB LO(&2B6F)   \  6: &1D
+    EQUB LO(&2C5D)   \  7: &21
+    EQUB LO(&2D36)   \  8: &25
+    EQUB LO(&2DCF)   \  9: &29
+    EQUB LO(&2F7C)   \ 10: &31
+    EQUB LO(&2FD8)   \ 11: &35
+    EQUB LO(&3029)   \ 12: &37
+    EQUB LO(&33EC)   \ 13: &3B
+    EQUB LO(&344D)   \ 14: &3F
+    EQUB LO(&3477)   \ 15: &43
+    EQUB LO(&34A3)   \ 16: &51
+    EQUB LO(&3553)   \ 17: &54
+    EQUB LO(&358E)   \ 18: &58
+    EQUB LO(&364F)   \ 19: &60
+    EQUB LO(&3676)   \ 20: &64
+    EQUB LO(&36A1)   \ 21: &68
+    EQUB LO(&37B3)   \ 22: &70
+    EQUB LO(&3825)   \ 23: &78
+    EQUB LO(&384C)   \ 24: &8A
+    EQUB LO(&388D)   \ 25: &8E
+    EQUB LO(&39F6)   \ 26: bar
+    EQUB LO(&3A04)   \ 27: platform
+    EQUB LO(&3A2D)   \ 28: train
+    EQUB LO(&3B50)   \ 29: truck
+    EQUB LO(&3DBF)   \ (the end, for the last's length)
 .group_hi
-    EQUB HI(&22D4)
-    EQUB HI(&23D8)
-    EQUB HI(&26AD)
-    EQUB HI(&2733)
-    EQUB HI(&287C)
-    EQUB HI(&2981)
-    EQUB HI(&2A52)
-    EQUB HI(&2B40)
-    EQUB HI(&2C19)
-    EQUB HI(&2CB2)
-    EQUB HI(&2E5F)
-    EQUB HI(&2EBB)
-    EQUB HI(&2F0C)
-    EQUB HI(&32CF)
-    EQUB HI(&3330)
-    EQUB HI(&335A)
-    EQUB HI(&3386)
-    EQUB HI(&3436)
-    EQUB HI(&3471)
-    EQUB HI(&3532)
-    EQUB HI(&3559)
-    EQUB HI(&3584)
-    EQUB HI(&3696)
-    EQUB HI(&3708)
-    EQUB HI(&372F)
-    EQUB HI(&3770)
-    EQUB HI(&38D9)
-    EQUB HI(&38E7)
-    EQUB HI(&3910)
-    EQUB HI(&3A33)
-    EQUB HI(&3CA2)
-RECORDS_LEN = 15522
+    EQUB HI(&23F1)
+    EQUB HI(&24F5)
+    EQUB HI(&27CA)
+    EQUB HI(&2850)
+    EQUB HI(&2999)
+    EQUB HI(&2A9E)
+    EQUB HI(&2B6F)
+    EQUB HI(&2C5D)
+    EQUB HI(&2D36)
+    EQUB HI(&2DCF)
+    EQUB HI(&2F7C)
+    EQUB HI(&2FD8)
+    EQUB HI(&3029)
+    EQUB HI(&33EC)
+    EQUB HI(&344D)
+    EQUB HI(&3477)
+    EQUB HI(&34A3)
+    EQUB HI(&3553)
+    EQUB HI(&358E)
+    EQUB HI(&364F)
+    EQUB HI(&3676)
+    EQUB HI(&36A1)
+    EQUB HI(&37B3)
+    EQUB HI(&3825)
+    EQUB HI(&384C)
+    EQUB HI(&388D)
+    EQUB HI(&39F6)
+    EQUB HI(&3A04)
+    EQUB HI(&3A2D)
+    EQUB HI(&3B50)
+    EQUB HI(&3DBF)
+RECORDS_LEN = 15807
 \ The most a room needs, its body and its groups (the streaming
 \ edition's room buffer).
 ROOM_MAX = 1021
+NPORT = &29       \ things 0 to NPORT - 1 are portable
+FIXED_MAX = 9

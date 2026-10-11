@@ -18,7 +18,7 @@
 .clear
     STA band_off,X
     DEX : BPL clear
-    LDY #1 : LDA (rb),Y
+    LDA rb_bands
     CLC : ADC rb : STA sb_p
     LDA rb+1 : ADC #0 : STA sb_p+1
 .record

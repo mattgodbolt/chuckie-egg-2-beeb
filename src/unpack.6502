@@ -124,7 +124,7 @@ MTF_TYPE = 6
 \ bp = the room's bit stream, in its body (rooms.6502's room_load).
 .room_stream
 {
-    LDY #2 : LDA (rb),Y
+    LDA rb_stream
     CLC : ADC rb : STA bp
     LDA rb+1 : ADC #0 : STA bp+1
     RTS

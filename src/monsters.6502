@@ -42,7 +42,7 @@ MF_STATIC  = &01            ; never moves
 {
     ZA_AUTO1 left
     LDA #0 : STA m_count : STA dl_count
-    LDY #0 : LDA (rb),Y : TAY
+    LDY rb_mon
     LDA (rb),Y : STA left
 .scan
     DEC left : BMI done

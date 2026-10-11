@@ -11,10 +11,8 @@
 .state_regions
     EQUW ZP_FIXED : EQUB &90 - ZP_FIXED
     EQUW low_state : EQUB low_state_end - low_state
-    EQUW things : EQUB 0
-    EQUW things + &100 : EQUB 0
-    EQUW things + &200 : EQUB 0
-    EQUW things + &300 : EQUB 0
+    EQUW t_room : EQUB 0
+    EQUW t_row : EQUB 3 * NPORT
     EQUW visits : EQUB 121
     EQUW thing_types : EQUB 201
 .state_regions_end

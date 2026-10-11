@@ -25,14 +25,36 @@ ZA_AUTO1 ctype              ; the type ORed into the type map (E)
     ZA_AUTO1 gi                 ; the body's group list, at rb + gi
     ZA_AUTO1 frames             ; the group's frames left
     ZA_AUTO1 lo
+    ZA_AUTO1 n
+    STA n
     JSR find_body
+    \ Where its parts start: groups (at 0), monsters, bands, fixed things,
+    \ the packed room.
+    LDY #0 : LDA (rb),Y : CLC : ADC #1 : STA rb_mon
+    TAY : LDA (rb),Y : ASL A : ASL A : SEC : ADC rb_mon : STA rb_bands
+    TAY
+.bands
+    LDA (rb),Y : BEQ bands_end
+    INY : INY : BNE bands           ; (always)
+.bands_end
+    INY : STY rb_things
+    \ The room's fixed things, in order (objects.6502's thing_load).
+    LDX #NPORT : LDY #0
+.fixed
+    LDA t_room,X : AND #&7F : CMP n : BNE not_here
+    TXA : STA room_fixed,Y
+    INY
+.not_here
+    INX : BNE fixed
+    STY n : TYA : ASL A : ADC n     ; 3 a thing (carry clear)
+    ADC rb_things : STA rb_stream
     \ No frame until a group gives it one: a frame drawn without one
     \ shows (sprite.6502's sprite_frame, in the tests' build).
     LDX #151 : LDA #0
 .clear
     STA sprite_frames,X : STA sprite_frames+152,X
     DEX : CPX #&FF : BNE clear
-    LDY #3 : LDA (rb),Y : STA groups
+    LDY #0 : LDA (rb),Y : STA groups
     STY gi
 .group
     DEC groups : BMI done

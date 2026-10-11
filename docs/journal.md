@@ -1247,3 +1247,9 @@ gathers any number of one ingredient (and makes jumps lower).
   `roomtime.mjs` jumps between, against 0.17-0.31s with sideways RAM.
   Most of it is missed sectors: one read a command, the next sector gone
   by the time the copy is done.
+- Room for a cache: CE2S had 115 bytes free beside its 1,021-byte room
+  buffer, and a room plus the one Harry is heading for needs up to 1,887.
+  Of the thing table's 1K, the 215 fixed things' rows, columns and types
+  are constant and only `thing_load` reads them, for the round robin's
+  thing, always in the current room: into the bodies (decision 30), 645
+  bytes back.

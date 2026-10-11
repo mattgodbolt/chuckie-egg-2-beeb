@@ -144,13 +144,20 @@ IF DEFINED(STREAM)
 \ The room's body and graphics groups, read from the disc (rooms.6502).
 .room_buf SKIP ROOM_MAX
 ENDIF
+\ Where the parts of the room's body start, from rb (rooms.6502's
+\ room_load), and its fixed things' numbers, in order.
+.rb_mon     SKIP 1
+.rb_bands   SKIP 1
+.rb_things  SKIP 1
+.rb_stream  SKIP 1
+.room_fixed SKIP FIXED_MAX
 .harry_gfx
     INCBIN "data/harry.bin"
 .tiles
     INCBIN "data/tiles.bin"
     INCLUDE "data/objects.6502"
-.things
-    INCBIN "data/things.bin"
+.things                         ; (objects.6502; tools/mkrecords.py)
+    INCBIN "data/thingsres.bin"
 .visits
     INCBIN "data/visits.bin"
 .thing_types                    ; (changed by each egg's toy: egg_init)

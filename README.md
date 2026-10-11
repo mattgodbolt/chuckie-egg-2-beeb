@@ -38,7 +38,8 @@ unless...; some pipes are more slippery than others.
 
 From the menu: **P** plays, **R** redefines the keys, **L** loads a saved
 game, **S** saves (the high-score table, and the game if one was in
-progress), **I** shows the instructions again. Saving and loading list the
+progress), **I** shows the instructions again, and with sideways RAM **D**
+switches to the edition that reads its rooms from the disc (below). Saving and loading list the
 disc and ask for a filename, offering the last one used.
 
 The original's hidden developers' cheats are here too: **f0** on the menu
@@ -50,19 +51,25 @@ choose the starting egg.
 
 ## What it runs on
 
-A BBC Model B with 16K of sideways RAM, or a Master 128 (from DFS or
-ADFS). The game's data fills a sideways RAM bank; the front end finds a
-free one. On real hardware, write `chuckie-egg-2.ssd` to a disc (or put it
-on a Gotek or an MMFS card) and SHIFT-BREAK.
+Any BBC Model B or Master 128, from the same disc, in one of two editions;
+on real hardware, write `chuckie-egg-2.ssd` to a disc and SHIFT-BREAK.
+
+- **With 16K of sideways RAM** (a Model B with a sideways RAM board, a
+  B+128, any Master): the game's data fills a sideways RAM bank, which the
+  front end finds. From DFS or ADFS; a Gotek or an MMFS card works too.
+- **A stock 32K Model B** (no sideways RAM): the front end runs CE2S, which
+  reads each room from the disc as Harry nears it, with its own disc
+  reader for the 8271 (a Master's 1770 too), a cache, and reading ahead in
+  the background, so most room changes are as quick as the other
+  edition's ([docs/streaming.md](docs/streaming.md)). The disc must stay in
+  the drive. It needs a real disc drive or a Gotek: MMFS has no disc
+  controller for it to drive. **D** on the menu plays it on a machine with
+  sideways RAM too.
 
 <img src="docs/images/real-master.jpg" alt="The game running on a real BBC Master 128, on a Panasonic CRT: a magenta-brick room with green ladders, hanging chains and Harry, score 04434" width="600">
 
 *On Matt's own Master 128, loading and saving and all.*
 
-A stock Model B without sideways RAM isn't supported;
-[docs/stock-b.md](docs/stock-b.md) is an exploratory study of what it
-would take (a disc edition loading each room as Harry enters it), tracked
-for the future as [issue #1](https://github.com/mattgodbolt/chuckie-egg-2-beeb/issues/1).
 
 ## How close is it?
 
@@ -101,15 +108,16 @@ make fetch      # download the original from Spectrum Computing
 make            # build/ce2.ssd
 make run        # boot it headless and screenshot it
 make check      # every room, the play scenarios, the front end and the
-                # sound, against the original (MODEL=Master for the Master)
+                # sound, against the original (MODEL=Master for the Master,
+                # STREAM=1 for the stock-B edition)
 ```
 
 `make fetch` downloads the original's tape and checks its hash; the tools
 in `tools/` extract the rooms, graphics and text from it into `src/data/`
 (committed, so a build needs only baron).
 
-GitHub Actions runs `make check` on both machines for every push and pull
-request ([.github/workflows/check.yml](.github/workflows/check.yml)), with
+GitHub Actions runs `make check` on both machines, for both editions, for
+every push and pull request ([.github/workflows/check.yml](.github/workflows/check.yml)), with
 baron built at the release it pins.
 
 ## Licence

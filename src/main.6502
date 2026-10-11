@@ -164,7 +164,44 @@ ENDIF
 .harry_gfx
     INCBIN "data/harry.bin"
 .tiles
-    INCBIN "data/tiles.bin"
+    \ (Codes &20-&5B. No room draws tiles &31 and &3B-&3D, whose bytes cell_glyph
+    \ never reads, so they hold tables: tools/mkrooms.py writes the font in
+    \ three parts around them. tools/roomcmp.py would show a room that drew
+    \ one.)
+    INCBIN "data/tiles1.bin"
+    ASSERT P% = tiles + 8 * (&31 - &20)
+\ (screen.6502's cell_glyph) The glyph addresses, by a code's top three
+\ bits: 256 * those bits (their share of 8 * the code) plus the font less
+\ 8 * its first code. Tiles start at &20; text, bit 7 set, at &A0 in the
+\ OS's font (decision 4). (font_hi is in screen.6502.)
+.font_lo
+FOR x = 0..3
+    EQUB LO(x * 256 - (x AND 1) + tiles - 8 * &20)
+NEXT
+FOR x = 4..7
+    EQUB LO(x * 256 - (x AND 1) + text_font - 8 * &A0)
+NEXT
+    INCBIN "data/tiles2.bin"
+    ASSERT P% = tiles + 8 * (&3B - &20)
+\ (rooms.6502's draw_cmds) Commands 1-10's handlers, less one for the RTS,
+\ from cmd_block's (the handlers in rooms.6502's order keep them under 256).
+MACRO CMD_OFF h
+    ASSERT h - cmd_block < 256
+    EQUB h - cmd_block
+ENDMACRO
+.cmd_offs
+    CMD_OFF cmd_block : CMD_OFF cmd_text
+    CMD_OFF cmd_bend : CMD_OFF cmd_bend : CMD_OFF cmd_bend : CMD_OFF cmd_bend
+    CMD_OFF cmd_hopper : CMD_OFF cmd_diag : CMD_OFF cmd_diag : CMD_OFF cmd_single
+\ (objects.6502's drop) The hoppers' rooms: the toy parts' (basket &20),
+\ the milk's, the cocoa's, the sugar's.
+.hopper_rooms
+    EQUB 95, 33, 51, 110
+    \ (Room to spare in the holes, for another table.)
+    ASSERT P% <= tiles + 8 * (&3E - &20)
+    SKIP tiles + 8 * (&3E - &20) - P%
+    INCBIN "data/tiles3.bin"
+    ASSERT P% = tiles + 8 * (&5C - &20)
     INCLUDE "data/objects.6502"
 .things                         ; (objects.6502; tools/mkrecords.py)
     INCBIN "data/thingsres.bin"

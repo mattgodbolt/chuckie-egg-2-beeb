@@ -124,19 +124,17 @@ NEXT
     BCC place                       ; (always: the body's offsets are bytes)
 }
 
-\ The cell at row A, column Y: its low byte in A, its high byte in Y. X is
+\ The cell at row A, column Y: its low byte in A, its high byte in Y, and
+\ both in `cell` (rooms.6502's), which three of the six callers want. X is
 \ kept.
 .row_col_cell
-{
-    ZA_AUTO1 col
-    STY col
+    STY cell                        ; (the column, for now)
     PHA
-    LSR A : LSR A : LSR A : TAY
+    LSR A : LSR A : LSR A : TAY : STY cell+1
     PLA
     ASL A : ASL A : ASL A : ASL A : ASL A
-    ORA col
+    ORA cell : STA cell
     RTS
-}
 
 \ RoomThings (&99F6): on entering a room, mark the footprints of the
 \ portable things in it; select none. Nothing is drawn yet.
@@ -334,7 +332,7 @@ GIRDER_COL = 10
     JSR erase_object
     LDA #0 : STA h_state : STA h_fall
     LDA factory : EOR #4 : STA factory      ; factory bit 2: across the gap
-    LDX #GIRDER_ROW : LDY #GIRDER_COL       ; back (girder_home's, the bit
+    LDX #GIRDER_ROW : LDY #GIRDER_COL       ; back (its start, the bit
     AND #4 : BEQ place                      ; just cleared)
     LDX #14 : LDY #19                       ; across
 .place
@@ -423,10 +421,8 @@ GIRDER_COL = 10
     PLA : STA t_row,X
     RTS
 }
-\ The hoppers' rooms: the toy parts' (basket &20), the milk's, the
-\ cocoa's, the sugar's.
-.hopper_rooms
-    EQUB 95, 33, 51, 110
+\ (The hoppers' rooms, hopper_rooms, are in the tile font's spare room:
+\ main.6502.)
 
 \ The type of the cell under the bottom-left of the sprite record at X in
 \ zero page (its height, at most 5, rows below); Z set if it is empty.

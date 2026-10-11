@@ -21,8 +21,7 @@
 .restore_cells
 {
     STX rc_b
-    JSR row_col_cell
-    STA cell : STY cell+1
+    JSR row_col_cell                ; (into cell)
 .loop
     JSR cell_looks
     JSR draw_glyph_pd
@@ -143,8 +142,7 @@
 .no_borrow
     STX glyph+1
     LDY #6 : LDA (glyph),Y : STA ds_rows
-    LDY ds_d : LDA ds_e : JSR row_col_cell
-    STA cell : STY cell+1
+    LDY ds_d : LDA ds_e : JSR row_col_cell     ; (into cell)
 .cell_loop
     CLC : LDA glyph : ADC #8 : STA glyph
     BCC paper_ink

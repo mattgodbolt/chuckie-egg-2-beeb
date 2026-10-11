@@ -276,8 +276,7 @@ ENDIF
 .fetch_cell
     JSR fetch : PHA
     JSR fetch : TAY
-    PLA : JSR row_col_cell
-    STA cell : STY cell+1
+    PLA : JSR row_col_cell          ; (into cell)
     \ Fall into sync_type.
 \ The type pointer to the attribute pointer (&7DEF). (tcell is kept as the
 \ address in type_map, which type_step steps as the original steps the cell.)
@@ -466,16 +465,8 @@ BEND_BACK3 = 3 * 8          ; ... three
     DEC block_h
     RTS
 
-\ Commands 1-10's handlers (draw_cmds), less one for the RTS, from cmd_block's
-\ (the handlers in this order keep the offsets under 256).
-MACRO CMD_OFF h
-    ASSERT h - cmd_block < 256
-    EQUB h - cmd_block
-ENDMACRO
-.cmd_offs
-    CMD_OFF cmd_block : CMD_OFF cmd_text
-    CMD_OFF cmd_bend : CMD_OFF cmd_bend : CMD_OFF cmd_bend : CMD_OFF cmd_bend
-    CMD_OFF cmd_hopper : CMD_OFF cmd_diag : CMD_OFF cmd_diag : CMD_OFF cmd_single
+\ (Commands 1-10's handlers, cmd_offs, are in the tile font's spare room:
+\ main.6502.)
 
 \ The bends' steps, five each (cmd_bend). The last steps down of &03 and
 \ &04 move the cell too, which the original's don't: nothing reads it

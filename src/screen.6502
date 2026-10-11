@@ -115,15 +115,9 @@ NEXT
 
 \ cell_glyph's glyph addresses, by a code's top three bits: 256 * those bits
 \ (their share of 8 * the code) plus the font less 8 * its first code. Tiles
-\ start at &20; text, bit 7 set, at &A0 in the OS's font (decision 4). Less
-\ the carry the ADC adds, which is the bits' lowest (code_glyph).
-.font_lo
-FOR x = 0..3
-    EQUB LO(x * 256 - (x AND 1) + tiles - 8 * &20)
-NEXT
-FOR x = 4..7
-    EQUB LO(x * 256 - (x AND 1) + text_font - 8 * &A0)
-NEXT
+\ start at &20; text, bit 7 set, at &A0 in the OS's font (decision 4).
+\ (font_lo is in the tile font's spare room: main.6502.) Less the carry
+\ the ADC adds, which is the bits' lowest (code_glyph).
 .font_hi
 FOR x = 0..3
     EQUB HI(x * 256 - (x AND 1) + tiles - 8 * &20)

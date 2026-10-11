@@ -1487,3 +1487,12 @@ the map keeps only what the OS and hardware fix.
   commands shared a prefix, and the command table became offsets. Rooms
   draw about 3% faster. The unpacker's `BRK` on a command the packer
   never writes went with it.
+- The cross-file reader's proposals went in last, five of them: tables in
+  the tile font's unused glyphs (no room draws tiles &31 or &3B-&3D),
+  `sound_init` in the discarded loader, a dead copy in CE2S's resume,
+  `row_col_cell` storing into `cell` for its callers, and one tens-and-
+  units conversion for two callers. The owners' patches had already done
+  four others, and two no longer paid once they had: inlining
+  `girder_home` (now sharing a tail with `girder_at`) and `sprite_frame`
+  keeping X (its search reshaped under it). CE2S's cache is over 4,000
+  bytes, from 1,031 at the start of the day.

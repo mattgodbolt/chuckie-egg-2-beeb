@@ -230,16 +230,12 @@ CHECKPOINT_VARS = h_frame + 2 - h_cell    ; h_cell .. h_frame
 .number
     \ The egg number, at column 24 (two digits if it needs them).
     LDA #LO(11 * 32 + 24) : STA cell
-    LDA egg : LDX #0
-.tens
-    CMP #10 : BCC units
-    SBC #10 : INX : BCS tens        ; (always)
-.units
+    LDA egg : JSR tens_units
     PHA
-    TXA : BEQ one_digit
-    ORA #'0' : JSR yellow_char
+    CPX #'0' : BEQ one_digit
+    TXA : JSR yellow_char
 .one_digit
-    PLA : ORA #'0' : JSR yellow_char
+    PLA : JSR yellow_char
     JSR wait_key
     JMP next_egg
 }
@@ -331,17 +327,16 @@ CHECKPOINT_VARS = h_frame + 2 - h_cell    ; h_cell .. h_frame
 IF DEFINED(STREAM)
     \ The monsters' and the lift's frames were saved as addresses, and the
     \ streaming edition's cache (disc.6502) may have the room's graphics
-    \ somewhere else now: point them at its frames again. (The frame last
-    \ drawn, which a monster's erasing uses, becomes the one it shows: the
-    \ room has just been drawn without them.)
+    \ somewhere else now: point them at its frames again. (Not the frames
+    \ last drawn, m_oframe: only m_erase reads them, for a monster on this
+    \ tick's draw list or respawning, and m_move and respawn save them
+    \ first, as they do on entering a room.)
 {
     LDX m_count
 .monster
     DEX : BMI monsters_done
     JSR choose_frame
-    LDA m_frame_lo,X : STA m_oframe_lo,X
-    LDA m_frame_hi,X : STA m_oframe_hi,X
-    BPL monster                     ; (always: main RAM)
+    BPL monster                     ; (always: choose_frame leaves N clear)
 .monsters_done
     \ (The lift's l_oframe isn't read before run_lift sets it.)
     LDA l_type : BEQ no_lift

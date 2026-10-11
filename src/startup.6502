@@ -316,6 +316,18 @@ I_LOAD   = &E8
     ENDSECTION
 ENDIF
 
+\ Everything silent, the noise set up and channel 2 clocking it, silent
+\ (sound.6502).
+.sound_init
+{
+    LDA #0 : STA noise_on
+    LDX #sound_init_end - sound_init_bytes - 1
+.loop
+    LDA sound_init_bytes,X : JSR sound_write
+    DEX : BPL loop
+    RTS
+}
+
 \ Note what a soft BREAK keeps of page 2, for MENU to put back and the
 \ handoff to restore (handoff.6502).
 .keep_os

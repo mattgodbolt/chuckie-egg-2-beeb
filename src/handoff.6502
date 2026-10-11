@@ -39,7 +39,9 @@
 .done_add
     INX : INX : INX
     CPX #state_regions_end - state_regions : BNE region
-    JSR sound_init              ; silence
+    \ Silence: the tone channels already are (move_sound and death_tune end
+    \ each note), so only the train's noise may be on.
+    LDA #&FF : JSR sound_write
     \ Every key up first: the abort or save key will still be down, and a
     \ key held through a BREAK stops the DFS booting (it picks a filing
     \ system); SHIFT would stop the boot, CTRL make it a hard reset.

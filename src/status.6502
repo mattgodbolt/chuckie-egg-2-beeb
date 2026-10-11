@@ -47,10 +47,8 @@
 .hundreds
     PHA                             ; what's left
     TXA : JSR status_char
-    PLA : LDX #'0' - 1 : SEC
-.tens
-    INX : SBC #10 : BCS tens
-    ADC #'0' + 10 : PHA             ; the units (carry clear), as a character
+    PLA : JSR tens_units
+    PHA                             ; the units
     TXA : JSR status_char
     PLA : JSR status_char
     \ Fall into visit_bonus.
@@ -72,6 +70,17 @@
     LSR A : LSR A : LSR A : LSR A
     LDX #7 : JMP times_egg
 .done
+    RTS
+}
+
+\ A (under 100) as two digits, characters: the tens in X, the units in A.
+\ (Also game.6502's egg number.)
+.tens_units
+{
+    LDX #'0' - 1 : SEC
+.tens
+    INX : SBC #10 : BCS tens
+    ADC #'0' + 10                   ; (carry clear)
     RTS
 }
 

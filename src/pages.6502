@@ -32,7 +32,7 @@
     EQUB 4, 4, 3, 2, 1, 1, 1, 0, 0, 0, 0, -1, -1, -1, -2, -3, -4, -4, -4, -4, -4, -4
 \ (game.6502)
 .delivered_text EQUS "EGGS DELIVERED:-", 0
-\ (sound.6502's sound_init)
+\ (startup.6502's sound_init)
 .sound_init_bytes                   ; (written last first)
     EQUB &FF, &E7                   ; noise: silent; white, clocked by channel 2
     EQUB &34, &C1                   ; channel 2: N = 833, about 150Hz

@@ -36,17 +36,7 @@
     RTS
 }
 
-\ Everything silent, the noise set up and channel 2 clocking it, silent.
-.sound_init
-{
-    LDA #0 : STA noise_on
-    LDX #sound_init_end - sound_init_bytes - 1
-.loop
-    LDA sound_init_bytes,X : JSR sound_write
-    DEX : BPL loop
-    RTS
-}
-\ (sound_init_bytes is in page 1: pages.6502.)
+\ (sound_init, which sets the chip up, is start-up code: startup.6502.)
 
 \ Wait Y * 256 + X microseconds on the User VIA's timer 2 (one-shot).
 .wait_us

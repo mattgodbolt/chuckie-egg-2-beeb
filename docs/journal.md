@@ -1172,3 +1172,21 @@ gathers any number of one ingredient (and makes jumps lower).
 - With the warning naming the right line, the viewer build's unreachable
   code starts at `init_game`, the game's start, so the viewer's `ZA_ENTRY`
   moved there from `harry_update`. No byte of any disc changed.
+
+### The stock-B challenge: streaming, with a cache
+
+- The challenge, from the bitshifters' corner: the game on a regular 32K
+  Model B. Matt wants a choice of editions, sideways RAM or not, both
+  playable on a B and on his Master. Three agents went out: the known
+  tricks (scarybeasts' quicdisc, his and Tom Seddon's advice on the NMI
+  routine of Kieran's 1942), the budget and room graph re-measured, and a
+  driver built and measured.
+- The driver works in jsbeeb: one binary reads sectors in the background
+  on the B's 8271 and the Master's 1770, 24% of the CPU while a sector
+  arrives, every interrupt still taken. The budget leaves ~1.6-1.9K for a
+  cache once the DFS isn't needed; with it, 109-118 of the 120 rooms have
+  every neighbour loaded before Harry gets there. The splits are the risk:
+  an NMI can make one late.
+- The plan is `docs/streaming.md`; `docs/stock-b.md`'s OSWORD &7F plan is
+  superseded. Step 1 needs no disc: the records, read by the sideways
+  edition.

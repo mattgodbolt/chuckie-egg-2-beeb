@@ -1,0 +1,2 @@
+variant 1: idle: worst 32us; 29 reads (579ms): 563 T1 IRQs (expect 564), 29 VSyncs (expect 28.9), worst 52us; results 128
+variant 2: idle: worst 33us; 29 reads (579ms): 564 T1 IRQs (expect 564), 29 VSyncs (expect 28.9), worst 50us; results 128

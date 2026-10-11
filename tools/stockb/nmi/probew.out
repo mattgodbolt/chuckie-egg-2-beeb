@@ -1,0 +1,74 @@
+== cold: motor off after reset
+restore+verify (spin-up wait, 6ms steps) total  1082.4ms  status &a6  cpu lost   0.3%  vsyncs 54 (expect 54.1)
+seek 1                                   total     6.1ms  status &80  cpu lost   1.0%  vsyncs 0 (expect 0.3)
+read 1/5                                 total   109.7ms  first NMI   93.0ms  status &80  cpu lost   5.4%  vsyncs 6 (expect 5.5) ok true
+== warm, motor on, track 1: single sectors back to back
+variant 1: read 1/0                      total   100.2ms  first NMI   83.5ms  status &80  cpu lost   5.9%  vsyncs 5 (expect 5.0) ok true
+variant 1: read 1/1                      total    19.2ms  first NMI    2.5ms  status &80  cpu lost  29.3%  vsyncs 1 (expect 1.0) ok true
+variant 1: read 1/2                      total    19.2ms  first NMI    2.5ms  status &80  cpu lost  29.3%  vsyncs 1 (expect 1.0) ok true
+variant 1: read 1/3                      total    19.2ms  first NMI    2.5ms  status &80  cpu lost  29.3%  vsyncs 1 (expect 1.0) ok true
+variant 1: read 1/4                      total    19.2ms  first NMI    2.5ms  status &80  cpu lost  29.3%  vsyncs 1 (expect 1.0) ok true
+variant 1: read 1/5                      total    19.2ms  first NMI    2.5ms  status &80  cpu lost  29.3%  vsyncs 1 (expect 1.0) ok true
+variant 1: read 1/6                      total    19.2ms  first NMI    2.5ms  status &80  cpu lost  29.3%  vsyncs 1 (expect 1.0) ok true
+variant 1: read 1/7                      total    19.2ms  first NMI    2.5ms  status &80  cpu lost  29.3%  vsyncs 1 (expect 1.0) ok true
+variant 1: read 1/8                      total    19.2ms  first NMI    2.5ms  status &80  cpu lost  29.3%  vsyncs 1 (expect 1.0) ok true
+variant 1: read 1/9                      total    19.2ms  first NMI    2.5ms  status &80  cpu lost  29.3%  vsyncs 1 (expect 1.0) ok true
+variant 2: read 1/0                      total   100.1ms  first NMI   83.5ms  status &80  cpu lost   4.9%  vsyncs 5 (expect 5.0) ok true
+variant 2: read 1/1                      total    19.2ms  first NMI    2.5ms  status &80  cpu lost  23.9%  vsyncs 1 (expect 1.0) ok true
+variant 2: read 1/2                      total    19.2ms  first NMI    2.5ms  status &80  cpu lost  23.9%  vsyncs 1 (expect 1.0) ok true
+variant 2: read 1/3                      total    19.2ms  first NMI    2.5ms  status &80  cpu lost  23.9%  vsyncs 1 (expect 1.0) ok true
+variant 2: read 1/4                      total    19.2ms  first NMI    2.5ms  status &80  cpu lost  23.9%  vsyncs 1 (expect 1.0) ok true
+variant 2: read 1/5                      total    19.2ms  first NMI    2.5ms  status &80  cpu lost  23.9%  vsyncs 1 (expect 1.0) ok true
+variant 2: read 1/6                      total    19.2ms  first NMI    2.5ms  status &80  cpu lost  23.9%  vsyncs 1 (expect 1.0) ok true
+variant 2: read 1/7                      total    19.2ms  first NMI    2.5ms  status &80  cpu lost  23.9%  vsyncs 1 (expect 1.0) ok true
+variant 2: read 1/8                      total    19.2ms  first NMI    2.5ms  status &80  cpu lost  23.9%  vsyncs 1 (expect 1.0) ok true
+variant 2: read 1/9                      total    19.2ms  first NMI    2.5ms  status &80  cpu lost  23.9%  vsyncs 1 (expect 1.0) ok true
+== with the settle bit (E, &84)
+read 1/6 (&80)                           total    19.2ms  first NMI    2.5ms  status &80  cpu lost  29.3%  vsyncs 1 (expect 1.0)
+read 1/7 (&84: 15ms settle)              total    19.2ms  first NMI    2.5ms  status &80  cpu lost  29.3%  vsyncs 1 (expect 1.0) ok true
+== rotational latency: read 1/3 after n vsyncs
+delay 1                                  total   148.5ms  first NMI  131.8ms  status &80  cpu lost  -3.4%  vsyncs 8 (expect 7.4)
+delay 2                                  total   128.5ms  first NMI  111.8ms  status &80  cpu lost -19.5%  vsyncs 8 (expect 6.4)
+delay 3                                  total   108.5ms  first NMI   91.8ms  status &80  cpu lost -41.6%  vsyncs 8 (expect 5.4)
+delay 4                                  total    88.5ms  first NMI   71.8ms  status &80  cpu lost -73.5%  vsyncs 8 (expect 4.4)
+delay 5                                  total    68.5ms  first NMI   51.8ms  status &80  cpu lost -124.2%  vsyncs 8 (expect 3.4)
+delay 6                                  total    48.5ms  first NMI   31.8ms  status &80  cpu lost -216.7%  vsyncs 8 (expect 2.4)
+delay 7                                  total    28.5ms  first NMI   11.8ms  status &80  cpu lost -438.9%  vsyncs 8 (expect 1.4)
+delay 8                                  total   208.5ms  first NMI  191.8ms  status &80  cpu lost -69.3%  vsyncs 18 (expect 10.4)
+delay 9                                  total   188.5ms  first NMI  171.8ms  status &80  cpu lost -87.2%  vsyncs 18 (expect 9.4)
+delay 10                                 total   168.5ms  first NMI  151.8ms  status &80  cpu lost -109.5%  vsyncs 18 (expect 8.4)
+== seeks (motor on)
+6ms: seek 1->2                           total     6.1ms  status &80  cpu lost   1.0%  vsyncs 0 (expect 0.3)
+6ms: then read 2/0                       total    93.5ms  first NMI   76.8ms  status &80  cpu lost   6.3%  vsyncs 5 (expect 4.7) ok true
+6ms: seek 1->3                           total    12.1ms  status &80  cpu lost   0.9%  vsyncs 1 (expect 0.6)
+6ms: then read 3/0                       total    87.5ms  first NMI   70.8ms  status &80  cpu lost   6.7%  vsyncs 4 (expect 4.4) ok true
+6ms: seek 1->6                           total    30.1ms  status &80  cpu lost   0.4%  vsyncs 1 (expect 1.5)
+6ms: then read 6/0                       total    69.5ms  first NMI   52.8ms  status &80  cpu lost   8.3%  vsyncs 4 (expect 3.5) ok true
+6ms: seek 1->11                          total    60.1ms  status &80  cpu lost   0.4%  vsyncs 3 (expect 3.0)
+6ms: then read 11/0                      total    39.5ms  first NMI   22.8ms  status &80  cpu lost  14.4%  vsyncs 2 (expect 2.0) ok true
+6ms: seek 1->21                          total   120.1ms  status &80  cpu lost   0.4%  vsyncs 6 (expect 6.0)
+6ms: then read 21/0                      total   179.6ms  first NMI  162.9ms  status &80  cpu lost   3.4%  vsyncs 9 (expect 9.0) ok true
+6ms: seek 1->39                          total   228.1ms  status &80  cpu lost   0.3%  vsyncs 11 (expect 11.4)
+6ms: then read 39/0                      total    71.7ms  first NMI   55.0ms  status &80  cpu lost   8.1%  vsyncs 4 (expect 3.6) ok true
+30ms: seek 1->2                          total    30.1ms  status &80  cpu lost   0.4%  vsyncs 1 (expect 1.5)
+30ms: then read 2/0                      total    69.5ms  first NMI   52.8ms  status &80  cpu lost   8.3%  vsyncs 4 (expect 3.5) ok true
+30ms: seek 1->3                          total    60.1ms  status &80  cpu lost   0.4%  vsyncs 3 (expect 3.0)
+30ms: then read 3/0                      total    39.5ms  first NMI   22.8ms  status &80  cpu lost  14.4%  vsyncs 2 (expect 2.0) ok true
+30ms: seek 1->6                          total   150.1ms  status &80  cpu lost   0.4%  vsyncs 7 (expect 7.5)
+30ms: then read 6/0                      total   149.5ms  first NMI  132.8ms  status &80  cpu lost   4.0%  vsyncs 8 (expect 7.5) ok true
+30ms: seek 1->11                         total   300.1ms  status &80  cpu lost   0.3%  vsyncs 15 (expect 15.0)
+30ms: then read 11/0                     total   199.5ms  first NMI  182.8ms  status &80  cpu lost   3.1%  vsyncs 10 (expect 10.0) ok true
+30ms: seek 1->21                         total   600.1ms  status &80  cpu lost   0.3%  vsyncs 30 (expect 30.0)
+30ms: then read 21/0                     total    99.6ms  first NMI   82.9ms  status &80  cpu lost   5.9%  vsyncs 5 (expect 5.0) ok true
+30ms: seek 1->39                         total  1140.1ms  status &80  cpu lost   0.3%  vsyncs 57 (expect 57.0)
+30ms: then read 39/0                     total   159.6ms  first NMI  142.9ms  status &80  cpu lost   3.8%  vsyncs 8 (expect 8.0) ok true
+== multi-sector read (&90)
+read 1/0.. to the end of the track       total  1280.6ms  first NMI   83.5ms  status &90  cpu lost   4.9%  vsyncs 64 (expect 64.0) ok true
+read 1/7.. to the end of the track       total  1080.6ms  first NMI   22.3ms  status &90  cpu lost   2.0%  vsyncs 54 (expect 54.0) ok true
+== motor
+idle 1.5s, then read                     total   208.9ms  first NMI  192.2ms  status &80  cpu lost   3.0%  vsyncs 10 (expect 10.4) ok true
+idle 2.5s (motor off after 9 revs), read total  1502.5ms  first NMI 1485.8ms  status &80  cpu lost   0.7%  vsyncs 75 (expect 75.1) ok true
+idle 5s, read                            total  1563.8ms  first NMI 1547.1ms  status &80  cpu lost   0.7%  vsyncs 78 (expect 78.2) ok true
+idle 5s, read with h (&88, no spin-up wait) total    78.4ms  first NMI   25.7ms  status &80  cpu lost   7.4%  vsyncs 3 (expect 3.9) ok true
+&D0 every 1.4s for 5.6s, read            total   108.2ms  first NMI   91.5ms  status &80  cpu lost   5.5%  vsyncs 5 (expect 5.4) ok true
+idle 5s, &D0, 1s, read                   total   163.8ms  first NMI  147.1ms  status &80  cpu lost   3.7%  vsyncs 8 (expect 8.2) ok true

@@ -5,6 +5,9 @@
 > will drift; nothing here is planned or built. A stock-B edition is
 > tracked as [issue #1](https://github.com/mattgodbolt/chuckie-egg-2-beeb/issues/1),
 > for the future; re-measure before relying on any of it.
+>
+> **Superseded** by [`docs/streaming.md`](streaming.md) (2026-10-10): the
+> plan now is our own NMI driver reading in the background, with a cache.
 
 Research for the "moon shot": the game on a Model B with no sideways RAM.
 An exploratory agent measured it on the build of `25a57fd` and in jsbeeb
@@ -429,3 +432,9 @@ disc probes (it writes `tools/stockb/disc.ssd`, not committed).
 | `discprobe5.mjs`, `discprobe5.out` | a random walk loading real record sizes: DFS default and head kept loaded, 1.5s and 5s a room |
 | `discprobe6.mjs`, `discprobe6.out` | page 3, `&0236-&02FF`, `&0D9F-&0DEF`, `&0DF0-&0DFF` |
 | `roomtime.mjs`, `roomtime.out` | the port's `enter_room` time now |
+| `budget_stream.py`, `budget_stream.out` | (2026-10-10, build `8c630c6`) the budget with our own driver and a cache |
+| `graph.py` | the room graph: which exits exist, from the original's type maps |
+| `cache.py`, `cache.out` | bodies and graphics groups, cache sizes against rooms with every neighbour ready |
+| `frametime_move.out` | the slowest stretch between VSync waits with Harry moving, 95 rooms |
+| `breakjunk.mjs` | page 3 and `&0D9F-&0DFF` filled with junk in play, then BREAK |
+| `nmi/` | the NMI-driven 8271 and 1770 driver, its tests and probes (`REPORT.md`; `build.sh` first) |

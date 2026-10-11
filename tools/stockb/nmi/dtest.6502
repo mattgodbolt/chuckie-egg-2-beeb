@@ -1,0 +1,76 @@
+\ A test of driver.6502 on either machine: it picks the controller from
+\ OSBYTE 0 (as MENU would), takes the machine over and reads the requests
+\ at REQS (track, sector, page; track &FF: wait `sector` VSyncs, calling
+\ fdc_keepalive every 50 if page is non-zero; track &FE: fdc_spinup),
+\ storing each one's result and foreground count at OUT.
+REQS = &2800
+OUT = &2A00             ; result, count (3 bytes)
+IRQ1V = &0204
+vsyncs = &70 : count = &71 : count1 = &72 : count2 = &73 : req = &74 : outp = &75 : since = &76
+
+SECTION Boot, filename = "!BOOT", exec = &FFFFFFFF
+    EQUS "*RUN DTEST", 13
+ENDSECTION
+
+SECTION Prog, org = &1900, load = &FFFF1900, exec = &FFFF1900, filename = "DTEST"
+.start
+    LDA #0 : LDX #1 : JSR &FFF4                 ; OSBYTE 0: X = 1 on a B, 3 on a Master
+    LDA #FDC_8271 : CPX #3 : BCC b
+    LDA #FDC_1770
+.b
+    SEI
+    PHA
+    LDX #&FF : TXS : PHA                        ; (the stack reset keeps the type)
+    LDA #&7F : STA &FE4E : STA &FE6E
+    LDA #&82 : STA &FE4E
+    LDA #LO(irq) : STA IRQ1V
+    LDA #HI(irq) : STA IRQ1V+1
+    PLA
+    JSR fdc_init
+    CLI
+.init_done
+    LDA #0 : STA req : STA outp
+.next
+    LDX req
+    LDA #0 : STA count : STA count1 : STA count2
+    LDA REQS,X : CMP #&FF : BEQ pause
+    CMP #&FE : BEQ spin
+    CMP #&FD : BEQ all_done
+    LDY REQS+2,X : PHA : LDA REQS+1,X : TAX : PLA
+    JSR fdc_read
+.wait
+    INC count : BNE nc : INC count1 : BNE nc : INC count2
+.nc JSR fdc_poll : BCS wait
+.store
+    LDX outp
+    STA OUT,X : LDA count : STA OUT+1,X : LDA count1 : STA OUT+2,X : LDA count2 : STA OUT+3,X
+.req_done
+    TXA : CLC : ADC #4 : STA outp
+    LDA req : CLC : ADC #3 : STA req
+    JMP next
+.spin
+    JSR fdc_spinup
+    LDA #0 : BEQ store
+.pause
+    LDA #0 : STA vsyncs : STA since
+.pl LDA vsyncs : CMP REQS+1,X : BEQ store0
+    LDA vsyncs : SEC : SBC since : CMP #50 : BCC pl
+    LDA vsyncs : STA since
+    LDA REQS+2,X : BEQ pl
+    JSR fdc_keepalive
+    LDX req
+    JMP pl
+.store0
+    LDA #0 : JMP store
+.all_done
+    JMP all_done
+
+.irq
+    LDA &FE4D : AND #2 : BEQ out
+    STA &FE4D
+    INC vsyncs
+.out
+    LDA &FC : RTI
+
+INCLUDE "driver.6502"
+ENDSECTION

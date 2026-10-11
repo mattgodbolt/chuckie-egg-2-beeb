@@ -1,0 +1,20 @@
+main RAM free now: 2766 (code_end &4532)
+  +   480  tile font, from the bank
+  +   294  Harry's frames, from the bank
+  +   210  setup_bands, from the bank
+  +    28  band colour maps, from the bank
+  +   233  unpacker's tier/vocabulary tables, from the bank
+  +    47  mailbox the game keeps (keys 8, RNG 4, flags 4, OS bytes for BREAK 29) + record file's start 2
+  +   170  high-score table and filename (0 if MENU keeps them in a file)
+  +   121  record index: first sector of each record, a byte a room (228 < 256 sectors)
+  +    20  ~ LowState displaced from &0D00-&0D13 by the NMI stub (20 bytes), into main RAM
+  +   250  ~ disc driver (8271 on a B / 1770 on a Master, same slot): command, seek+read, result, retry, motor keep-alive
+  +   300  ~ cache: slot table, lookup, LRU, install (frame pointers, monster entries, palette/bands), prefetch policy
+  +    60  exits table: 4 bits a room (L R U D), destinations computed as change_room does
+  -  1014  monster table: entries go in the records (dog-sat flag + the egg's limit kept)
+  -    15  ~ the bank's paging (system.6502)
+  net 1184: 1582 left in main RAM for cache buffers (both machines)
+  option -  188  monster types into the records (4 bytes an entry beside the entry)
+  option -  170  high scores + filename kept by MENU in a file
+  with the options: 1940
+  B-only regions (measured safe for BREAK on OS 1.20, decision 22 forbids them on a Master): page 3 256, &0D9F-&0DEF 81 -> 2277

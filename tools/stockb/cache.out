@@ -1,0 +1,189 @@
+== records (monolithic, as records.py) ==
+total 43848, max 1017 (room 120), mean 365
+sectors a record: {1: 42, 2: 54, 3: 18, 4: 6} total 228
+bodies only (room + entries + palette/bands + group refs):
+  total 8725, max 194 (room 38), mean 73
+groups: 30 total 6602 max 963
+group (bytes, rooms using): &37:963/1, &04:725/1, truck:623/2, &29:429/8, &8E:361/4, &0D:329/11, train:291/10, &68:274/4, &15:261/3, &00:260/20, &1D:238/6, &21:217/7, &19:209/3, &58:193/4, &51:176/1, &25:153/3, &0C:134/1, &70:114/19, &3B:97/12, &31:92/9, &35:81/11, &8A:65/15, &54:59/4, &43:44/9, &3F:42/27, plat:41/2, &60:39/6, &78:39/18, &64:39/6, bar:14/2
+
+== graph ==
+max degree 4, mean 2.40, hist {1: 8, 2: 62, 3: 44, 4: 6}
+
+== (a) current + all neighbours ==
+monolithic bytes: max 2293 (room 1); mean 1219; top [(1, 2293), (2, 2256), (6, 2211), (8, 2129), (7, 2037)]
+monolithic sectors (256-byte slots): max 11 (room 6); mean 6; top [(6, 11), (1, 10), (2, 10), (7, 10), (8, 10)]
+128-byte granules, bytes: max 2560 (room 1); mean 1433; top [(1, 2560), (6, 2560), (2, 2432), (7, 2432), (8, 2432)]
+1K slots, bytes: max 5120 (room 45); mean 3482; top [(45, 5120), (52, 5120), (80, 5120), (85, 5120), (97, 5120)]
+== (b) current + previous ==
+max pair bytes (1887, 2, 1) sectors 8
+== current + neighbours + checkpoint pinned (worst case: any other room) ==
+bytes: max 3310 (room 1); mean 2236; top [(1, 3310), (2, 3273), (6, 3228), (8, 3146), (7, 3054)]
+
+== (d) bodies and graphic groups cached apart (shared) ==
+current + neighbours, split: max 2303 (room 1); mean 1007; top [(1, 2303), (2, 2008), (19, 1836), (8, 1818), (69, 1737)]
+one room, split (body + its groups whole): max 1019 (room 120); mean 369; top [(120, 1019), (111, 996), (1, 966), (2, 929), (89, 862)]
+sharing win on (a): see above vs monolithic
+
+== resident groups: greedy, to shrink the worst current+neighbours ==
+  + &0C (134 resident): worst -> 2169 (gain 134, net 0)
+  + &00 (260 resident): worst -> 1909 (gain 260, net 0)
+  + &0D (329 resident): worst -> 1614 (gain 295, net -34)
+  + &3F (42 resident): worst -> 1580 (gain 34, net -8)
+  + truck (623 resident): worst -> 1477 (gain 103, net -520)
+  + &3B (97 resident): worst -> 1380 (gain 97, net 0)
+  + &8A (65 resident): worst -> 1336 (gain 44, net -21)
+  + &1D (238 resident): worst -> 1315 (gain 21, net -217)
+frequency view: groups used by >= 10 rooms: [('&00', 260, 20), ('&0D', 329, 11), ('&35', 81, 11), ('&3B', 97, 12), ('&3F', 42, 27), ('&8A', 65, 15), ('&78', 39, 18), ('&70', 114, 19), ('train', 291, 10)]
+
+== neighbour lists ==
+    1: D11 R2   rec 962 (4s) body 83 groups ['&00', 'truck']
+    2: L1 R3   rec 925 (4s) body 70 groups ['&04', '&0C']
+    3: L2 R4   rec 369 (2s) body 71 groups ['&00', '&3F']
+    4: L3 R5   rec 396 (2s) body 59 groups ['&00', '&35']
+    5: L4 R6   rec 404 (2s) body 106 groups ['&00', '&3F']
+    6: D16 L5 R7   rec 550 (3s) body 56 groups ['&00', '&1D']
+    7: D17 L6 R8   rec 677 (3s) body 92 groups ['&00', '&0D']
+    8: D18 L7 R9   rec 403 (2s) body 76 groups ['&0D']
+    9: D19 L8   rec 467 (2s) body 69 groups ['&19', '&35', '&70']
+   10: D20   rec 160 (1s) body 65 groups ['&3B']
+   11: U1   rec 406 (2s) body 79 groups ['&0D']
+   12: D22   rec 239 (1s) body 48 groups ['&58']
+   13: D23 R14   rec 391 (2s) body 70 groups ['&00', '&8A']
+   14: L13 R15   rec 371 (2s) body 56 groups ['&1D', '&35']
+   15: L14 R16   rec 192 (1s) body 60 groups ['&3B', '&64']
+   16: L15 U6   rec 580 (3s) body 76 groups ['&29', '&3F', '&60']
+   17: R18 U7   rec 407 (2s) body 80 groups ['&0D']
+   18: L17 R19 U8   rec 582 (3s) body 81 groups ['&29', '&64', '&78']
+   19: L18 R20 U9   rec 523 (3s) body 84 groups ['&0D', '&70']
+   20: D30 L19 U10   rec 439 (2s) body 102 groups ['&00', '&35']
+   21: D31 R22   rec 175 (1s) body 63 groups ['&70']
+   22: D32 L21 U12   rec 438 (2s) body 67 groups ['&15', '&70']
+   23: R24 U13   rec 410 (2s) body 68 groups ['&21', '&31', '&64']
+   24: D34 L23 R25   rec 238 (1s) body 71 groups ['&31', '&3F', '&78']
+   25: D35 L24 R26   rec 284 (2s) body 69 groups ['&21']
+   26: D36 L25   rec 183 (1s) body 81 groups ['&31', 'bar']
+   27: D37 R28   rec 566 (3s) body 60 groups ['&29', '&35']
+   28: D38 L27 R29   rec 427 (2s) body 57 groups ['&00', '&70']
+   29: D39 L28   rec 168 (1s) body 91 groups ['&3F', '&78']
+   30: D40 U20   rec 524 (3s) body 40 groups ['&29', '&54']
+   31: D41 R32 U21   rec 372 (2s) body 65 groups ['&35', '&58', '&78']
+   32: D42 L31 U22   rec 246 (1s) body 58 groups ['&25', '&78']
+   33: D43 R34 U23   rec 252 (1s) body 83 groups ['&31', '&35']
+   34: D44 L33 U24   rec 462 (2s) body 61 groups ['&31', '&68', 'plat']
+   35: D45 R36 U25   rec 284 (2s) body 69 groups ['&21']
+   36: D46 L35 U26   rec 180 (1s) body 90 groups ['&31']
+   37: D47 R38 U27   rec 241 (1s) body 87 groups ['&43', '&70']
+   38: L37 R39 U28   rec 194 (1s) body 194 groups []
+   39: D49 L38 U29   rec 619 (3s) body 80 groups ['&29', '&70']
+   40: D50 U30   rec 226 (1s) body 66 groups ['&3F', '&54', '&8A']
+   41: U31   rec 336 (2s) body 33 groups ['&58', '&70']
+   42: D52 U32   rec 320 (2s) body 89 groups ['&3F', '&58']
+   43: D53 U33   rec 385 (2s) body 80 groups ['&21', '&31']
+   44: R45 U34   rec 638 (3s) body 74 groups ['&15', '&21', '&31']
+   45: D55 L44 R46 U35   rec 367 (2s) body 62 groups ['&21', '&31']
+   46: L45 U36   rec 279 (2s) body 64 groups ['&21']
+   47: R48 U37   rec 608 (3s) body 102 groups ['&29', '&43', '&78']
+   48: L47 R49 U38   rec 126 (1s) body 126 groups []
+   49: D59 L48 U39   rec 397 (2s) body 88 groups ['&68', '&78']
+   50: D60 U40   rec 423 (2s) body 71 groups ['&00', '&54', '&78']
+   51: R52   rec 41 (1s) body 41 groups []
+   52: D62 L51 R53 U42   rec 249 (1s) body 97 groups ['&3F', '&70']
+   53: L52 U43   rec 307 (2s) body 76 groups ['&35', '&3F', '&70']
+   54: D64 R55   rec 250 (1s) body 98 groups ['&3F', '&70']
+   55: D65 L54 U45   rec 167 (1s) body 78 groups ['&3F', '&78', 'bar']
+   56: D66 R57   rec 632 (3s) body 102 groups ['&00', '&68']
+   57: D67 L56   rec 480 (2s) body 79 groups ['&0D', '&60', '&78']
+   58: D68 R59   rec 212 (1s) body 80 groups ['&3B', '&60']
+   59: D69 L58 U49   rec 621 (3s) body 82 groups ['&29', '&70']
+   60: D70 U50   rec 167 (1s) body 47 groups ['&54', '&8A']
+   61: R62   rec 520 (3s) body 81 groups ['&0D', '&70']
+   62: L61 R63 U52   rec 265 (2s) body 88 groups ['&3B', '&3F', '&43']
+   63: L62 R64   rec 199 (1s) body 96 groups ['&3F', '&8A']
+   64: L63 U54   rec 164 (1s) body 82 groups ['&3F', '&43']
+   65: R66 U55   rec 459 (2s) body 90 groups ['&0D', '&43']
+   66: L65 U56   rec 836 (4s) body 88 groups ['&00', '&29', '&8A']
+   67: R68 U57   rec 220 (1s) body 71 groups ['&70', '&78']
+   68: L67 U58   rec 479 (2s) body 78 groups ['&0D', '&64', '&78']
+   69: D79 U59   rec 671 (3s) body 78 groups ['&00', '&68', '&8A']
+   70: D80 U60   rec 398 (2s) body 161 groups ['&51', '&8A']
+   71: D81 L80 R72   rec 540 (3s) body 44 groups ['&3B', '&70', 'train']
+   72: L71 R73   rec 471 (2s) body 47 groups ['&3B', '&3F', 'train']
+   73: L72 R74   rec 546 (3s) body 50 groups ['&3B', '&70', 'train']
+   74: D84 L73 R75   rec 428 (2s) body 44 groups ['&3B', 'train']
+   75: D85 L74 R76   rec 447 (2s) body 46 groups ['&70', 'train']
+   76: L75 R77   rec 446 (2s) body 62 groups ['&3B', 'train']
+   77: L76 R78   rec 406 (2s) body 54 groups ['&8A', 'train']
+   78: L77 R79   rec 507 (2s) body 67 groups ['&25', 'train']
+   79: L78 R80 U69   rec 431 (2s) body 47 groups ['&3B', 'train']
+   80: D90 L79 R71 U70   rec 336 (2s) body 47 groups ['train']
+   81: D91 U71   rec 120 (1s) body 80 groups ['&3F']
+   82: D92 R83   rec 424 (2s) body 65 groups ['&8E']
+   83: D93 L82   rec 660 (3s) body 65 groups ['&1D', '&8E']
+   84: R85 U74   rec 394 (2s) body 96 groups ['&00', '&3F']
+   85: D95 L84 R86 U75   rec 420 (2s) body 65 groups ['&1D', '&35', '&3F']
+   86: L85 R87   rec 417 (2s) body 81 groups ['&1D', '&64', '&8A']
+   87: D97 L86 R88   rec 370 (2s) body 75 groups ['&00', '&78']
+   88: L87 R89   rec 299 (2s) body 80 groups ['&35', '&3F', '&60', '&8A']
+   89: D99 L88 R90   rec 854 (4s) body 78 groups ['&00', '&0D', '&25', '&3F']
+   90: L89 U80   rec 161 (1s) body 49 groups ['&70']
+   91: D101 U81   rec 397 (2s) body 99 groups ['&00', '&3F']
+   92: R93 U82   rec 674 (3s) body 71 groups ['&19', '&78', '&8E']
+   93: L92 R94 U83   rec 467 (2s) body 68 groups ['&3F', '&8E']
+   94: D104 L93 R95   rec 114 (1s) body 72 groups ['&43']
+   95: L94 R96 U85   rec 76 (1s) body 76 groups []
+   96: D106 L95 R97   rec 47 (1s) body 47 groups []
+   97: D107 L96 R98 U87   rec 338 (2s) body 68 groups ['&19', '&8A']
+   98: D108 L97 R99   rec 486 (2s) body 59 groups ['&0D', '&78', '&8A']
+   99: L98 R100 U89   rec 269 (2s) body 71 groups ['&3B', '&3F', '&8A']
+  100: D110 L99   rec 339 (2s) body 81 groups ['&00']
+  101: R102 U91   rec 251 (1s) body 95 groups ['&35', '&3F', '&78']
+  102: D112 L101 R103   rec 301 (2s) body 89 groups ['&60', '&70', '&8A']
+  103: D113 L102   rec 201 (1s) body 98 groups ['&3F', '&8A']
+  104: D114 R105 U94   rec 94 (1s) body 55 groups ['plat']
+  105: L104 R106   rec 108 (1s) body 68 groups ['&3F']
+  106: L105 R107 U96   rec 115 (1s) body 115 groups []
+  107: L106 R108 U97   rec 45 (1s) body 45 groups []
+  108: D118 L107 R109 U98   rec 122 (1s) body 70 groups ['&60', '&64']
+  109: D119 L108 R110   rec 31 (1s) body 31 groups []
+  110: L109 U100   rec 50 (1s) body 50 groups []
+  111: R112   rec 990 (4s) body 73 groups ['&15', '&78', 'truck']
+  112: L111 U102   rec 320 (2s) body 62 groups ['&00']
+  113: R114 U103   rec 417 (2s) body 82 groups ['&00', '&3F', '&78']
+  114: L113 R115 U104   rec 96 (1s) body 54 groups ['&43']
+  115: L114 R116   rec 88 (1s) body 88 groups []
+  116: L115 R117   rec 98 (1s) body 56 groups ['&43']
+  117: L116 R118   rec 93 (1s) body 51 groups ['&43']
+  118: L117 R119 U108   rec 120 (1s) body 25 groups ['&3B']
+  119: L118 R120 U109   rec 259 (2s) body 23 groups ['&1D']
+  120: L119   rec 1017 (4s) body 56 groups ['&37']
+
+== fit: rooms where current + all neighbours fit a budget (bytes, no fragmentation) ==
+  1582: monolithic 92/120, split 109/120; over: [1, 2, 3, 6, 7, 8, 17, 18, 19, 20, 34, 37, 45, 49, 56, 59, 66, 69, 74, 75, 79, 80, 82, 85, 89, 93, 99, 112]
+  1940: monolithic 111/120, split 118/120; over: [1, 2, 6, 7, 8, 19, 56, 79, 99]
+  2048: monolithic 116/120, split 119/120; over: [1, 2, 6, 8]
+  2277: monolithic 119/120, split 119/120; over: [1]
+  2304: monolithic 120/120, split 120/120; over: []
+  2560: monolithic 120/120, split 120/120; over: []
+current + k largest neighbours (worst):
+  k=1: (1887, 2)
+  k=2: (2293, 1)
+  k=3: (2293, 1)
+
+== ZX02 per record (sprites + room + rest), for a compressed cache ==
+total 36024 (raw 43848), max 716 (room 66)
+sectors: {1: 48, 2: 59, 3: 13} total 205
+compressed current + neighbours: max 1905 (room 6), mean 1008
+1K working buffer (current, unpacked) + compressed neighbours: max 2444
+  1582: compressed cur+nbrs fit 112/120
+  1940: compressed cur+nbrs fit 120/120
+  2277: compressed cur+nbrs fit 120/120
+
+== split design details ==
+group items on disc: 30, sectors 44 (hist {1: 20, 2: 7, 3: 2, 4: 1}); bodies: 120 sectors, one each (max 194)
+  split over 1582: [(1625, 112), (1645, 59), (1660, 20), (1667, 6), (1681, 66), (1704, 56), (1737, 69), (1818, 8), (1836, 19), (2008, 2), (2303, 1)]
+  split over 1940: [(2008, 2), (2303, 1)]
+  split over 2277: [(2303, 1)]
+rounded up (sector granules) split cur+nbrs: 3840
+exact split, plus one sector of read slack: 2558
+per room change, items to fetch (bodies, groups): worst bytes (1141, 2, 2) (109, 119), worst sectors 10, mean bytes 330, mean sectors 3.5
+   distribution of new bodies per change: {0: 8, 1: 124, 2: 131, 3: 25}; new groups: {0: 67, 1: 94, 2: 63, 3: 46, 4: 15, 5: 2, 6: 1}

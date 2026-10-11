@@ -1,0 +1,263 @@
+\ ***************************************************************************
+\ A background sector reader for the Model B's 8271 and the Master's WD1770:
+\ one driver, the controller picked at start-up (MENU, with the OS alive,
+\ can tell: OSBYTE 0 gives X = 1 on a B, 3 on a Master).
+\
+\   fdc_init      A = FDC_8271 or FDC_1770. Owns &0D00 from now on.
+\   fdc_read      A = track, X = sector, Y = destination page: starts reading
+\                 one 256-byte sector and returns at once.
+\   fdc_poll      C set while the read is under way; then C clear and A = 0
+\                 (read) or the controller's error bits. Call it as often
+\                 as you like (main loop or VSync): it is where a 1770 seek
+\                 turns into the read, and an 8271 not-ready is retried.
+\   fdc_keepalive Call about once a second when idle: keeps a 1770's motor
+\                 from stopping (it stops after 9 idle revolutions). The
+\                 8271's head stays loaded by itself (Specify, unload &F).
+\   fdc_spinup    Starts the motor ahead of a read (when Harry nears an exit).
+\
+\ The NMI handler is the same on both, but for the data register's address:
+\ 4 (STA abs) + 4 (LDA data) + 4 (STA abs) + 6 (INC abs) + 2 (BEQ) + 2 (LDA #)
+\ + 6 (RTI) = 28 cycles a byte, plus 7 to take the NMI: 35 of the 128
+\ between bytes (FM, 64us), 27%. The 256th byte turns it into an RTI, so the
+\ completion NMI does nothing, and fdc_poll reads the result, which drops
+\ the controller's interrupt (8271 result register, 1770 status register).
+\ ***************************************************************************
+
+FDC_8271 = 0
+FDC_1770 = 1
+NMI_AREA = &0D00
+RTI_OP = &40
+STA_ABS = &8D
+
+\ 8271 (Model B)
+I_STATUS = &FE80 : I_COMMAND = &FE80 : I_RESULT = &FE81 : I_PARAM = &FE81
+I_RESET = &FE82 : I_DATA = &FE84
+I_STEP = &0C            ; the DFS's own: 24ms a step on jsbeeb (units of 2ms)
+I_SETTLE = &0A          ; 20ms
+I_LOAD = &F8            ; never unload; 64ms head load
+\ WD1770 (Master)
+W_CONTROL = &FE24 : W_STATUS = &FE28 : W_COMMAND = &FE28
+W_TRACK = &FE29 : W_SECTOR = &FE2A : W_DATA = &FE2B
+W_LATCH = &25           ; drive 0, not reset, side 0, single density
+W_RATE = 0              ; 6ms steps (r1 r0)
+
+\ Driver state, which must survive the game's death path (fixed zero page
+\ or LowState in the game).
+fdc_type  = &60
+fdc_state = &61         ; 0 idle, 1 seeking (1770), 2 reading
+fdc_track = &62         ; wanted track, sector, page
+fdc_sect  = &63
+fdc_page  = &64
+fdc_cur   = &65         ; 1770: where the head is (&FF: unknown)
+
+.fdc_init
+{
+    STA fdc_type
+    LDX #nmi_end - nmi_template - 1
+.copy
+    LDA nmi_template,X : STA NMI_AREA,X
+    DEX : BPL copy
+    LDA #RTI_OP : STA NMI_AREA
+    LDA #0 : STA fdc_state
+    LDA fdc_type : BNE w
+    LDA #LO(I_DATA) : STA NMI_AREA + nmi_data - nmi_template + 1
+    LDA #HI(I_DATA) : STA NMI_AREA + nmi_data - nmi_template + 2
+    LDA #1 : STA I_RESET
+    LDX #20
+.rw DEX : BNE rw
+    STX I_RESET
+    LDX #i_init_end - i_init - 1
+.cmds
+    \ (each a command and its parameters, the count first)
+    JSR i_command_x
+    BPL cmds
+    \ The seek's result (ignored: not ready, most likely, but the head is
+    \ at track 0 and the 8271 knows it), read to drop its interrupt.
+.seek
+    BIT I_STATUS : BMI seek
+    LDA I_RESULT
+    RTS
+.w
+    LDA #LO(W_DATA) : STA NMI_AREA + nmi_data - nmi_template + 1
+    LDA #HI(W_DATA) : STA NMI_AREA + nmi_data - nmi_template + 2
+    LDA #W_LATCH AND NOT(4) : STA W_CONTROL     ; reset
+    LDX #20
+.ww DEX : BNE ww
+    LDA #W_LATCH : STA W_CONTROL
+    LDA #&FF : STA fdc_cur
+    RTS
+}
+
+\ The 8271's set-up, read backwards by i_command_x: count, command,
+\ parameters.
+.i_init
+    EQUB 0, &69, 2                              ; Seek 0 (steps until TRK0)
+    EQUB &C1, &17, &7A, 3                       ; Write Special Register: mode, no DMA
+    EQUB 0, &FF, &FF, &10, &75, 5               ; Specify bad tracks (none), track 0
+    EQUB I_LOAD, I_SETTLE, I_STEP, &0D, &75, 5  ; Specify timings
+.i_init_end
+
+\ Issue the 8271 command whose bytes end at i_init + X (count, command,
+\ parameters, read downwards); returns X before the next, N set at the end.
+.i_command_x
+{
+.idle
+    BIT I_STATUS : BMI idle                     ; busy
+    LDY i_init,X : DEX
+    LDA i_init,X : STA I_COMMAND : DEX : DEY
+    BEQ done
+.param
+    LDA I_STATUS : AND #&20 : BNE param         ; parameter register full
+    LDA i_init,X : STA I_PARAM
+    DEX : DEY : BNE param
+.done
+    TXA
+    RTS
+}
+
+.fdc_read
+{
+    STA fdc_track : STX fdc_sect : STY fdc_page
+    LDA fdc_type : BNE w
+    JMP i_start
+.w
+    LDA fdc_track : CMP fdc_cur : BEQ w_start
+    \ A Seek first (the 1770 can't seek within a read); fdc_poll goes on.
+    LDA fdc_cur : BPL known
+    LDA #&00 + W_RATE : BPL go                  ; Restore, then the seek
+.known
+    LDA fdc_track : STA W_DATA
+    LDA #&10 + W_RATE
+.go
+    STA W_COMMAND
+    LDA #1 : STA fdc_state
+    RTS
+}
+
+\ Aim the handler at the page and arm it, then the read command.
+.arm
+{
+    LDA fdc_page : STA NMI_AREA + nmi_dst - nmi_template + 2
+    LDA #0 : STA NMI_AREA + nmi_dst - nmi_template + 1
+    LDA #STA_ABS : STA NMI_AREA
+    LDA #2 : STA fdc_state
+    RTS
+}
+
+.i_start
+{
+    JSR arm
+.idle
+    BIT I_STATUS : BMI idle
+    LDA #&53 : STA I_COMMAND                    ; Read Data, drive 0
+    LDA fdc_track : JSR param
+    LDA fdc_sect : JSR param
+    LDA #&21                                    ; one 256-byte sector
+.param
+    PHA
+.full
+    LDA I_STATUS : AND #&20 : BNE full
+    PLA : STA I_PARAM
+    RTS
+}
+
+.w_start
+{
+    JSR arm
+    LDA fdc_sect : STA W_SECTOR
+    LDA #&80 : STA W_COMMAND                    ; Read Sector
+    RTS
+}
+
+.fdc_poll
+{
+    LDA fdc_state : BNE busy
+    CLC
+    RTS
+.busy
+    LDA fdc_type : BNE w
+    \ 8271
+    BIT I_STATUS : BMI still
+    LDA I_RESULT : AND #&1E
+    CMP #&10 : BNE finished
+    \ Not ready (a B makes the drive ready on the second index pulse after
+    \ it is selected), latched until a Read Drive Status: that, and again.
+    LDA #&6C : STA I_COMMAND
+.rds
+    BIT I_STATUS : BMI rds
+    LDA I_RESULT
+    JSR i_start
+.still
+    SEC
+    RTS
+.w
+    LDA W_STATUS : LSR A : BCS still            ; busy (reading drops INTRQ)
+    LDA fdc_state : CMP #1 : BNE w_read
+    \ The seek (or restore) is done: now the read.
+    LDA fdc_cur : BPL sought
+    LDA #0 : STA fdc_cur                        ; restored: now the seek
+    LDA fdc_track : STA W_DATA
+    LDA #&10 + W_RATE : STA W_COMMAND
+    SEC
+    RTS
+.sought
+    LDA fdc_track : STA fdc_cur
+    JSR w_start
+    SEC
+    RTS
+.w_read
+    LDA W_STATUS : AND #&1C                            ; record not found, CRC, lost data
+.finished
+    LDX #0 : STX fdc_state
+    CLC
+    RTS
+}
+
+.fdc_keepalive
+{
+    LDA fdc_type : BEQ out
+    LDA fdc_state : BNE out
+    LDA #&D0 : STA W_COMMAND                    ; Force Interrupt: no INTRQ
+.out
+    RTS
+}
+
+.fdc_spinup
+{
+    LDA fdc_state : BNE out
+    LDA fdc_type : BNE w
+.idle
+    BIT I_STATUS : BMI idle
+    LDA #&7A : STA I_COMMAND                    ; Write Special Register:
+    LDA #&23 : JSR i_start_param                ; drive output = select 0 +
+    LDA #&48 : JMP i_start_param                ; load head (and motor)
+.w
+    LDA #&D0 : STA W_COMMAND                    ; starts the motor
+.out
+    RTS
+}
+.i_start_param
+{
+    PHA
+.full
+    LDA I_STATUS : AND #&20 : BNE full
+    PLA : STA I_PARAM
+    RTS
+}
+
+\ Copied to &0D00. The first byte is RTI until a read arms it.
+.nmi_template
+    STA NMI_AREA + nmi_restore - nmi_template + 1
+.nmi_data
+    LDA I_DATA
+.nmi_dst
+    STA &3000
+    INC NMI_AREA + nmi_dst - nmi_template + 1
+    BEQ nmi_last
+.nmi_restore
+    LDA #0
+    RTI
+.nmi_last
+    LDA #RTI_OP : STA NMI_AREA
+    BNE nmi_restore
+.nmi_end

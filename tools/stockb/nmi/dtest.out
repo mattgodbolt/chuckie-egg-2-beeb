@@ -1,0 +1,32 @@
+== B-DFS1.2: fdc_type 0 (8271)
+read 1/0                           236.0ms  result &00  polls 4037 data ok
+read 1/1                            19.8ms  result &00  polls 689 data ok
+read 1/2                            19.8ms  result &00  polls 690 data ok
+read 1/3                            19.8ms  result &00  polls 690 data ok
+read 5/7                           279.4ms  result &00  polls 12465 data ok
+read 3/2                           100.8ms  result &00  polls 4362 data ok
+read 20/9                          538.9ms  result &00  polls 24238 data ok
+pause 150 VSyncs with keepalive   2993.7ms  result &00  polls 0
+read 20/0                           27.7ms  result &00  polls 1047 data ok
+pause 150 VSyncs                  2992.3ms  result &00  polls 0
+read 21/0                          207.7ms  result &00  polls 9212 data ok
+pause 150 VSyncs                  2992.3ms  result &00  polls 0
+fdc_spinup                           0.1ms  result &00  polls 0
+pause 50 VSyncs                    999.9ms  result &00  polls 0
+read 22/5                          106.9ms  result &00  polls 4638 data ok
+== Master: fdc_type 1 (WD1770)
+read 1/0                          1299.9ms  result &00  polls 55008 data ok
+read 1/1                            19.8ms  result &00  polls 647 data ok
+read 1/2                            19.8ms  result &00  polls 647 data ok
+read 1/3                            19.9ms  result &00  polls 648 data ok
+read 5/7                            79.3ms  result &00  polls 3173 data ok
+read 3/2                           100.8ms  result &00  polls 4084 data ok
+read 20/9                          138.9ms  result &00  polls 5702 data ok
+pause 150 VSyncs with keepalive   2992.6ms  result &00  polls 0
+read 20/0                           28.9ms  result &00  polls 1032 data ok
+pause 150 VSyncs                  2991.1ms  result &00  polls 0
+read 21/0                         1524.5ms  result &00  polls 64548 data ok
+pause 150 VSyncs                  2995.5ms  result &00  polls 0
+fdc_spinup                           0.1ms  result &00  polls 0
+pause 50 VSyncs                    999.9ms  result &00  polls 0
+read 22/5                          223.9ms  result &00  polls 9312 data ok

@@ -10,3 +10,6 @@ original/*
 !original/README.md
 !original/SHA256SUMS
 tools/stockb/disc.ssd
+tools/stockb/nmi/*.ssd
+tools/stockb/nmi/*.json
+tools/stockb/nmi/*.lst

@@ -1,0 +1,2 @@
+variant 1: idle 2s: 151 T1 IRQs, worst T1 low byte read 32us after the reload; 29 reads (579ms): 563 T1 IRQs (expect 564), 29 VSyncs (expect 28.9), worst 43us; per read: 42 25 42 43 32 22 43 40 22 43 42 24 42 43 29 42 43 35 23 43 41 22 43 42 25 42 43 32 22
+variant 2: idle 2s: 152 T1 IRQs, worst T1 low byte read 32us after the reload; 29 reads (579ms): 563 T1 IRQs (expect 564), 29 VSyncs (expect 28.9), worst 43us; per read: 39 40 27 39 40 33 22 40 39 23 40 40 24 39 40 30 23 40 36 22 40 40 23 40 40 28 39 43 34

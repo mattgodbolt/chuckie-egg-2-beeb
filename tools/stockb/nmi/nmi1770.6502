@@ -1,0 +1,236 @@
+\ The same prototype for the Master 128's WD1770: our own NMI
+\ handler at &0D00, our own IRQ1V, and no OS or DFS calls once it starts.
+\ The harness (harness.mjs) fills a queue of 8271 commands at QUEUE and pokes
+\ go; the foreground counts while each one runs, so the CPU the NMIs take
+\ can be measured; breakpoints on cmd_issued and cmd_finished time them.
+
+fdc_control = &FE24     ; Master: b0 drive 0, b1 drive 1, b2 not reset, b4 side, b5 single density
+fdc_status  = &FE28     ; read (clears INTRQ)
+fdc_command = &FE28     ; write
+fdc_track   = &FE29
+fdc_sector  = &FE2A
+fdc_data    = &FE2B
+CONTROL     = &25       ; drive 0, running, side 0, FM
+
+sysvia_ifr = &FE4D : sysvia_ier = &FE4E
+usrvia_t1cl = &FE64 : usrvia_t1ch = &FE65 : usrvia_t1ll = &FE66 : usrvia_t1lh = &FE67
+usrvia_acr = &FE6B : usrvia_ifr = &FE6D : usrvia_ier = &FE6E
+IRQ1V = &0204
+NMI_AREA = &0D00
+
+QUEUE = &2800           ; 16-byte entries, see the E_ offsets
+E_CMD = 0               ; 0: no command, just the delay
+E_N = 1                 ; which of the four to write: b0 track, b1 sector, b2 data, b3 control
+E_P = 2                 ; track register, sector register, data register, control latch
+E_DEST = 6              ; destination page
+E_VARIANT = 7           ; NMI handler: 0 RTI, 1 status check, 2 counting, 3 multi-page
+E_DELAY = 8             ; VSyncs to wait before the command
+E_RESULT = 9
+E_COUNT = 10            ; 3 bytes: foreground loops while it ran
+E_VSYNCS = 13
+E_T1S = 14
+E_T1MIN = 15            ; least User VIA T1 low byte seen in the IRQ (latency)
+E_END = &FF             ; in E_CMD: the end of the queue
+
+go = &70
+t1_on = &71
+entry = &72
+entry_hi = &73
+count = &74
+count1 = &75
+count2 = &76
+vsyncs = &77
+t1s = &78
+t1min = &79
+done = &7A
+nmi_result = &7B
+result = &7C
+delay = &7D
+mask = &7E
+
+SECTION Boot, filename = "!BOOT", exec = &FFFFFFFF
+    EQUS "*RUN NMIW", 13
+ENDSECTION
+
+SECTION Prog, org = &1900, load = &FFFF1900, exec = &FFFF1900, filename = "NMIW"
+.start
+    SEI
+    LDX #&FF : TXS
+    LDA #&7F : STA sysvia_ier : STA usrvia_ier
+    LDA #&82 : STA sysvia_ier           ; VSync only
+    LDA t1_on : BEQ no_t1
+    LDA #&40 : STA usrvia_acr           ; T1 free-running
+    LDA #&FF : STA usrvia_t1ll : STA usrvia_t1cl
+    LDA #&03 : STA usrvia_t1lh : STA usrvia_t1ch
+    LDA #&C0 : STA usrvia_ier
+.no_t1
+    LDA #LO(irq) : STA IRQ1V
+    LDA #HI(irq) : STA IRQ1V+1
+    LDA #&40 : STA NMI_AREA             ; RTI until a command wants more
+    \ Reset the 1770 (the latch's bit 2 low).
+    LDA #CONTROL AND NOT(4) : STA fdc_control
+    LDX #20
+.rwait DEX : BNE rwait
+    LDA #CONTROL : STA fdc_control
+    CLI
+.idle
+    LDA go : BEQ idle
+    LDA #0 : STA go
+    LDA #LO(QUEUE) : STA entry
+    LDA #HI(QUEUE) : STA entry_hi
+.next
+    LDY #E_CMD : LDA (entry),Y : CMP #E_END : BNE not_end : JMP idle
+.not_end
+    LDA #0 : STA count : STA count1 : STA count2
+    STA vsyncs : STA t1s : STA done
+    LDA #&FF : STA t1min
+    LDY #E_DELAY : LDA (entry),Y : STA delay
+    BEQ no_delay
+.delay_loop
+    INC count : BNE dc : INC count1 : BNE dc : INC count2
+.dc LDA vsyncs : CMP delay : BNE delay_loop
+.no_delay
+    LDY #E_CMD : LDA (entry),Y : BEQ finished
+.again
+    JSR install_nmi
+    JSR issue
+.cmd_issued
+.busy
+    INC count : BNE nc : INC count1 : BNE nc : INC count2
+.nc LDA fdc_status : LSR A : BCS busy
+    LDY #E_VARIANT : LDA (entry),Y : LSR A : BCS from_nmi
+    \ No completion NMI handled (variants 0 and 2): the status is the result,
+    \ and reading it drops INTRQ (and with it the NMI line).
+    LDA fdc_status : JMP got
+.from_nmi
+    LDA done : BEQ busy                 ; (the completion NMI is on its way)
+    LDA nmi_result
+.got
+    STA result
+.finished
+    LDY #E_RESULT : LDA result : STA (entry),Y
+    INY : LDA count : STA (entry),Y
+    INY : LDA count1 : STA (entry),Y
+    INY : LDA count2 : STA (entry),Y
+    INY : LDA vsyncs : STA (entry),Y
+    INY : LDA t1s : STA (entry),Y
+    INY : LDA t1min : STA (entry),Y
+.cmd_finished
+    LDA entry : CLC : ADC #16 : STA entry
+    BCC to_next : INC entry_hi
+.to_next JMP next
+
+\ The registers the entry names, then the command.
+.issue
+{
+.wait_idle
+    LDA fdc_status : LSR A : BCS wait_idle      ; busy
+    LDA #0 : STA result
+    LDY #E_N : LDA (entry),Y : STA mask
+    LDY #E_P
+    LSR mask : BCC no_track : LDA (entry),Y : STA fdc_track
+.no_track
+    INY : LSR mask : BCC no_sector : LDA (entry),Y : STA fdc_sector
+.no_sector
+    INY : LSR mask : BCC no_data : LDA (entry),Y : STA fdc_data
+.no_data
+    INY : LSR mask : BCC no_control : LDA (entry),Y : STA fdc_control
+.no_control
+    LDY #E_CMD : LDA (entry),Y : STA fdc_command
+    RTS
+}
+
+\ Copy the entry's NMI handler to &0D00, aimed at its destination page.
+.install_nmi
+{
+    LDY #E_VARIANT : LDA (entry),Y : AND #&7F : ASL A : TAX
+    LDA handlers,X : STA src+1
+    LDA handlers+1,X : STA src+2
+    LDY #0
+.copy
+.src LDA &FFFF,Y : STA NMI_AREA,Y
+    INY : CPY #&40 : BNE copy
+    LDY #E_VARIANT : LDA (entry),Y : AND #&7F : TAX
+    LDA dst_hi,X : BEQ out
+    TAX
+    LDY #E_DEST : LDA (entry),Y : STA NMI_AREA,X
+    LDA #0 : STA NMI_AREA-1,X           ; from the start of the page
+.out
+    RTS
+}
+
+\ Where each handler's destination high byte is (0: none).
+.dst_hi
+    EQUB 0, hs_dst + 2 - h_status, hc_dst + 2 - h_count, hm_dst + 2 - h_multi
+
+.handlers
+    EQUW h_rti, h_status, h_count, h_multi
+
+\ Variant 0: nothing expected but the completion (Restore, Seek): INTRQ
+\ stays up until the foreground reads the status.
+.h_rti
+    RTI
+
+\ Variant 1: the status register says which NMI this is (and reading it
+\ drops INTRQ). 4 + 4 + 2 + 2 + 2 + 4 + 4 + 6 + 2 + 6 = 36 cycles a data
+\ byte, plus 7 to take the NMI.
+.h_status
+    STA hs_restore+1 - h_status + NMI_AREA
+    LDA fdc_status : LSR A : LSR A : BCC hs_complete    ; DRQ
+    LDA fdc_data
+.hs_dst STA &3000
+    INC hs_dst+1 - h_status + NMI_AREA
+.hs_restore LDA #0
+    RTI
+.hs_complete
+    LDA fdc_status : STA nmi_result
+    LDA #&FF : STA done
+    BNE hs_restore
+
+\ Variant 2: one 256-byte sector, the handler counting: after the 256th byte
+\ it turns itself into an RTI for the completion NMI (INTRQ), and the
+\ foreground reads the status, which drops INTRQ. 4 + 4 + 4 + 6 + 2 + 2 + 6 = 28 cycles a byte, plus 7.
+.h_count
+    STA hc_restore+1 - h_count + NMI_AREA
+    LDA fdc_data
+.hc_dst STA &3000
+    INC hc_dst+1 - h_count + NMI_AREA
+    BEQ hc_last
+.hc_restore LDA #0
+    RTI
+.hc_last
+    LDA #&40 : STA NMI_AREA             ; RTI
+    BNE hc_restore
+
+\ Variant 3: as 1, carrying into the page, for multi-sector reads.
+.h_multi
+    STA hm_restore+1 - h_multi + NMI_AREA
+    LDA fdc_status : LSR A : LSR A : BCC hm_complete
+    LDA fdc_data
+.hm_dst STA &3000
+    INC hm_dst+1 - h_multi + NMI_AREA
+    BNE hm_restore
+    INC hm_dst+2 - h_multi + NMI_AREA
+.hm_restore LDA #0
+    RTI
+.hm_complete
+    LDA fdc_status : STA nmi_result
+    LDA #&FF : STA done
+    BNE hm_restore
+
+.irq
+{
+    LDA usrvia_ifr : AND #&40 : BEQ not_t1
+    LDA usrvia_t1cl                     ; acknowledges, and says how late
+    CMP t1min : BCS later : STA t1min
+.later
+    INC t1s
+    LDA &FC : RTI
+.not_t1
+    LDA sysvia_ifr : AND #2 : BEQ out
+    STA sysvia_ifr
+    INC vsyncs
+.out
+    LDA &FC : RTI
+}
+ENDSECTION

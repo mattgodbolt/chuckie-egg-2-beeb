@@ -45,14 +45,14 @@
     CMP #100 : BCC hundreds         ; (rooms 1-120: one hundred at most)
     SBC #100 : INX
 .hundreds
-    STA status_x                    ; what's left
+    PHA                             ; what's left
     TXA : JSR status_char
-    LDA status_x : LDX #'0' - 1 : SEC
+    PLA : LDX #'0' - 1 : SEC
 .tens
     INX : SBC #10 : BCS tens
-    ADC #'0' + 10 : STA status_x    ; the units (carry clear), as a character
+    ADC #'0' + 10 : PHA             ; the units (carry clear), as a character
     TXA : JSR status_char
-    LDA status_x : JSR status_char
+    PLA : JSR status_char
     \ Fall into visit_bonus.
 }
 
@@ -87,10 +87,12 @@
     CLC : ADC score,X
     CMP #10 : BCC store
     SBC #10
-    CPX #0 : BEQ store
-    PHA : TXA : PHA                 ; (recursive: the digit on the stack)
-    DEX : LDA #1 : JSR add_score    ; (only the digits to the left)
-    PLA : TAX : PLA
+    DEX : BMI lost                  ; (none to the left of digit 0)
+    PHA                             ; (recursive: the digit on the stack)
+    LDA #1 : JSR add_score          ; (only the digits to the left; X kept)
+    PLA
+.lost
+    INX
 .store
     STA score,X
     \ Fall into draw_digit.

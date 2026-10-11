@@ -167,7 +167,7 @@ ENDIF
 .things                         ; (objects.6502; tools/mkrecords.py)
     INCBIN "data/thingsres.bin"
 .visited    SKIP 16             ; a bit a room, its visit bonus taken (status.6502)
-.thing_types                    ; (changed by each egg's toy: egg_init)
+.thing_types                    ; (objects.6502; tools/mkobjects.py)
     INCBIN "data/thingtypes.bin"
 IF NOT(DEFINED(STREAM))             ; (the streaming edition's are in its bodies)
 .mon_types
@@ -272,7 +272,7 @@ ENDIF
 MS_C    = &70
 MS_P    = &71
 \ Screen memory, unseen in MODE 7: above this loader and the page tables
-\ (copy_os_pages wants them after) and the game's state block (&5F00 up),
+\ (copy_os_pages wants them after) and the game's state block (SAVE_HDR up),
 \ below MODE 7's screen.
 FONT_BUF = &7800
 ASSERT FONT_BUF >= loader_end AND FONT_BUF + &300 <= &7C00

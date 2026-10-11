@@ -1447,3 +1447,19 @@ mailbox's restore wrapped and overwrote the loader (fixed in 2d7631d).
   began. A trap on the way: the build stamp isn't a make dependency, so
   `make BUILD=...` after another stamp reuses the old discs (delete them).
 
+
+### A third round
+
+Four agents again, three owning files and one looking across them for
+proposals only. The monsters, objects and status agent's patch went in
+first (decision 39): the five thing types no thing has dropped and the
+rest renumbered so a portable thing's type follows from its number, the
+toy's graphics worked out from the egg, and the object graphics' high
+bytes from where their pages start; 177 bytes. With the saved game's
+format changing anyway, it no longer carries the high-score table either
+(CE2HI has it, decision 38), and on the way the header turned out to
+have room for 40 bytes when a test or viewer disc's stamp is 41 or more:
+it ran into the keys. The header now has 56, and the build checks.
+`docs/memory-map.md` and CLAUDE.md stopped quoting the port's own
+addresses, which had gone stale: they name the sections and symbols, and
+the map keeps only what the OS and hardware fix.

@@ -51,9 +51,9 @@ runs `make check` on the B and the Master: move that pin with the local one.
   front end), `build/test.ssd` (`-D DIRECT=1`: `MENU` goes straight into a
   game; the tools use it, with `build/test.json`) and `build/viewer.ssd`.
 - `make front` (`tools/frontcheck.mjs`) drives the front end on the
-  release disc. `MENU` (`&1900-&27FF`) shares addresses with the game's
-  code: once the game has run, put breakpoints only on game routines
-  above `&2800`, and recognise `MENU` by its text in MODE 7's screen
+  release disc. `MENU` shares addresses with the game's code: once the
+  game has run, put breakpoints only on game routines above the end of
+  the `Menu` section (`build/symbols.json`), and recognise `MENU` by its text in MODE 7's screen
   memory. Not by the build stamp: the OS prints that too, echoing
   `!BOOT`'s first line. A test typing the same key twice needs a gap
   between (frontcheck's `type`), or the OS sees one long press.
@@ -77,14 +77,14 @@ runs `make check` on the B and the Master: move that pin with the local one.
 
 ## The screen
 
-MODE 1's pixels with the CRTC narrowed to 256 x 192 (R1 = 64, R6 = 24) at
-`&5000-&7FFF`: the Spectrum's geometry exactly. A character row is 512
+MODE 1's pixels with the CRTC narrowed to 256 x 192 (R1 = 64, R6 = 24) from
+`screen` to the top of RAM: the Spectrum's geometry exactly. A character row is 512
 bytes, so row r starts at `screen + r * &200`. In a byte, a pixel's high bit
 is in the top nibble and its low bit in the bottom one: colour 1 = `&0F`,
 2 = `&F0`, 3 = `&FF` for four pixels.
 
 The game sets MODE 1 in the hardware (`init_system`): `MENU` leaves the OS
-in MODE 7, and an OS mode change would clear the state block at `&5F00`.
+in MODE 7, and an OS mode change would clear the state block (`SAVE_HDR` up).
 
 ## Finding bytes or cycles
 
@@ -127,12 +127,15 @@ handoff, the front end or anything paged.
 
 ## OS workspace
 
-- The maps live in `&0400-&0CFF`. The OS's 100Hz interrupt rewrites
-  `&080C-&083F` (sound workspace) even when silent; `init_system` stops the
-  System VIA timer interrupt that drives it.
-- A soft BREAK reads page 2 beyond the vectors, page 3, `&D0` and
-  `&0D9F-&0DFF` (the last two a Master's): the game keeps out of them
-  (decision 22), and `make front` ends with a BREAK in play.
+- `docs/memory-map.md` lists what the OS keeps that the layout must fit
+  around. Take the port's own addresses from `src/memory.6502` and
+  `build/symbols.json`; don't copy them into docs, where they go stale.
+- The maps (`Maps`) are in OS workspace: its 100Hz interrupt rewrites the
+  sound workspace there even when silent; `init_system` stops the System
+  VIA timer interrupt that drives it.
+- A soft BREAK reads parts of pages 0, 2, 3 and 13 (some only on a
+  Master): the game keeps out of them (decision 22), and `make front`
+  ends with a BREAK in play.
 - Write the SN76489 with the keyboard on auto-scan (System VIA latch
   `&0B`): enabled, it drives port A's bit 7 and every byte loses its top
   bit, so latch bytes land as data in the wrong register.

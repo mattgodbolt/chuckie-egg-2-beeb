@@ -54,8 +54,8 @@ the room fills the other 22. Every cell of the room has three things:
   through it.
 
 When a room is drawn, all three go into three 768-byte maps, one byte per
-cell (`attr_map`, `tile_map` and `type_map`, at `&0400`, `&0700` and
-`&0A00` on the BBC). Everything after that works from the maps. Harry's
+cell (`attr_map`, `tile_map` and `type_map`, in OS workspace on the BBC:
+`src/memory.6502`). Everything after that works from the maps. Harry's
 movement reads the cell types. Erasing a sprite puts back the room's
 pixels from the tile and attribute maps. The collision test uses the tile
 map to tell the room's own pixels from a monster's.
@@ -661,7 +661,7 @@ budget). So the port needs a BBC with 16K of sideways RAM, or a Master
 sideways RAM bank, which the game pages in and leaves paged in, so it
 reads like ordinary memory at `&8000`.
 
-![A diagram of memory. Main RAM: zero page, page 1 with the stack, pages 2-3, the three maps at &0400-&0CFF, LowState at &0D00, code and tables from &0E00 to about &44F5, a little free space, and the screen at &5000-&7FFF. The sideways RAM bank at &8000: the mailbox, the palettes and bands, the packed rooms, the sprites, the tile font and some free space. Text uses the OS ROM's font at &C000.](images/memory-map.png)
+![A diagram of memory. Main RAM: zero page, page 1 with the stack, pages 2-3, the three maps at &0400-&0CFF, LowState at &0D00, code and tables, a little free space, and the screen at &5000-&7FFF. The sideways RAM bank at &8000: the mailbox, the palettes and bands, the packed rooms, the sprites, the tile font and some free space. Text uses the OS ROM's font at &C000.](images/memory-map.png)
 
 Getting there took a good deal of measuring and packing: the rooms
 (decisions 5 and 21), the sprite frames (decision 26), reading text

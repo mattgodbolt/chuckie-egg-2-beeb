@@ -52,30 +52,33 @@ MF_STATIC  = &01            ; never moves
 .setup_monsters
 {
     ZA_AUTO1 left
-    LDA #0 : STA m_count : STA dl_count
+    \ (dl_count needs no clearing: monsters_tick sets it before
+    \ draw_monsters reads it.)
+    LDA #0 : STA m_count
     LDY rb_mon
     LDA (rb),Y : STA left
 .scan
     DEC left : BMI done
     INY : STY m_entry
-    LDA (rb),Y : BEQ dog_sits
-    CMP #1 : BNE limit
-    LDX dog_sat : BNE off       ; (else on: mon_limit is at least 155)
+    \ Entries 0 and 1, the sitting dog and the running one: the one that
+    \ dog_sat (0 or 1) says is on, entry EOR dog_sat = 1.
+    LDA (rb),Y : CMP #2 : BCS limit
+    EOR dog_sat : BEQ off       ; (else A = 1: on, as mon_limit is at least 155)
 .limit
     CMP mon_limit : BEQ on : BCS off
 .on
-    LDX m_count : CPX #NM : BCS off
+    \ (A room has at most four entries, fewer than NM: tools/mkrecords.py.)
+    LDX m_count
     JSR setup_monster
     INC m_count
 .off
-    LDY m_entry : INY : INY : INY
 IF DEFINED(STREAM)
-    INY : INY : INY                 ; (the type's four bytes, not its number)
+    \ (The entry's type's four bytes, not its number: seven a monster.)
+    LDA m_entry : CLC : ADC #6 : TAY
+ELSE
+    LDY m_entry : INY : INY : INY
 ENDIF
     BNE scan                    ; (always: the entry's type is in the body)
-.dog_sits
-    LDA dog_sat : BEQ off
-    BNE on                      ; (always)
 .done
     RTS
 }
@@ -98,10 +101,9 @@ ELSE
     LDA mon_types+2,Y : STA m_flags,X
     LDA mon_types+3,Y : STA m_speed,X
 ENDIF
-    JSR m_to_start
+    JSR m_to_start                          ; (A = 0)
+    STA m_sub,X : STA m_dx,X : STA m_dy,X
     INX : TXA : DEX : STA m_tick,X          ; staggers the first moves
-    LDA #0 : STA m_sub,X
-    STA m_dx,X : STA m_dy,X
     \ The step: 1, or 2 when fast; negative if NEG.
     LDA m_flags,X : AND #MF_NEG : BEQ positive
     LDA #&FE
@@ -111,7 +113,7 @@ ENDIF
     ASL A
 .slow
     TAY
-    LDA m_flags,X : AND #MF_VERT : BEQ across
+    LDA m_flags,X : ASL A : BPL across      ; MF_VERT, shifted into bit 7
     TYA : ASL A : STA m_dy,X
     BNE choose_frame                        ; (always)
 .across
@@ -139,7 +141,8 @@ ENDIF
     RTS
 }
 
-\ Monster X to its start cell, top line.
+\ Monster X to its start cell, top line. Returns A = 0 (setup_monster
+\ and respawn rely on it).
 .m_to_start
     LDY m_scol,X : LDA m_srow,X : JSR row_col_cell
     STA m_cell_lo,X
@@ -155,24 +158,66 @@ ENDIF
 .loop
     CPX m_count : BEQ done
     STX m_cur
-    JSR tick
-    LDX m_cur : INX
+    JSR tick                                ; (which returns X = m_cur)
+    INX
     BNE loop                                ; (always)
 .done
     RTS
 }
 
-\ Tick (&8C2C)
+\ Specials (4.5): icicles, drips, bubbles, clouds. State in speed bits 6,
+\ 5: 00 idle, 01 forming, 10 formed, 11 moving, each the last + &20 (and
+\ respawn's back to 00). (Before tick, which branches back to it.)
+.m_special
+{
+    LDA m_speed,X : AND #&60
+    BEQ idle
+    ASL A : ASL A : BCC forming             ; 01
+    BPL formed                              ; 10
+    \ 11: moving; tested on a character boundary.
+    LDA m_yf,X : BNE go
+    JMP vcheck
+.idle
+    LDA m_flags,X : AND #MF_NEG : BNE appear
+    JSR rng : CMP #10 : BCS wait            ; 10 in 256 a tick
+.appear
+    LDA #0 : STA m_sub,X : STA m_dy,X
+    JSR next_state                          ; 01
+    BNE ten                                 ; (always: the speed's bit 7)
+.forming
+    LDA m_sub,X : CMP #3 : BEQ advance      ; 10
+    INC m_sub,X
+.ten
+    LDA #10 : STA m_tick,X
+    BNE go                                  ; (always)
+.formed
+    \ Falls (up if NEG, at 10 in 256 a tick; down at once).
+    LDA m_flags,X : AND #MF_NEG : BEQ rise
+    JSR rng : CMP #10 : BCS wait
+    LDA #&FE : BNE set_dy                   ; (always)
+.rise
+    LDA #2
+.set_dy
+    STA m_dy,X
+.advance                                    ; 11 (or 10, from forming)
+    JSR next_state
+.go
+    JMP m_move
+\ The next state: + &20 (from 00, 01 or 10, so bit 7 stays set).
+.next_state
+    LDA m_speed,X : CLC : ADC #&20 : STA m_speed,X
+.wait
+    RTS
+}
+
+\ Tick (&8C2C). X = m_cur all through, and on the way out (monsters_tick
+\ relies on it: every path keeps X, or loads m_cur again).
 .tick
 {
     JSR rng                                 ; every monster, every tick
-    DEC m_tick,X : BPL not_yet              ; (X = m_cur, all through a tick)
+    DEC m_tick,X : BPL m_special.wait
     LDA m_speed,X : TAY : AND #&1F : STA m_tick,X
-    TYA : BPL normal
-    JMP m_special
-.not_yet
-    RTS
-.normal
+    TYA : BMI m_special
     LDA m_flags,X : LSR A : BCC moves       ; MF_STATIC
     LDA #0 : STA m_dx,X : STA m_dy,X
     BEQ to_move                             ; (always)
@@ -181,31 +226,33 @@ ENDIF
 \ Horizontal movers (4.3): tested only on a character boundary.
     LDA m_sub,X : BNE to_move
     JSR m_size                              ; m_w, m_h; mon_p = type map at the cell
-    LDA m_dx,X : BPL right
+    LDA mon_p : AND #31                     ; the column
+    LDY m_dx,X : BPL right
     \ Left: the column just before, mon_p - 1 (the column isn't 0, so
     \ mon_p's low byte isn't either: no borrow).
-    LDA mon_p : AND #31 : BEQ blocked
+    TAY : BEQ blocked
     DEC mon_p
     LDY #0 : BEQ column                     ; (always)
 .right
-    \ Right: the column just past the monster.
-    LDA mon_p : AND #31 : ADC m_w           ; (m_size leaves C clear)
-    CMP #32 : BCS blocked
+    \ Right: the column just past the monster, blocked if that is 32 or
+    \ more (at most 31 + 15: bit 5). (m_size leaves C clear; so does the
+    \ sum.)
+    ADC m_w : AND #32 : BNE blocked
     LDY m_w
 .column
     \ m_h cells down from (mon_p),Y must all be clear (anything but bit 1)...
-    LDA m_h : STA m_n
 .cells
     LDA (mon_p),Y : AND #&FD : BNE blocked
     TYA : ADC #32 : TAY                     ; (C is clear every way in)
     BCC no_page
     INC mon_p+1 : CLC
 .no_page
-    DEC m_n : BNE cells
+    DEC m_h : BNE cells                     ; (nothing reads m_h after)
     \ ... and unless it flies, the cell below them must be floor.
     LDA m_flags,X : AND #MF_FREE : BNE to_move
     LDA (mon_p),Y : AND #&21 : BNE to_move
 .blocked
+    \ (C is clear every way here, which m_blocked relies on.)
     TXA : TAY                               ; (m_blocked's m_dx,Y: the step across)
     BPL m_blocked                           ; (always)
 .to_move
@@ -233,15 +280,14 @@ ENDIF
     DEC mon_p+1
     BCC test                                ; (always)
 .down
-    \ Down: the row h below; blocked if that is row 24 or more, past the
-    \ end of the map (as the columns are 0-31).
-    LDY m_h
-.rows
-    LDA mon_p : ADC #32 : STA mon_p         ; (C clear)
+    \ Down: the row h below (h < 8: h * 32 is a byte, and the shifts
+    \ leave C clear); blocked if that is row 24 or more, past the end of
+    \ the map (as the columns are 0-31).
+    LDA m_h : ASL A : ASL A : ASL A : ASL A : ASL A
+    ADC mon_p : STA mon_p
     BCC row_ok
-    INC mon_p+1 : CLC
+    INC mon_p+1
 .row_ok
-    DEY : BNE rows
     LDA mon_p+1 : CMP #HI(type_map) + 3 : BCS vblocked
 .test
     \ The w cells ORed together: nothing but rope bits (2), and unless it
@@ -261,14 +307,14 @@ ENDIF
 
 \ Blocked: back to the start if it respawns, else it turns, and steps the
 \ same tick. m_dx,Y is the step that was blocked: Y is X across, X + NM
-\ (m_dy) up or down.
+\ (m_dy) up or down. C is clear (tick's and vcheck's paths here).
     ASSERT m_dy = m_dx + NM
 .m_blocked
 {
     LDA m_flags,X : AND #MF_RESPAWN : BEQ turn
     JMP respawn
 .turn
-    LDA #0 : SEC : SBC m_dx,Y : STA m_dx,Y
+    LDA #1 : SBC m_dx,Y : STA m_dx,Y        ; (C clear: 1 - step - 1)
     \ Fall into m_move.
 }
 
@@ -301,7 +347,9 @@ ENDIF
     INC m_cell_hi,X
     BNE framed                              ; (always)
 .up
-    SEC : LDA m_cell_lo,X : SBC #32 : STA m_cell_lo,X
+    \ (C clear: yf - dy is negative only by a borrow, as |dy| <= 4 and
+    \ yf < 8; so - 32.)
+    LDA m_cell_lo,X : SBC #31 : STA m_cell_lo,X
     BCS framed
     DEC m_cell_hi,X
 .framed
@@ -324,69 +372,18 @@ ZA_AUTO2 mframe
     CLC : LDA m_cell_hi,X : ADC #HI(type_map) : STA mon_p+1
     RTS
 
-\ Specials (4.5): icicles, drips, bubbles, clouds. State in speed bits 6, 5.
-.m_special
-{
-    LDA m_speed,X : AND #&60
-    BEQ idle
-    ASL A : ASL A : BCC forming             ; 01
-    BPL formed                              ; 10
-    \ 11: moving; tested on a character boundary.
-    LDA m_yf,X : BNE go
-    JMP vcheck
-.go
-    JMP m_move
-.idle
-    LDA m_flags,X : AND #MF_NEG : BNE appear
-    JSR rng : CMP #10 : BCS wait            ; 10 in 256 a tick
-.appear
-    LDA #0 : STA m_sub,X : STA m_dy,X
-    LDA #&20 : JSR set_special
-    BNE ten                                 ; (always)
-.forming
-    LDA m_sub,X : CMP #3 : BNE next_frame
-    LDA #&40 : JSR set_special
-    BNE go                                  ; (always)
-.next_frame
-    INC m_sub,X
-.ten
-    LDA #10 : STA m_tick,X
-    BNE go                                  ; (always)
-.formed
-    \ Falls (up if NEG, at 10 in 256 a tick; down at once).
-    LDA m_flags,X : AND #MF_NEG : BEQ rise
-    JSR rng : CMP #10 : BCS wait
-    LDA #&FE : BNE set_dy                   ; (always)
-.rise
-    LDA #2
-.set_dy
-    STA m_dy,X
-    LDA #&60 : JSR set_special
-    BNE go                                  ; (always)
-.wait
-    RTS
-}
-\ The special state (speed bits 6, 5) of monster X to A. Returns Z clear
-\ unless the speed byte is now 0.
-.set_special
-    STA m_n
-    LDA m_speed,X : AND #&9F : ORA m_n : STA m_speed,X
-    RTS
-
 \ Respawn (&8D4D), with the two room events.
 .respawn
 {
     JSR m_save_old
     LDA room : CMP #120 : BNE not120
     \ The dinosaur on its scooter stops.
-    LDA #MF_STATIC : STA m_flags,X
     INC m_base,X : INC m_base,X
-    JMP stop
+    BNE static                          ; (always: the bases are under &FE)
 .not120
     CMP #2 : BNE general
     \ The dog sits, for good: entry 0 (sitting) replaces entry 1.
     LDA #&0C : STA m_base,X
-    LDA #MF_STATIC : STA m_flags,X
     LDA #1 : STA dog_sat
     \ And the bone is gone, wherever it is: its footprint toggled in this
     \ room's map at its row and column (a stray &40 if it's elsewhere, as
@@ -396,7 +393,8 @@ ZA_AUTO2 mframe
     JSR erase_object
     LDA #0 : STA o_sel
     LDX m_cur
-.stop
+.static
+    LDA #MF_STATIC : STA m_flags,X
     LDA #0 : STA m_dx,X : STA m_sub,X
 .nosave
     JMP m_move_nosave
@@ -405,7 +403,7 @@ ZA_AUTO2 mframe
     \ Specials vanish now, and wait invisible.
     JSR m_erase
     LDX m_cur
-    LDA #0 : JSR set_special             ; idle
+    LDA m_speed,X : AND #&9F : STA m_speed,X    ; idle
     JMP m_to_start
 .back
     JSR m_to_start

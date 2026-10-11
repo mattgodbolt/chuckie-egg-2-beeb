@@ -19,7 +19,7 @@
     LDA egg_harry,X : STA h_cell,X
     DEX : BPL harry
     \ (ctrl, o_sel and dl_count need no clearing here: read_keys,
-    \ room_things and setup_monsters set them before anything reads them.)
+    \ room_things and monsters_tick set them before anything reads them.)
     INX : STX room_delta            ; (X = 0)
     JSR save_checkpoint
     JSR egg_init

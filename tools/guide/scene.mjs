@@ -30,10 +30,12 @@ try {
             const carry = spec.carry;
             await b.write("carried", [carry]);
             await b.write(b.addr("t_room") + carry, [(await b.peek(b.addr("t_room") + carry)) | 0x80]);
-            const type = await b.peek(b.addr("t_type") + carry);
-            const [, gfx, kind] = await b.read(b.addr("thing_types") + 3 * type, 3);
-            const frame = await b.read(b.addr("object_frames") + 2 * gfx, 2);
-            await b.write("carried_h", [(await b.peek(frame[0] | (frame[1] << 8))) & 7]);
+            // (As tools/passlog.mjs: thing_load's type and graphic.)
+            const type = carry < 8 ? carry : carry < 0x24 ? 8 + (carry >> 3) : await b.peek(b.addr("port_types") + carry - 0x24);
+            const gfx = type < 9 ? 4 * type + ((await b.peek("egg")) & 3) : await b.peek(b.addr("ty_gfx") + type);
+            const kind = await b.peek(b.addr("ty_kind") + type);
+            const frame = b.addr("objgfx") + b.syms.OBJ_OFFS[gfx];    // (data/objects.6502)
+            await b.write("carried_h", [(await b.peek(frame)) & 7]);
             await b.write("carrying_name", [(kind & 15) + 1]);
         }
         for (const [sym, bytes] of Object.entries(spec.pokes ?? {})) await b.write(sym, bytes);

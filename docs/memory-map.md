@@ -1,80 +1,61 @@
-# Memory map (BBC Model B)
+# Memory map
 
-Measured from the build's listing and symbols. Take live figures from the
-build output (`code &0E00-&xxxx (N bytes free)`), never from this file.
+Where things go, and why. The addresses of the port's own regions live in
+the source (`src/memory.6502`, the `SECTION`s in `src/main.6502` and
+`src/pages.6502`) and their live figures in the build's output and
+`build/symbols.json`: this file names them rather than copying their
+numbers, which would go stale. The addresses it does give are the
+constraints the layout has to fit around, set by the OS and the hardware.
 
-## The machine, as the port uses it
+## What the layout has to keep out of
 
-| Range | Size | Use |
-|---|---|---|
-| `&0000-&0027` | 40 | zero page, baron's allocator (`ZA_POOL`): the game uses `&00-&1F` (`MENU` keeps to `&70-&78`, which the OS leaves it) |
-| `&0028-&008E` | 103 | zero page, the game's permanent state and LowState's most used variables (`memory.6502`) |
-| `&008F` | 1 | the data bank's number, from `MENU` |
-| `&0090-&00FB` | 108 | zero page, the game's scratch variables (`Scratch`): the OS's until the game owns the interrupts; `&00D0` (a Master's VDU status) is left alone for a soft BREAK (decision 22) |
-| `&00FC` | 1 | the OS's IRQ entry saves A here |
-| `&00FD-&00FF` | 3 | free: neither MOS's IRQ entry touches them |
-| `&0100-&01BF` | 192 | `thing_init` and small tables (page 1, copied in at start-up) |
-| `&01C0-&01FF` | 64 | stack: the deepest measured is `&01EA` |
-| `&0200-&0203` | 4 | free (USERV, BRKV) |
-| `&0204-&0205` | 2 | IRQ1V: the game's handler |
-| `&0206-&0235` | 48 | small tables, over the OS's vectors (page 2; every reset puts the vectors back) |
-| `&0236-&03FF` | 458 | the OS's, untouched: what a soft BREAK reads, on either machine (decision 22) |
-| `&0400-&06FF` | 768 | attribute map |
-| `&0700-&09FF` | 768 | tile map |
-| `&0A00-&0CFF` | 768 | cell-type map |
-| `&0D00-&0D1F` | 32 | kept for the streaming edition's NMI routine (docs/streaming.md) |
-| `&0D20-&0D9E` | 127 | `LowState`: monsters, checkpoint, score, lives (to `&0D98`) |
-| `&0D9F-&0DFF` | 97 | the OS's, untouched: a Master's extended vectors, which its soft BREAK reads (decision 22) |
-| `&0E00-&4FFF` | 16,896 | code and data (copied down from `&1900`) |
-| `&5000-&7FFF` | 12,288 | screen: 256 x 192, MODE 1 pixels (decision 1) |
-| `&8000-&BFFF` | 16,384 | sideways RAM: the mailbox and the records, each room's body (packed room, monsters, bands) and the graphics groups they share (decisions 8, 13, 28) |
-| `&C000-&C2FF` | 768 | OS 1.20's font, read in place for text (decisions 4, 14) |
+| Range | What fixes it |
+|---|---|
+| `&00D0` | a Master's VDU status, read by its soft BREAK (decision 22) |
+| `&00FC` | the OS's IRQ entry saves A here |
+| `&0236-&03FF` | the OS's workspace beyond the vectors and page 3, which a soft BREAK reads on either machine (decision 22); the vectors below are reset on every BREAK, so tables can go over them |
+| `&080C-&083F` | the OS's sound workspace, rewritten by its 100Hz interrupt until `init_system` stops it |
+| `&0D00-&0D1F` | the NMI routine's space (`NMI_AREA`): the streaming edition's disc reader (docs/streaming.md) |
+| `&0D9F-&0DFF` | a Master's extended vectors, read by its soft BREAK (decision 22) |
+| `&7C00-&7FFF` | MODE 7's screen, where `MENU` runs between games |
+| `&8000-&BFFF` | the sideways RAM bank (CE2's data: decisions 8, 13, 28) |
+| `&C000-&C2FF` | OS 1.20's font, read in place for text (decisions 4, 14) |
 
-Between games (decision 13): `MENU` runs from `&1900` (below `&3000`) in MODE 7 (screen
-`&7C00`), loading `CE2DATA` at `&3000` to copy into the bank when the bank
-doesn't hold this build's. The game's state block is at `&5F00-&67A9`
-(256 bytes of header, keys and high scores for a saved game, then the
-regions from `&6000`): above anything `CE2` loads over (checked by the
-build), below MODE 7's screen, so it survives the reset, `MENU` and the
-game's reload.
+## The port's regions
+
+- **Zero page:** baron's allocator pool (`ZA_POOL`, below `ZP_FIXED`),
+  then `ZeroPage` (the permanent state and LowState's most used variables)
+  up to `DATA_BANK_ZP` (the data bank's number, from `MENU`), then
+  `Scratch` (the OS's until the game owns the interrupts). `MENU` keeps
+  to `mz_*` (`&70` up), which the OS leaves to a program.
+- **Page 1:** `Page1` (`thing_init` and small tables) below the stack;
+  the stack is 64 bytes (decision 19).
+- **Page 2:** small tables over the vectors, and the game's IRQ1V.
+- **`Maps`:** the attribute, tile and cell-type maps, 768 bytes each.
+- **`LowState`:** monsters, the checkpoint, score, lives (the part up to
+  `low_state_end` is the saved state).
+- **`Code`:** code and data, loaded above the DFS's workspace and copied
+  down (`main.6502`); in CE2S the room cache (`Cache`) follows it to `CODE_TOP`.
+- **The screen** (`screen`): 256 x 192 in MODE 1's pixels (decision 1).
+
+Between games (decision 13), `MENU` runs from the `Menu` section in
+MODE 7, loading `CE2DATA` to copy into the bank when the bank doesn't hold
+this build's. The game's state block (`SAVE_HDR`, then the regions from
+`STATE`; the high scores are `CE2HI`'s, decision 38) sits above anything
+`CE2` loads over (checked by the build) and below MODE 7's screen, so it
+survives the reset, `MENU` and the game's reload. CE2S keeps its mailbox
+at `MB_STREAM`, under the screen, and `MENU` leaves a copy at `MB_XFER`
+for its loader to put back (docs/streaming.md).
 
 Pages 1 and 2 are the OS's until the game owns the interrupts
 (`install_irq`) and reads the keyboard itself (`key_down`, straight from
 the System VIA): from then on the game makes no OS calls. Their tables
 load after the code in the `CE2` file and `copy_os_pages` puts them in
-place (`pages.6502`), only where a soft BREAK doesn't look: below the
-stack, and over page 2's vectors.
+place (`pages.6502`), only where a soft BREAK doesn't look.
 
 The game's start-up (`startup.6502`: the screen, the interrupts, the
 tables, a new game or a resumed one) runs once per load from the loader,
 in screen memory, and is overwritten by the first room's `cls`.
-
-## Code and data, 2026-10-04 (machines in)
-
-Historical (before the front end and decisions 19-22 moved things about);
-approximate, by each file's first label:
-
-| From | What | Bytes |
-|---|---|---|
-| `&0E12` | system, swram, irq | 395 |
-| `&0F9D` | screen | 358 |
-| `&1103` | room drawer | 1,162 |
-| `&158D` | status bar | 420 |
-| `&1731` | room unpacker (streaming) | 560 |
-| `&1961` | sprites | 563 |
-| `&1B94` | Harry | 2,056 |
-| `&239C` | monsters | 1,180 |
-| `&2838` | collisions | 647 |
-| `&2ABF` | objects | 2,023 |
-| `&32A6` | machines: truck, train, lifts | 1,120 |
-| `&3706` | game loop, deaths, keys | 900 |
-| `&3A8A` | room palettes, packed room offsets | 720 |
-| `&3D5A` | Harry's and the sprites' frame pointers | 328 |
-| `&3EA2` | monster table | 1,024 |
-| `&42A2` | object frame pointers, things, visits | 1,291 |
-| `&47AD` | object graphics | 1,256 |
-| `&4C95` | tile font | 480 |
-| `&4E75` | end: 395 bytes free (before the front end; now 251) | |
 
 ## The budget against a stock Model B (2026-10-04)
 

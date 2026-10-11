@@ -57,11 +57,12 @@ try {
             // its height (its type's frame) for the drop, its name shown.
             await b.write("carried", [carry]);
             await b.write(b.addr("t_room") + carry, [(await b.peek(b.addr("t_room") + carry)) | 0x80]);
-            const type = await b.peek(b.addr("t_type") + carry);
-            // (The types' inks, graphics and kinds are three tables of 67.)
-            const gfx = await b.peek(b.addr("thing_types") + 67 + type);
-            const kind = await b.peek(b.addr("thing_types") + 134 + type);
-            const frame = (await b.peek(b.addr("object_lo") + gfx)) | ((await b.peek(b.addr("object_hi") + gfx)) << 8);
+            // Its type and graphic, as objects.6502's thing_load works
+            // them out (tools/mkobjects.py's numbering).
+            const type = carry < 8 ? carry : carry < 0x24 ? 8 + (carry >> 3) : await b.peek(b.addr("port_types") + carry - 0x24);
+            const gfx = type < 9 ? 4 * type + ((await b.peek("egg")) & 3) : await b.peek(b.addr("ty_gfx") + type);
+            const kind = await b.peek(b.addr("ty_kind") + type);
+            const frame = b.addr("objgfx") + b.syms.OBJ_OFFS[gfx];    // (data/objects.6502)
             await b.write("carried_h", [(await b.peek(frame)) & 7]);   // (sprite.6502's header)
             await b.write("carrying_name", [(kind & 15) + 1]);
         }

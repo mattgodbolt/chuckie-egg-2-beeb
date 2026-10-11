@@ -172,9 +172,6 @@ SECTION Scratch, org = &90, guard = &FC, virtual = TRUE
 .m_entry       SKIP 1
 .cf_x          SKIP 1
 .m_cur         SKIP 1
-.m_c           SKIP 1
-.m_n           SKIP 1
-.m_ropes       SKIP 1
 .m_w           SKIP 1
 .m_h           SKIP 1
 .dl_i          SKIP 1
@@ -213,9 +210,6 @@ SECTION Scratch, org = &90, guard = &FC, virtual = TRUE
 \ ten of room_ula, after it, in one go)
 .status_ula    SKIP 6
 .room_ula      SKIP 16
-.drop_row      SKIP 1
-.drop_col      SKIP 1
-.drop_g        SKIP 1
 \ (game.6502)
 .ed_n          SKIP 1
 .save_armed    SKIP 1
@@ -240,14 +234,14 @@ ENDIF
 ENDSECTION
 
 \ The game's state on its way to and from the front end (state.6502,
-\ menu.6502): a saved game is the 256 bytes from SAVE_HDR (MENU's header,
-\ the keys and the high-score table), then the regions at STATE. Above
-\ anything CE2 loads over (main.6502 checks) and below MODE 7's screen,
-\ so it survives the reset, MENU and the game's reload.
-SAVE_HDR   = &5F00          ; "CE2SAVE" and the build stamp, 40 bytes
-SAVE_KEYS  = &5F28
-SAVE_TABLE = &5F30          ; 150 bytes (state.6502: HS_LEN)
+\ menu.6502): a saved game is the 64 bytes from SAVE_HDR (MENU's header
+\ and the keys; not the high scores, which are CE2HI's: decision 38), then
+\ the regions at STATE. Above anything CE2 loads over (main.6502 checks)
+\ and below MODE 7's screen, so it survives the reset, MENU and the game's
+\ reload.
 STATE      = &6000
+SAVE_HDR   = STATE - 64     ; "CE2SAVE" and the build stamp (menu.6502 checks)
+SAVE_KEYS  = STATE - 8
 
 \ The streaming edition's mailbox (docs/streaming.md), with no sideways
 \ bank to keep it in: CE2DATA's first bytes (its magic and state.6502's

@@ -43,13 +43,20 @@ IF DEFINED(STREAM)
 .stream_init
 {
     SEI                         ; interrupts stay off until install_irq
+    \ REC_BASE bytes: a page and the rest, or less than a page (a short
+    \ build stamp; the rest's count would wrap and copy over this loader).
     LDX #0
 .box
     LDA MB_XFER,X : STA MB_STREAM,X
-    INX : BNE box
+    INX
+IF REC_BASE <= &100
+    CPX #LO(REC_BASE) : BNE box
+ELSE
+    BNE box
 .rest
     LDA MB_XFER + &100,X : STA MB_STREAM + &100,X
     INX : CPX #REC_BASE - &100 : BNE rest
+ENDIF
     LDX #nmi_end - NMI_AREA - 1
 .nmi
     LDA nmi_load,X : STA NMI_AREA,X

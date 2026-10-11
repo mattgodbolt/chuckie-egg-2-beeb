@@ -86,6 +86,11 @@ is in the top nibble and its low bit in the bottom one: colour 1 = `&0F`,
 The game sets MODE 1 in the hardware (`init_system`): `MENU` leaves the OS
 in MODE 7, and an OS mode change would clear the state block at `&5F00`.
 
+## Finding bytes or cycles
+
+`docs/optimising.md`: how to look (exhaustively, a checklist, the oracles
+at hand, the data questioned too) and the idioms that keep paying.
+
 ## Checks
 
 **`make check` before every commit, and read its output.** (Once, a commit

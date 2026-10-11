@@ -5,6 +5,31 @@ and cycles (a byte saved in main RAM is a byte more of CE2S's room cache,
 and room for new things like music). This is what kept coming up, to
 apply anywhere. The findings themselves went in as commits.
 
+## How to look (why this pass found three times the earlier ones)
+
+Earlier squeezes were aimed at a number (the cache past 1,021; claw back
+what a fix cost) and stopped when it was reached: the big structural
+moves, a skim of the rest. This pass found about 1,200 bytes in ~9K of
+resident code, nearly all of it 1-5 bytes at a time, each a proof about
+one instruction. What made the difference:
+
+1. **Exhaustive, not opportunistic.** Every routine, a dozen instructions
+   at a time, each asked the same questions. Split the code so each
+   reader owns a few hundred lines and can afford to be thorough.
+2. **A checklist to search with** (the sections below): test each line
+   against each pattern, rather than waiting to notice something.
+3. **The measuring loop in the reader's hands**: build, read the arena,
+   run the exact oracles (`screencmp`, `make passes`, `roomcmp`). Proving
+   a carry is known is only worth it if a test catches you when you're
+   wrong; with them, go round again until a round finds little.
+4. **Question the data, not just the code.** The biggest single win came
+   from asking of every resident table who reads it and when: only on
+   room entry (into the records), a run of numbers (a range, not a
+   table), or left behind by a format change (now redundant).
+5. **Shared structures collide.** Tables several passes reshape
+   (`band_ula`, the frame table, the scratch zero page, the reader's slot)
+   need one owner, or the passes run one after another.
+
 ## Space first, where it counts
 
 - **Every byte of main-RAM code or data is a byte of CE2S's cache.**

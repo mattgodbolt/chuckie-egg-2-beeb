@@ -26,15 +26,14 @@ KIND_FIXED = &40            ; kind bit 6 (with bit 7): a machine part
     ZA_AUTO1 tw
     ZA_AUTO1 th
     ZA_AUTO1 txor
-    STX tc_x
     LDA #0 : STA cell_hit
     LDY #&40
-    CPX #&26 : BNE not_ladder
-    LDY #&42
-.not_ladder
-    CPX #&25 : BNE not_girder
-    LDY #&41
-.not_girder
+    CPX #&25 : BEQ is_girder
+    CPX #&26 : BNE store
+    INY                             ; the ladder &42
+.is_girder
+    INY                             ; the girder &41
+.store
     STY txor
     JSR thing_load
     \ The footprint: h x w cells from the thing's cell.
@@ -55,8 +54,7 @@ KIND_FIXED = &40            ; kind bit 6 (with bit 7): a machine part
     INC tp+1
 .no_carry
     DEC th : BNE row
-    LDX tc_x
-    RTS
+    RTS                             ; (X kept: thing_load keeps it)
 }
 
 \ Load thing X's position, ink and graphic into the current-thing record,
@@ -72,29 +70,28 @@ KIND_FIXED = &40            ; kind bit 6 (with bit 7): a machine part
     JSR row_col_cell
     STA o_cell : STY o_cell+1
     LDA #1 : STA o_sel              ; (the original: the attribute's high byte)
-    LDA tl_t : ASL A : CLC : ADC tl_t : TAY
+    LDA tl_t : ASL A : ADC tl_t : TAY     ; (ASL: carry clear, as the type < 86)
     LDA thing_types,Y : STA o_ink
-    LDA thing_types+2,Y : STA tl_kind
+    LDA thing_types+2,Y : PHA               ; its kind, returned in A
     LDA thing_types+1,Y : ASL A : TAY       ; its graphic
     LDA object_frames,Y : STA o_frame
     LDA object_frames+1,Y : STA o_frame+1
+    PLA
     RTS
 .fixed
     \ A thing that never moves, so in this room (the round robin found it
     \ here): its row, column and type in the body, by its place among the
     \ room's (room_load's room_fixed).
-    LDY #0
+    LDY #&FF : TXA
 .find
-    TXA : CMP room_fixed,Y : BEQ found
-    INY : BNE find                  ; (always: it's there)
-.found
+    INY : CMP room_fixed,Y : BNE find   ; (it's there)
     STY tl_t : TYA : ASL A : ADC tl_t       ; 3 * its place (carry clear)
     ADC rb_things : TAY
     LDA (rb),Y : PHA                        ; row
     INY : INY : LDA (rb),Y : STA tl_t       ; type
     DEY : LDA (rb),Y : TAY                  ; column
     PLA
-    JMP place
+    BCC place                       ; (always: the body's offsets are bytes)
 }
 
 \ The cell at row A, column Y: its low byte in A, its high byte in Y. X is
@@ -115,12 +112,12 @@ KIND_FIXED = &40            ; kind bit 6 (with bit 7): a machine part
 \ portable things in it; select none. Nothing is drawn yet.
 .room_things
 {
-    LDX #0
+    LDX #&28                        ; (the footprints EOR: any order)
 .loop
     LDA t_room,X : CMP room : BNE next
     JSR thing_cells
 .next
-    INX : CPX #&29 : BNE loop
+    DEX : BPL loop
     LDA #0 : STA o_sel
     RTS
 }
@@ -144,57 +141,23 @@ KIND_FIXED = &40            ; kind bit 6 (with bit 7): a machine part
 .found
     STX o_index
     JSR thing_load
-    LDA tl_kind : STA o_kind
+    STA o_kind
     RTS
 }
-
-\ Draw the current thing (the original's interrupt ORs it on every frame).
-.draw_object
-{
-    LDA o_sel : BEQ none
-    LDX #o_cell : JMP sp_draw_at
-.none
-    RTS
-}
-
-\ Erase the current thing where it is (&884D then &7FC9).
-.erase_object
-    LDX #o_cell : JMP sp_erase_at
-
-\ Draw or erase the sprite whose record is at X in zero page (memory.6502):
-\ cell (2), yf, frame (2), and to draw, the ink.
-.sp_draw_at
-    LDA 5,X
-\ ... in Spectrum colour A.
-.sp_draw_ink
-    STA sp_ink
-    JSR sp_record
-    JMP draw_sprite
-.sp_erase_at
-    JSR sp_record
-    JMP erase_image
-.sp_record
-    LDA 0,X : STA sp_cell
-    LDA 1,X : STA sp_cell+1
-    LDA 2,X : STA sp_yf
-    LDA 3,X : STA sp_frame
-    LDA 4,X : STA sp_frame+1
-    RTS
 
 \ PowerOn (&9606): the generator on; and the restart point is moved.
 .power_on
 {
-    LDA factory : ORA #1 : STA factory
+    LSR factory : SEC : ROL factory         ; bit 0 on
     LDX #&34 : LDY #&37 : JSR power_signs
-    JSR toy_check
-    JSR egg_check
     \ The restart record (&962F): room 115, row 21, column 30, facing
-    \ left, walking.
+    \ left, walking. (Before the checks, which don't read it.)
     LDX #CHECKPOINT_VARS
 .copy
     LDA power_restart,X : STA checkpoint,X
     DEX : BPL copy
-    RTS
+    JSR toy_check
+    JMP egg_check
 }
 \ In save_checkpoint's layout: h_cell..h_frame, then the room.
 .power_restart
@@ -217,7 +180,7 @@ KIND_FIXED = &40            ; kind bit 6 (with bit 7): a machine part
     \ (&95FF) Jumped across from the left: on; from the right: off.
     LDA h_dx : BPL power_on
     \ (&9649)
-    LDA factory : AND #&FE : STA factory
+    LSR factory : ASL factory               ; bit 0 off
     LDX #&37 : LDY #&34 : JSR power_signs
     JMP train_reset
 .done
@@ -227,8 +190,8 @@ KIND_FIXED = &40            ; kind bit 6 (with bit 7): a machine part
 \ Harry touched the current thing (&9515).
 .touch_thing
 {
-    LDA o_kind : BPL bonus
-    AND #KIND_FIXED : BNE fixed_thing
+    BIT o_kind : BPL bonus
+    BVS fixed_thing                         ; (KIND_FIXED, bit 6)
 \ Take (&956B)
     BIT ctrl : BVC done                     ; TAKE held
     LDA take_latch : BNE done
@@ -239,10 +202,10 @@ KIND_FIXED = &40            ; kind bit 6 (with bit 7): a machine part
 .not_ladder
     LDA carried : BMI hands_empty
     CMP #&24 : BCS done                     ; hands full: only a basket...
-    TXA : LSR A : LSR A : LSR A : TAY       ; (the thing's group)
+    TXA : LSR A : LSR A : LSR A : TAX       ; (the thing's group)
     ORA #&20 : CMP carried : BNE done       ; ... of the thing's group
-    LDA in_basket,Y : CLC : ADC #1 : STA in_basket,Y
-    JMP out_of_world
+    INC in_basket,X
+    BNE out_of_world                        ; (always: at most 8)
 .hands_empty
     LDA o_kind : AND #15 : CLC : ADC #1 : JSR set_carrying
     LDX o_index : STX carried
@@ -259,20 +222,48 @@ KIND_FIXED = &40            ; kind bit 6 (with bit 7): a machine part
 .bonus
     \ A bonus item: kind x 100 x egg points, plus random tens and units.
     LDX o_index : JSR thing_off             ; gone for this egg
-    LDA egg : STA bonus_n
-.score_loop
+    \ (The original adds the thousand and the hundreds egg times over;
+    \ adding each egg times is the same sum.)
     LDA o_kind
     CMP #10 : BCC hundreds
     SBC #10 : PHA
-    LDA #1 : LDX #6 : JSR add_score         ; a thousand
+    LDA #1 : LDX #6 : JSR times_egg         ; a thousand
     PLA
 .hundreds
-    LDX #7 : JSR add_score
-    DEC bonus_n : BNE score_loop
+    LDX #7 : JSR times_egg
     JSR rng : AND #7 : LDX #8 : JSR add_score
     JSR rng : AND #7 : LDX #9 : JSR add_score
-    JMP erase_object
+    \ Fall into erase_object.
 }
+\ Erase the current thing where it is (&884D then &7FC9).
+.erase_object
+    LDX #o_cell
+\ Draw or erase the sprite whose record is at X in zero page (memory.6502):
+\ cell (2), yf, frame (2), and to draw, the ink.
+.sp_erase_at
+    JSR sp_record
+    JMP erase_image
+\ Draw the current thing (the original's interrupt ORs it on every frame).
+.draw_object
+    LDA o_sel : BEQ sp_record_done
+    LDX #o_cell
+    \ Fall into sp_draw_at.
+.sp_draw_at
+    LDA 5,X
+\ ... in Spectrum colour A.
+.sp_draw_ink
+    STA sp_ink
+    JSR sp_record
+    JMP draw_sprite
+.sp_record
+    LDA 0,X : STA sp_cell
+    LDA 1,X : STA sp_cell+1
+    LDA 2,X : STA sp_yf
+    LDA 3,X : STA sp_frame
+    LDA 4,X : STA sp_frame+1
+.sp_record_done
+    RTS
+
 
 \ The power's signs: things X and X+1 into the world, Y and Y+1 out of it.
 .power_signs
@@ -288,11 +279,6 @@ KIND_FIXED = &40            ; kind bit 6 (with bit 7): a machine part
     LDA t_room,X : AND #&7F : STA t_room,X
     RTS
 
-\ The train back to its start (&9AFD).
-.train_reset
-    LDA #74 : STA train_room
-    LDA #6 : STA train_pos
-    RTS
 
 \ The girder back to its start, the gap open (&9934; and a death, &8A29).
 .girder_home
@@ -338,15 +324,16 @@ KIND_FIXED = &40            ; kind bit 6 (with bit 7): a machine part
     STX drop_x
     \ Its column: Harry's left column facing left, his right facing right;
     \ its bottom level with his feet.
-    LDA h_cell : AND #31 : STA drop_col
-    LDA h_face : BNE left
-    LDY #1 : LDA (h_frame),Y
-    CLC : ADC drop_col : STA drop_col : DEC drop_col
+    LDA h_cell : AND #31
+    LDY h_face : BNE left
+    INY : CLC : ADC (h_frame),Y : SBC #0    ; + his width - 1 (carry clear)
 .left
+    STA drop_col
     LDA h_cell : LSR A : LSR A : LSR A : LSR A : LSR A : STA drop_row
     LDA h_cell+1 : ASL A : ASL A : ASL A : ORA drop_row  ; Harry's top row
-    \ + h - 1 = his bottom row (h = 2), - the thing's height + 1
-    CLC : ADC #2 : SEC : SBC carried_h : STA drop_row
+    \ + h - 1 = his bottom row (h = 2), - the thing's height + 1 (the
+    \ ASLs of 0-2 cleared the carry: + 3 - 1)
+    ADC #3 : SBC carried_h : STA drop_row
     JSR swap_place                          ; tried there, the old place kept
     JSR thing_cells
     LDA cell_hit : BNE refused
@@ -355,27 +342,24 @@ KIND_FIXED = &40            ; kind bit 6 (with bit 7): a machine part
     LDA #&FF : STA carried
     LDA #0 : JSR set_carrying
     LDX drop_x
-    CPX #&27 : BNE not_toy
-    JMP toy_placed
-.not_toy
+    CPX #&27 : BEQ toy_placed
     \ Gravity exists only for hoppers: the cell under its left column must
     \ be empty, the column 9-23, the room and the thing a match.
     LDX #o_cell : JSR under_record : BNE no_fall
     LDX drop_x
     LDA o_cell : AND #31
-    CMP #9 : BCC no_fall
-    CMP #24 : BCS no_fall
-    LDY #3
+    SBC #9 - 1 : CMP #24 - 9 : BCS no_fall  ; 9-23 (under_record: carry clear)
+    LDA room : LDY #3
 .find
-    LDA hopper_rooms,Y : CMP room : BEQ hopper
+    CMP hopper_rooms,Y : BEQ hopper
     DEY : BPL find
 .no_fall
     RTS
 .hopper
-    TYA : ORA #&20 : STA drop_g
-    CPX drop_g : BEQ falls                  ; its basket (&20 + Y)
-    TXA : LSR A : LSR A : LSR A : STA drop_g
-    CPY drop_g : BEQ falls                  ; or one of its group (Y)
+    STY drop_g
+    TXA : EOR #&20 : CMP drop_g : BEQ falls ; its basket (&20 + Y)
+    TXA : LSR A : LSR A : LSR A
+    CMP drop_g : BEQ falls                  ; or one of its group (Y)
     RTS
 .falls
     \ (&9796) Out of the world, its footprint lifted; it falls 2 lines a
@@ -399,6 +383,17 @@ KIND_FIXED = &40            ; kind bit 6 (with bit 7): a machine part
     LDA t_col,X : LDY drop_col : STA drop_col : TYA : STA t_col,X
     RTS
 }
+\ ToyPlaced (&985B): the toy dropped in room 48 with Harry at column 16 or
+\ right.
+.toy_placed
+{
+    LDA room : CMP #48 : BNE done
+    LDA h_cell : AND #31 : CMP #16 : BCC done
+    LDA factory : ORA #8 : STA factory
+    JMP egg_check
+.done
+    RTS
+}
 \ The hoppers' rooms: the toy parts' (basket &20), the milk's, the
 \ cocoa's, the sugar's.
 .hopper_rooms
@@ -409,13 +404,11 @@ KIND_FIXED = &40            ; kind bit 6 (with bit 7): a machine part
 .under_record
 {
     ZA_AUTO2 p
-    LDA 3,X : STA p
-    LDA 4,X : STA p+1
-    LDY #0 : LDA (p),Y                      ; the height (the shifts drop
+    LDA (3,X)                               ; the height (the shifts drop
     ASL A : ASL A : ASL A : ASL A : ASL A   ; the header's other bits: sprite.6502)
     CLC : ADC 0,X : STA p
     LDA 1,X : ADC #HI(type_map) : STA p+1
-    LDA (p),Y
+    LDY #0 : LDA (p),Y
     RTS
 }
 
@@ -423,9 +416,7 @@ KIND_FIXED = &40            ; kind bit 6 (with bit 7): a machine part
 \ its left column is taken, then delivered.
 .falling
 {
-    LDA f_thing : BPL active
-    RTS
-.active
+    LDA f_thing : BMI done
     LDX #f_cell
     LDA f_yf : BNE step_down
     \ On a cell boundary: is the cell under it taken?
@@ -436,7 +427,7 @@ KIND_FIXED = &40            ; kind bit 6 (with bit 7): a machine part
     JSR sp_erase_at
     LDA f_yf : CLC : ADC #2 : AND #7 : STA f_yf
     BNE same_cell
-    CLC : LDA f_cell : ADC #32 : STA f_cell
+    LDA f_cell : ADC #32 : STA f_cell       ; (carry clear from 6 + 2)
     BCC same_cell
     INC f_cell+1
 .same_cell
@@ -445,6 +436,7 @@ KIND_FIXED = &40            ; kind bit 6 (with bit 7): a machine part
     JSR sp_erase_at                 ; where it is
     LDA f_thing : JSR deliver       ; (which can read f_thing)
     LDA #&FF : STA f_thing
+.done
     RTS
 }
 
@@ -496,29 +488,31 @@ KIND_FIXED = &40            ; kind bit 6 (with bit 7): a machine part
 \ ToyCheck (&989E): with power and all eight parts, the toy.
 .toy_check
 {
-    LDA factory : AND #3 : CMP #1 : BNE done    ; power on, no toy yet
-    LDA delivered : CMP #8 : BNE done
+    LDA factory : AND #3 : CMP #1 : BNE wipe_lights.done    ; power on, no toy yet
+    LDA delivered : CMP #8 : BNE wipe_lights.done
     LDX #7
 .lights
     LDA t_room+&29,X : ORA #&80 : STA t_room+&29,X
     DEX : BPL lights
     LDX #&27 : JSR thing_on             ; THE TOY!
-    LDA factory : ORA #2 : STA factory
+    INC factory : INC factory           ; bit 1 on (bits 0-1 were 01)
     LDA #2 : JSR reward                 ; 20,000 a time
-    LDA room : CMP #95 : BNE done
-    JMP wipe_lights
-.done
-    RTS
+    LDA room : CMP #95 : BNE wipe_lights.done
+    \ Fall into wipe_lights.
 }
 
-\ ToyPlaced (&985B): the toy dropped in room 48 with Harry at column 16 or
-\ right.
-.toy_placed
+
+\ The toy maker's lights wiped when the toy is made in front of you (the
+\ original prints spaces in black over them, {AT 21,9}..{AT 22,9}). Black
+\ is room 95's paper, logical 0 in every band of its (src/data/rooms.6502,
+\ bands.6502), so the cells are cleared to zero.
+.wipe_lights
 {
-    LDA room : CMP #48 : BNE done
-    LDA h_cell : AND #31 : CMP #16 : BCC done
-    LDA factory : ORA #8 : STA factory
-    JMP egg_check
+    LDA #0 : LDX #4 * 16 - 1
+.loop
+    STA screen + 16 * (21 * 32 + 9),X
+    STA screen + 16 * (22 * 32 + 9),X
+    DEX : BPL loop
 .done
     RTS
 }
@@ -529,7 +523,7 @@ KIND_FIXED = &40            ; kind bit 6 (with bit 7): a machine part
     LDA factory : ORA #4 : CMP #&EF : BNE done
     LDX #&28 : JSR thing_on             ; THE EGG!
     LDA factory : ORA #&10 : STA factory
-    LDX #&27 : JSR thing_off            ; the toy is used up
+    DEX : JSR thing_off                 ; the toy (&27) is used up
     LDA #2 : JSR reward
     LDA room : CMP #48 : BNE done
     LDX #&27 : JSR thing_cells          ; the toy's footprint and picture go
@@ -538,28 +532,8 @@ KIND_FIXED = &40            ; kind bit 6 (with bit 7): a machine part
     RTS
 }
 
-\ SetCarrying (&9986): the status bar's name, 0 NOTHING to 10 BASKET.
-.set_carrying
-    STA carrying_name
-    JMP draw_carrying
-
-\ AddScore (&A0BD): add A to score digit X, one carry rippled up (lost
-\ past digit 0), each changed digit redrawn.
-.add_score
-{
-    CLC : ADC score,X
-    CMP #10 : BCC store
-    SBC #10 : STA score,X
-    CPX #0 : BEQ redraw
-    TXA : PHA
-    DEX : LDA #1 : JSR add_score    ; (recursive: the digit on the stack)
-    PLA : TAX
-.redraw
-    LDA score,X
-.store
-    STA score,X
-    JMP draw_digit
-}
+\ (set_carrying, add_score, reward and extra_life are in status.6502,
+\ falling into what they draw.)
 
 \ Add A to score digit X, egg times.
 .times_egg
@@ -575,41 +549,9 @@ KIND_FIXED = &40            ; kind bit 6 (with bit 7): a machine part
     RTS
 }
 
-\ The factory's rewards: A x 10,000 x egg, and a life.
-.reward
-    LDX #5 : JSR times_egg
-    \ Fall into extra_life.
-\ ExtraLife (&A2DD): at most 255.
-.extra_life
-{
-    INC lives : BNE ok
-    DEC lives
-.ok
-    JMP draw_lives
-}
-
-\ The toy maker's lights wiped when the toy is made in front of you (the
-\ original prints spaces in black over them, {AT 21,9}..{AT 22,9}). Black
-\ is room 95's paper, logical 0 in every band of its (src/data/rooms.6502,
-\ bands.6502), so the cells are cleared to zero.
-.wipe_lights
-{
-    LDA #0 : LDX #4 * 16 - 1
-.loop
-    STA screen + 16 * (21 * 32 + 9),X
-    STA screen + 16 * (22 * 32 + 9),X
-    DEX : BPL loop
-    RTS
-}
-
 \ EggInit (&9A80): every new egg, the factory back as it was.
 .egg_init
 {
-    \ Every room's visit bonus again.
-    LDX #15 : LDA #0
-.visit_reset
-    STA visited,X
-    DEX : BPL visit_reset
     \ The portable things back where they start.
     LDX #&28
 .init
@@ -628,11 +570,16 @@ KIND_FIXED = &40            ; kind bit 6 (with bit 7): a machine part
     STA t_room,X
     INX : BNE world
     LDA #&FF : STA carried : STA f_thing
-    LDA #0
+    \ Every room's visit bonus again.
+    LDX #15 : LDA #0
+.visit_reset
+    STA visited,X
+    DEX : BPL visit_reset
     LDX #in_basket + 3 - factory
 .counts
     STA factory,X               ; factory, take_latch, delivered, in_basket
     DEX : BPL counts
+    STA dog_sat                 ; the running dog, not the sitting one
     JSR set_carrying            ; NOTHING
     \ More monsters each egg: entries 1 .. min(130 + 25 * egg, 255).
     LDA egg : CMP #5 : BCC few
@@ -641,19 +588,25 @@ KIND_FIXED = &40            ; kind bit 6 (with bit 7): a machine part
     TAX
     LDA #&82
 .add
-    CLC : ADC #&19 : DEX : BNE add
+    CLC : ADC #&19 : DEX : BNE add  ; (the last never past 255: carry clear)
     STA mon_limit               ; the last entry on (setup_monsters)
-    LDA #0 : STA dog_sat        ; and the running dog, not the sitting one
     LDA #4 : STA truck_strip    ; (&9AF5)
     \ This egg's toy (&9B08): motorbike, car, boat, jet, then again.
-    LDA egg : SEC : SBC #1 : AND #3 : TAX
+    LDA egg : AND #3 : TAX
     LDA toy_frames,X
     LDX #0
 .gfx
     STA thing_types+1,X
-    CLC : ADC #1
+    ADC #1                      ; (carry clear: the ADCs above, X < 27)
     INX : INX : INX : CPX #27 : BNE gfx
-    JMP train_reset
-.toy_frames
-    EQUB &25, &2E, &37, &40     ; each toy's first graphic
+    \ Fall into train_reset.
 }
+\ The train back to its start (&9AFD).
+.train_reset
+    LDA #74 : STA train_room
+    LDA #6 : STA train_pos
+    RTS
+\ Each toy's first graphic (egg_init), by egg AND 3: motorbike for eggs
+\ 1, 5 ..., car, boat, jet.
+.toy_frames
+    EQUB &40, &25, &2E, &37

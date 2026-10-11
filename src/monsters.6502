@@ -20,16 +20,25 @@ MF_STATIC  = &01            ; never moves
 
 \ (mon_types, 4 bytes a type: ink, base, flags, speed.)
 
+\ The noise flag (&91B5): set while the train is drawn with the power on.
+\ The noise routine (&92E7) is called nine times a pass and, while the flag
+\ is set, takes a random number each time, so the calls stay in the
+\ original's places even before there is sound.
+.noise
+    LDA noise_flag : BEQ rng.done
+    \ Fall into rng.
 \ The RNG (&918A): 32 bits, big-endian, shifted left with bit 30 EOR bit
 \ 27 coming in at the bottom; returns the new top byte. Called once for
 \ every monster every tick, so the calls must stay in the original's
 \ order. X and Y are kept (the tick relies on X).
 .rng
 {
-    LDA rng_state : AND #&48 : CLC : ADC #&38   ; bit 6 = bit 6 EOR bit 3
+    LDA rng_state : AND #&48 : ADC #&38         ; bit 6 = bit 6 EOR bit 3 (a carry
+                                                ; in only sets bit 0)
     ASL A : ASL A                               ; ... into the carry
     ROL rng_state+3 : ROL rng_state+2 : ROL rng_state+1 : ROL rng_state
     LDA rng_state
+.done
     RTS
 }
 
@@ -48,21 +57,20 @@ MF_STATIC  = &01            ; never moves
     DEC left : BMI done
     INY : STY m_entry
     LDA (rb),Y : BEQ dog_sits
-    CMP #1 : BEQ dog_runs
-    CMP mon_limit : BEQ on : BCC on
-.off
-    LDA m_entry : CLC : ADC #3 : TAY
-    JMP scan
-.dog_sits
-    LDA dog_sat : BEQ off
-    BNE on                      ; (always)
-.dog_runs
-    LDA dog_sat : BNE off
+    CMP #1 : BNE limit
+    LDX dog_sat : BNE off       ; (else on: mon_limit is at least 155)
+.limit
+    CMP mon_limit : BEQ on : BCS off
 .on
     LDX m_count : CPX #NM : BCS off
     JSR setup_monster
     INC m_count
-    JMP off
+.off
+    LDY m_entry : INY : INY : INY
+    BNE scan                    ; (always: the entry's type is in the body)
+.dog_sits
+    LDA dog_sat : BEQ off
+    BNE on                      ; (always)
 .done
     RTS
 }
@@ -83,20 +91,19 @@ MF_STATIC  = &01            ; never moves
     LDA #0 : STA m_sub,X
     STA m_dx,X : STA m_dy,X
     \ The step: 1, or 2 when fast; negative if NEG.
-    LDY #1
     LDA m_flags,X : AND #MF_NEG : BEQ positive
-    LDY #&FF
+    LDA #&FE
 .positive
-    TYA
+    ORA #1
     LDY m_flags,X : BPL slow
     ASL A
 .slow
     TAY
-    LDA m_flags,X : AND #MF_VERT : BNE vertical
-    TYA : STA m_dx,X
-    JMP choose_frame
-.vertical
+    LDA m_flags,X : AND #MF_VERT : BEQ across
     TYA : ASL A : STA m_dy,X
+    BNE choose_frame                        ; (always)
+.across
+    TYA : STA m_dx,X
     \ Fall into choose_frame.
 }
 
@@ -105,7 +112,7 @@ MF_STATIC  = &01            ; never moves
 {
     LDA m_sub,X
     LDY m_dx,X : BPL right
-    CLC : ADC #4
+    ORA #4                                  ; (sub is 0-3)
 .right
     LDY m_flags,X : BPL slow
     LSR A
@@ -132,14 +139,13 @@ MF_STATIC  = &01            ; never moves
 \ go on the draw list.
 .monsters_tick
 {
-    LDA #0 : STA dl_count
-    LDX #0
+    LDX #0 : STX dl_count
 .loop
     CPX m_count : BEQ done
     STX m_cur
     JSR tick
     LDX m_cur : INX
-    JMP loop
+    BNE loop                                ; (always)
 .done
     RTS
 }
@@ -149,54 +155,48 @@ MF_STATIC  = &01            ; never moves
 {
     JSR rng                                 ; every monster, every tick
     DEC m_tick,X : BPL not_yet              ; (X = m_cur, all through a tick)
-    LDA m_speed,X : AND #&1F : STA m_tick,X
-    LDA m_speed,X : BPL normal
+    LDA m_speed,X : TAY : AND #&1F : STA m_tick,X
+    TYA : BPL normal
     JMP m_special
 .not_yet
     RTS
 .normal
-    LDA m_flags,X : AND #MF_STATIC : BEQ moves
+    LDA m_flags,X : LSR A : BCC moves       ; MF_STATIC
     LDA #0 : STA m_dx,X : STA m_dy,X
     BEQ to_move                             ; (always)
 .moves
-    LDA m_flags,X : AND #MF_VERT : BNE vertical
+    AND #MF_VERT DIV 2 : BNE vertical       ; (the flags, shifted down one)
 \ Horizontal movers (4.3): tested only on a character boundary.
     LDA m_sub,X : BNE to_move
     JSR m_size                              ; m_w, m_h; mon_p = type map at the cell
-    LDA m_cell_lo,X : AND #31 : STA m_c
-    LDA m_dx,X : BMI left
-    \ Right: the column just past the monster.
-    LDA m_c : CLC : ADC m_w : CMP #32 : BCS blocked
-    LDY m_w
-    JMP column
-.left
-    LDA m_c : BEQ blocked
-    \ The column just before: mon_p - 1.
-    LDA mon_p : BNE no_borrow
-    DEC mon_p+1
-.no_borrow
+    LDA m_dx,X : BPL right
+    \ Left: the column just before, mon_p - 1 (the column isn't 0, so
+    \ mon_p's low byte isn't either: no borrow).
+    LDA mon_p : AND #31 : BEQ blocked
     DEC mon_p
-    LDY #0
+    LDY #0 : BEQ column                     ; (always)
+.right
+    \ Right: the column just past the monster.
+    LDA mon_p : AND #31 : ADC m_w           ; (m_size leaves C clear)
+    CMP #32 : BCS blocked
+    LDY m_w
 .column
     \ m_h cells down from (mon_p),Y must all be clear (anything but bit 1)...
     LDA m_h : STA m_n
 .cells
     LDA (mon_p),Y : AND #&FD : BNE blocked
-    TYA : CLC : ADC #32 : TAY
+    TYA : ADC #32 : TAY                     ; (C is clear every way in)
     BCC no_page
-    INC mon_p+1
+    INC mon_p+1 : CLC
 .no_page
     DEC m_n : BNE cells
     \ ... and unless it flies, the cell below them must be floor.
     LDA m_flags,X : AND #MF_FREE : BNE to_move
-    LDA (mon_p),Y : AND #&21 : BEQ blocked
-.to_move
-    JMP m_move
+    LDA (mon_p),Y : AND #&21 : BNE to_move
 .blocked
-    LDA m_flags,X : AND #MF_RESPAWN : BEQ turn
-    JMP respawn
-.turn
-    LDA #0 : SEC : SBC m_dx,X : STA m_dx,X  ; turns and steps the same tick
+    TXA : TAY                               ; (m_blocked's m_dx,Y: the step across)
+    BPL m_blocked                           ; (always)
+.to_move
     JMP m_move
 
 \ Vertical movers (4.4): the animation from the pixel line; tested every
@@ -211,53 +211,96 @@ MF_STATIC  = &01            ; never moves
 \ cell clear but for ropes, and unless free, at least one rope.
 .vcheck
 {
-    LDX m_cur
-    JSR m_size
-    LDA m_cell_lo,X : AND #31 : STA m_c
+    JSR m_size                              ; (C clear)
     LDA m_dy,X : BMI down
-    \ Up: blocked at rows 0-2 (the top row of the room is 2).
-    LDA m_cell_hi,X : BNE up_ok
-    LDA m_cell_lo,X : CMP #3 * 32 : BCC vblocked
-.up_ok
-    SEC : LDA mon_p : SBC #32 : STA mon_p
+    \ Up: blocked at rows 0-2 (the top row of the room is 2), cells 0-95.
+    LDA mon_p : CMP #3 * 32
+    LDA mon_p+1 : SBC #HI(type_map) : BCC vblocked
+    LDA mon_p : SBC #32 : STA mon_p         ; (C set)
     BCS test
     DEC mon_p+1
     BCC test                                ; (always)
 .down
-    \ Down: blocked if row + h reaches 24.
-    LDA m_cell_lo,X : LSR A : LSR A : LSR A : LSR A : LSR A : STA m_n
-    LDA m_cell_hi,X : ASL A : ASL A : ASL A : ORA m_n   ; the row
-    CLC : ADC m_h : CMP #24 : BCS vblocked
-    \ mon_p += 32 * h
+    \ Down: the row h below; blocked if that is row 24 or more, past the
+    \ end of the map (as the columns are 0-31).
     LDY m_h
 .rows
-    CLC : LDA mon_p : ADC #32 : STA mon_p
+    LDA mon_p : ADC #32 : STA mon_p         ; (C clear)
     BCC row_ok
-    INC mon_p+1
+    INC mon_p+1 : CLC
 .row_ok
     DEY : BNE rows
+    LDA mon_p+1 : CMP #HI(type_map) + 3 : BCS vblocked
 .test
-    LDA #0 : STA m_ropes
-    LDY #0
+    \ The w cells ORed together: nothing but rope bits (2), and unless it
+    \ is free, some. (A frame is at least a column wide.)
+    LDY m_w : DEY
+    LDA #0
 .vcell
-    LDA (mon_p),Y : AND #2 : BEQ no_rope
-    INC m_ropes
-.no_rope
-    LDA (mon_p),Y : AND #&FD : BNE vblocked
-    INY : CPY m_w : BNE vcell
-    LDA m_flags,X : AND #MF_FREE : BNE ok
-    LDA m_ropes : BEQ vblocked
-.ok
-    JMP m_move
+    ORA (mon_p),Y
+    DEY : BPL vcell
+    CMP #2 : BEQ m_move
+    TAY : BNE vblocked
+    LDA m_flags,X : AND #MF_FREE : BNE m_move
 .vblocked
+    TXA : CLC : ADC #NM : TAY               ; (m_blocked's m_dx,Y: m_dy)
+    \ Fall into m_blocked.
+}
+
+\ Blocked: back to the start if it respawns, else it turns, and steps the
+\ same tick. m_dx,Y is the step that was blocked: Y is X across, X + NM
+\ (m_dy) up or down.
+    ASSERT m_dy = m_dx + NM
+.m_blocked
+{
     LDA m_flags,X : AND #MF_RESPAWN : BEQ turn
     JMP respawn
 .turn
-    LDA #0 : SEC : SBC m_dy,X : STA m_dy,X
-    JMP m_move
+    LDA #0 : SEC : SBC m_dx,Y : STA m_dx,Y
+    \ Fall into m_move.
 }
 
-\ m_w, m_h from monster X's frame; mon_p = type_map + its cell.
+\ Move (&8E59): save where it is, step, pick the frame, put it on the
+\ draw list. (X = m_cur.)
+.m_move
+    JSR m_save_old
+.m_move_nosave                              ; (X = m_cur)
+{
+    \ Step (&8E94): across by dx quarter cells, up by dy lines.
+    LDA m_sub,X : CLC : ADC m_dx,X : TAY
+    AND #3 : STA m_sub,X
+    TYA : BMI left
+    CMP #4 : BCC vertical
+    INC m_cell_lo,X : BNE vertical
+    INC m_cell_hi,X
+    BNE vertical                            ; (always)
+.left
+    LDA m_cell_lo,X : BNE no_borrow
+    DEC m_cell_hi,X
+.no_borrow
+    DEC m_cell_lo,X
+.vertical
+    LDA m_yf,X : SEC : SBC m_dy,X : TAY
+    AND #7 : STA m_yf,X
+    TYA : BMI up
+    CMP #8 : BCC framed
+    LDA m_cell_lo,X : ADC #31 : STA m_cell_lo,X     ; (C set: + 32)
+    BCC framed
+    INC m_cell_hi,X
+    BNE framed                              ; (always)
+.up
+    SEC : LDA m_cell_lo,X : SBC #32 : STA m_cell_lo,X
+    BCS framed
+    DEC m_cell_hi,X
+.framed
+    JSR choose_frame
+    LDY dl_count : STX draw_list,Y
+    INC dl_count
+    RTS
+}
+
+\ m_w, m_h from monster X's frame; mon_p = type_map + its cell. C is left
+\ clear (the cell's high byte is 0-2), which the checks rely on.
 ZA_AUTO2 mon_p
 ZA_AUTO2 mframe
 .m_size
@@ -274,8 +317,8 @@ ZA_AUTO2 mframe
 {
     LDA m_speed,X : AND #&60
     BEQ idle
-    CMP #&20 : BEQ forming
-    CMP #&40 : BEQ formed
+    ASL A : ASL A : BCC forming             ; 01
+    BPL formed                              ; 10
     \ 11: moving; tested on a character boundary.
     LDA m_yf,X : BNE go
     JMP vcheck
@@ -287,21 +330,20 @@ ZA_AUTO2 mframe
 .appear
     LDA #0 : STA m_sub,X : STA m_dy,X
     LDA #&20 : JSR set_special
-    LDA #10 : STA m_tick,X
-    BNE go                                  ; (always)
+    BNE ten                                 ; (always)
 .forming
     LDA m_sub,X : CMP #3 : BNE next_frame
     LDA #&40 : JSR set_special
     BNE go                                  ; (always)
 .next_frame
-    LDA #10 : STA m_tick,X
     INC m_sub,X
-    BNE go                                  ; (always: 1-3)
+.ten
+    LDA #10 : STA m_tick,X
+    BNE go                                  ; (always)
 .formed
-    LDA m_flags,X : AND #MF_NEG : BEQ fall_now
-    JSR rng : CMP #10 : BCS wait
-.fall_now
+    \ Falls (up if NEG, at 10 in 256 a tick; down at once).
     LDA m_flags,X : AND #MF_NEG : BEQ rise
+    JSR rng : CMP #10 : BCS wait
     LDA #&FE : BNE set_dy                   ; (always)
 .rise
     LDA #2
@@ -344,6 +386,7 @@ ZA_AUTO2 mframe
     LDX m_cur
 .stop
     LDA #0 : STA m_dx,X : STA m_sub,X
+.nosave
     JMP m_move_nosave
 .general
     LDA m_speed,X : BPL back
@@ -354,47 +397,7 @@ ZA_AUTO2 mframe
     JMP m_to_start
 .back
     JSR m_to_start
-    JMP m_move_nosave                   ; and step from the start at once
-}
-
-\ Move (&8E59): save where it is, step, pick the frame, put it on the
-\ draw list.
-.m_move
-    LDX m_cur
-    JSR m_save_old
-.m_move_nosave                              ; (X = m_cur)
-{
-    \ Step (&8E94): across by dx quarter cells, up by dy lines.
-    LDA m_sub,X : CLC : ADC m_dx,X : TAY
-    AND #3 : STA m_sub,X
-    TYA : BMI left
-    CMP #4 : BCC vertical
-    INC m_cell_lo,X : BNE vertical
-    INC m_cell_hi,X
-    BNE vertical                            ; (always)
-.left
-    LDA m_cell_lo,X : BNE no_borrow
-    DEC m_cell_hi,X
-.no_borrow
-    DEC m_cell_lo,X
-.vertical
-    LDA m_yf,X : SEC : SBC m_dy,X : TAY
-    AND #7 : STA m_yf,X
-    TYA : BMI up
-    CMP #8 : BCC framed
-    CLC : LDA m_cell_lo,X : ADC #32 : STA m_cell_lo,X
-    BCC framed
-    INC m_cell_hi,X
-    BNE framed                              ; (always)
-.up
-    SEC : LDA m_cell_lo,X : SBC #32 : STA m_cell_lo,X
-    BCS framed
-    DEC m_cell_hi,X
-.framed
-    JSR choose_frame
-    LDY dl_count : TXA : STA draw_list,Y
-    INC dl_count
-    RTS
+    BEQ nosave                          ; and step from the start at once (always)
 }
 
 \ The old position := the current one (&884D).

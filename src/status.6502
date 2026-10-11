@@ -67,8 +67,8 @@
     LDA #0 : SEC
 .bit
     ROL A : DEX : BPL bit
-    TAX : AND visited,Y : BNE done
-    TXA : ORA visited,Y : STA visited,Y
+    ORA visited,Y : CMP visited,Y : BEQ done      ; visited already
+    STA visited,Y
     LDY #0 : LDA (rb),Y
     LSR A : LSR A : LSR A : LSR A
     LDX #7 : JMP times_egg
@@ -80,6 +80,22 @@
 .status_at
     STA cell : LDA #0 : STA cell+1
     RTS
+
+\ AddScore (&A0BD): add A to score digit X, one carry rippled up (lost
+\ past digit 0), each changed digit redrawn.
+.add_score
+{
+    CLC : ADC score,X
+    CMP #10 : BCC store
+    SBC #10
+    CPX #0 : BEQ store
+    PHA : TXA : PHA                 ; (recursive: the digit on the stack)
+    DEX : LDA #1 : JSR add_score    ; (only the digits to the left)
+    PLA : TAX : PLA
+.store
+    STA score,X
+    \ Fall into draw_digit.
+}
 
 \ Redraw score digit X (add_score does, as the digits change).
 .draw_digit
@@ -108,6 +124,10 @@
     RTS
 }
 
+\ SetCarrying (&9986): the status bar's name, 0 NOTHING to 10 BASKET.
+.set_carrying
+    STA carrying_name
+    \ Fall into draw_carrying.
 \ What Harry carries, at row 1, columns 12-19.
 .draw_carrying
 {
@@ -120,6 +140,19 @@
     LDX status_i : INX
     TXA : AND #7 : BNE char     ; 8 characters
     RTS
+}
+
+\ The factory's rewards: A x 10,000 x egg, and a life.
+.reward
+    LDX #5 : JSR times_egg
+    \ Fall into extra_life.
+\ ExtraLife (&A2DD): at most 255.
+.extra_life
+{
+    INC lives : BNE ok
+    DEC lives
+.ok
+    \ Fall into draw_lives.
 }
 
 \ The lives icons at row 1, column 22 on: min(lives, 9), then a blank.
@@ -140,12 +173,8 @@
 }
 \ Tile A, white on black, at `cell`; step right.
 .status_tile
-{
-    LDX #cbyte(1) EOR cbyte(0) : STX diff
-    SEC : SBC #&20
-    LDX #LO(tiles) : LDY #HI(tiles)
-    JMP status_glyph
-}
+    LDX #cbyte(1) EOR cbyte(0)
+    BNE tile_glyph              ; (always)
 \ Character A (ASCII) from the OS's font (decision 4), on black at `cell`,
 \ in yellow (the EGGS DELIVERED screen's) or white; step right.
 .yellow_char
@@ -154,16 +183,12 @@
 .status_char
     LDX #cbyte(1) EOR cbyte(0)
 .text_char
-    STX diff
-    SEC : SBC #32
-    LDX #LO(text_font) : LDY #HI(text_font)
-\ glyph = font (Y:X) + 8 * A; draw in diff's colour on logical 0.
-.status_glyph
+    ORA #&80                    ; text in the tile map's codes (screen.6502)
+\ Tile map code A drawn in X's colour (diff) on logical 0.
+.tile_glyph
 {
-    STA glyph : LDA #0 : STA glyph+1
-    ASL glyph : ROL glyph+1 : ASL glyph : ROL glyph+1 : ASL glyph : ROL glyph+1
-    TXA : CLC : ADC glyph : STA glyph
-    TYA : ADC glyph+1 : STA glyph+1
+    STX diff
+    JSR cell_glyph.code_glyph
     LDA #cbyte(0) : STA paper
     JSR draw_glyph_pd
     INC cell : BNE done

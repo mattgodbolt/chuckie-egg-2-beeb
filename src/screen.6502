@@ -110,6 +110,7 @@ ZA_AUTO1 diff               ; ink pixels EOR paper pixels
     LDA cell : STA mp
     CLC : LDA cell+1 : ADC #HI(tile_map) : STA mp+1
     LDY #0 : LDA (mp),Y
+.code_glyph                     ; (glyph for code A: status.6502)
     \ glyph = 8 * the code + its font_lo/hi entry, by its top three bits.
     TAY
     LSR A : LSR A : LSR A : LSR A : LSR A : TAX

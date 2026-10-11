@@ -6,6 +6,20 @@
 \ train's random beeper.
 \ ***************************************************************************
 
+\ The train's noise: on while the noise flag is (machines.6502 sets it
+\ once a pass), off when it isn't.
+.noise_sound
+{
+    LDA noise_flag : CMP noise_on : BNE change
+    RTS
+.change
+    STA noise_on
+    LSR A                           ; (the flag is 0 or 1)
+    LDA #&FF : BCC off
+    LDA #&F3
+.off
+    \ Fall into sound_write.
+}
 \ Write A to the sound chip, through the System VIA's slow bus. X is kept.
 .sound_write
 {
@@ -68,25 +82,27 @@
     LDA h_dx : ORA h_dy : BNE moving
     RTS
 .moving
-    LDA h_state : CMP #7 : BNE not_jump
+    LDA h_state : BEQ fall_tick
+    CMP #7 : BNE other
     LDA h_cnt : ASL A : ADC #42             ; (cnt < 128: carry clear)
     LDX h_cnt : CPX #10 : BCS l0
-    EOR #&FF : ADC #1                       ; low for the first 9 steps
-    BNE l0                                  ; (always)
-.not_jump
-    CMP #0 : BNE other
-    LDA h_fall : ASL A : ADC #50
-    JMP l0
+    EOR #&FF : ADC #2                       ; 1 - that for the first 9 steps
+    BNE store                               ; (always: odd)
 .other
-    CLC : ADC #1 : LSR A : CMP #2 : BNE n_ok
+    LSR A : ADC #0 : CMP #2 : BNE n_ok      ; (state + 1) / 2
     LDA #6
 .n_ok
     ASL A : ASL A : ASL A : ASL A
-    EOR #&FF : CLC : ADC #1                 ; -16n
+    EOR #&FF : ADC #2                       ; 1 - 16n (carry clear: n < 16)
+    BNE store                               ; (always: odd)
+.fall_tick
+    LDA h_fall : ASL A : ADC #50 : SEC
 .l0
-    CLC : ADC #1 : STA ms_l0                ; L0
+    ADC #0                                  ; (carry set) + 1
+.store
+    TAX                                     ; L0
     LSR A : LSR A : LSR A : LSR A : LSR A : STA ms_n
-    LDA ms_l0 : CLC : ADC #3 : LSR A : LSR A
+    TXA : CLC : ADC #3 : LSR A : LSR A
     CLC : ADC ms_n : ADC #8 : STA ms_n      ; N, under 80
     AND #15 : ORA #&A0 : JSR sound_write
     LDA ms_n : LSR A : LSR A : LSR A : LSR A : TAX : JSR sound_write
@@ -98,16 +114,3 @@
     LDA #&BF : JMP sound_write              ; off
 }
 
-\ The train's noise: on while the noise flag is (machines.6502 sets it
-\ once a pass), off when it isn't.
-.noise_sound
-{
-    LDA noise_flag : CMP noise_on : BEQ same
-    STA noise_on
-    TAX : BEQ off
-    LDA #&F3 : JMP sound_write
-.off
-    LDA #&FF : JMP sound_write
-.same
-    RTS
-}

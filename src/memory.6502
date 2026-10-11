@@ -188,10 +188,7 @@ SECTION Scratch, org = &90, guard = &FC, virtual = TRUE
 .box_t         SKIP 1
 .box_b         SKIP 1
 \ (objects.6502)
-.tc_x          SKIP 1
 .tl_t          SKIP 1
-.tl_kind       SKIP 1
-.bonus_n       SKIP 1
 .drop_x        SKIP 1
 \ &D0 is the Master's VDU status, which its soft BREAK reads (decision 22).
     ASSERT P% <= &D0
@@ -216,7 +213,6 @@ SECTION Scratch, org = &90, guard = &FC, virtual = TRUE
 \ (sound.6502)
 .dt_i          SKIP 1
 .dt_n          SKIP 1
-.ms_l0         SKIP 1
 .ms_n          SKIP 1
 .noise_on      SKIP 1
 \ (bands.6502: set when a room is drawn)

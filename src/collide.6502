@@ -42,7 +42,7 @@ ZA_AUTO2 cimg               ; who_was_hit's frames
     ZA_AUTO2 s18
     ZA_AUTO2 g1                 ; ... and its glyph (the left's is `glyph`)
     \ Harry's frame: the window its width gives.
-    LDA #&FF : STA cw_hi : LDA #0 : STA cw_lo
+    LDX #&FF : STX cw_hi : INX : STX cw_lo
     LDY #1 : LDA (h_frame),Y : CMP #1 : BEQ window
     LDX h_xf : BEQ window
 .shift
@@ -50,19 +50,21 @@ ZA_AUTO2 cimg               ; who_was_hit's frames
     DEX : BNE shift
 .window
     \ His columns, each 16 lines, less his first line's Y.
-    CLC : LDA h_frame : ADC #2 : STA hp
-    LDA h_frame+1 : ADC #0 : STA hp+1
-    SEC : LDA hp : SBC h_yf : STA hp
+    LDA h_frame+1 : STA hp+1
+    LDA h_frame : CLC : ADC #2
+    BCC no_carry
+    INC hp+1
+.no_carry
+    SEC : SBC h_yf : STA hp
     BCS columns
     DEC hp+1
 .columns
-    CLC : LDA hp : ADC #16 : STA hp1
+    CLC : ADC #16 : STA hp1                 ; (A = hp)
     LDA hp+1 : ADC #0 : STA hp1+1
     \ (The right column's pointers and paper are only read when they're
-    \ set, but the allocator can't see that: set them, so that they hold
-    \ nothing between calls.)
-    LDA #0
-    STA g1 : STA g1+1 : STA s1 : STA s1+1 : STA s18 : STA s18+1 : STA c_paper1
+    \ set, but the allocator can't see that: they hold nothing between
+    \ calls.)
+    ZA_DISCARD g1, s1, s18, c_paper1
     LDA #16 : STA c_lines
     LDA h_cell : STA c_cell0
     LDA h_cell+1 : STA c_cell0+1
@@ -73,7 +75,7 @@ ZA_AUTO2 cimg               ; who_was_hit's frames
     \ 1-byte frame). Its cell is row * 32 OR column + 1, as the line's
     \ cell has always been found.
     LDA cw_lo : BEQ left
-    LDA h_cell : AND #31 : CLC : ADC #1 : STA cell
+    LDA h_cell : AND #31 : TAX : INX : STX cell
     LDA c_cell0 : AND #&E0 : ORA cell : STA cell
     LDA c_cell0+1 : STA cell+1
     JSR cell_looks
@@ -112,15 +114,15 @@ ZA_AUTO2 cimg               ; who_was_hit's frames
     DEC c_lines : BEQ done
     CPY #8 : BNE line
     \ The cell row below, from its top: Y goes back 8, so hp and hp1 on 8.
-    CLC : LDA hp : ADC #8 : STA hp
+    LDA hp : ADC #7 : STA hp                ; (C set: Y = 8)
     BCC hp_ok
-    INC hp+1
+    INC hp+1 : CLC
 .hp_ok
-    CLC : LDA hp1 : ADC #8 : STA hp1
+    LDA hp1 : ADC #8 : STA hp1
     BCC hp1_ok
-    INC hp1+1
+    INC hp1+1 : CLC
 .hp1_ok
-    CLC : LDA c_cell0 : ADC #32 : STA c_cell0
+    LDA c_cell0 : ADC #32 : STA c_cell0
     BCC down
     INC c_cell0+1
 .down
@@ -128,7 +130,7 @@ ZA_AUTO2 cimg               ; who_was_hit's frames
 .done
     RTS
 .hit
-    JMP who_was_hit
+    \ Fall into who_was_hit.
 }
 
 \ Who was hit (&940A): character-cell boxes, the first monster in record
@@ -160,19 +162,18 @@ ZA_AUTO2 cimg               ; who_was_hit's frames
     LDA m_frame_lo,X : STA cimg
     LDA m_frame_hi,X : STA cimg+1
     LDA m_cell_lo,X : LDY m_cell_hi,X : JSR frame_box
-    JSR overlap : BCS next
-    JMP contact
+    JSR overlap : BCC contact
 .next
-    LDX c_m : INX : JMP monster
+    LDX c_m : INX : BNE monster             ; (always)
 .no_monster
     \ Rooms 71-80: the train kills in rows 0-7.
     LDA room : CMP #71 : BCC dispatch
     CMP #81 : BCS dispatch
-    LDA h_cell+1 : BNE dispatch     ; rows 0-7 are cells 0-255
+    LDA h_cell+1 : BNE done         ; rows 0-7 are cells 0-255 (and not room 111)
     JMP harry_died
 .dispatch
-    \ Room 111: the egg carried into the truck (&9453).
-    LDA room : CMP #111 : BNE done
+    \ Room 111: the egg carried into the truck (&9453). (A = room.)
+    CMP #111 : BNE done
     LDA h_cell : AND #31 : CMP #7 : BCS done
     LDA carried : CMP #&28 : BNE done
     JMP egg_delivered
@@ -193,23 +194,24 @@ ZA_AUTO2 cimg               ; who_was_hit's frames
     PHA : AND #31 : STA box_l
     TYA : TAX : PLA : JSR cell_row : STA box_t
     LDY #1 : LDA (cimg),Y : AND #15 : CLC : ADC box_l : STA box_r     ; (the header's other
-    DEY : LDA (cimg),Y : AND #7 : CLC : ADC box_t : STA box_b         ; bits: sprite.6502)
+    DEY : LDA (cimg),Y : AND #7 : ADC box_t : STA box_b               ; bits: sprite.6502; C clear)
     RTS
 
 \ Contact with monster c_m (&94E5).
 .contact
 {
     LDX c_m
-    LDA m_flags,X : AND #MF_KILL : BEQ not_kill
+    LDA m_flags,X : LSR A : LSR A : BCC not_kill  ; MF_KILL
     JMP harry_died
 .not_kill
-    LDA m_flags,X : AND #MF_BOUNCE : BEQ harmless
+    LSR A : BCC harmless                          ; MF_BOUNCE
+    ASSERT MF_KILL = 2 AND MF_BOUNCE = 4
     \ Knocked back: a jump at count 2, momentum and facing at random.
     LDA #7 : STA h_state
     LDA #2 : STA h_cnt
 .again
     JSR rng : AND #3 : CMP #3 : BEQ again
-    SEC : SBC #1 : STA h_mom
+    SBC #0 : STA h_mom              ; (C clear: 0-2, so - 1)
     JSR rng : AND #4 : STA h_face
 .harmless
     RTS

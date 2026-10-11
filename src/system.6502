@@ -20,7 +20,7 @@
 .scan
     JSR key_down : BNE done
     INX : BPL scan
-    LDA #0
+    TAX                             ; (A = 0) Z set: none
 .done
     RTS
 }

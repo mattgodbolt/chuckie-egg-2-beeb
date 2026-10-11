@@ -12,17 +12,13 @@
 {
     LDX #&FF : TXS
     LDA #1 : STA room
-    STA h_mom                       ; (Harry's template, below)
     INC egg
     JSR show_room
-    \ Harry's template (&89E5): row 18, column 6, jumping right, count 0.
-    LDA #LO(18 * 32 + 6) : STA h_cell
-    LDA #HI(18 * 32 + 6) : STA h_cell+1
-    LDA #0 : STA h_yf : STA h_xf : STA h_face : STA h_cnt : STA h_fall
-    STA ctrl : STA room_delta : STA h_dx : STA h_dy : STA o_sel : STA dl_count
-    LDA #7 : STA h_state
-    LDA harry_frames : STA h_frame
-    LDA harry_frames+1 : STA h_frame+1
+    LDX #CHECKPOINT_VARS - 1
+.harry
+    LDA egg_harry,X : STA h_cell,X
+    DEX : BPL harry
+    LDA #0 : STA ctrl : STA room_delta : STA o_sel : STA dl_count
     JSR save_checkpoint
     JSR egg_init
     \ The truck backs in, then room 1 is set up as on entering it.
@@ -31,6 +27,12 @@
     JSR room_setup
     JMP game_loop
 }
+\ Harry's template (&89E5): row 18, column 6, jumping right, count 0; in
+\ save_checkpoint's layout, h_cell .. h_frame.
+.egg_harry
+    EQUW 18 * 32 + 6
+    EQUB 0, 0, 0, 0, 0, 1, 7, 0, 0  ; yf xf dx dy face mom state cnt fall
+    EQUW harry_gfx                  ; frame 0 (harry_frames' first)
 
 \ The main loop (&77B9): three frames a pass, always.
 .game_loop
@@ -68,11 +70,19 @@
     JSR draw_frame
     \ Part 3: contact, drop, falling.
     JSR contact_pass
-    LDA dbg_room : BEQ next_pass
-    JSR teleport
-.next_pass
-    JMP game_loop
+    LDA dbg_room : BEQ game_loop
+    \ Fall into teleport.
 }
+\ For the tests (tools/beeb.mjs's teleport, for passlog.mjs --start): they
+\ set dbg_room, and when the pass ends here they put Harry, his frame and
+\ the room in place; the room is then entered as the original's set-up
+\ would (tools/passlog.py calls the original's &7913 at the same point).
+.teleport
+    LDA #0 : STA dbg_room
+    JSR enter_room
+    JSR save_checkpoint
+    JMP game_loop
+
 \ At the next frame, the monsters that moved and the current thing (the
 \ original's interrupt).
 .draw_frame
@@ -85,15 +95,6 @@
     JSR collide
     JSR drop
     JMP falling
-
-\ For the tests (tools/beeb.mjs's teleport, for passlog.mjs --start): they
-\ set dbg_room, and when the pass ends here they put Harry, his frame and
-\ the room in place; the room is then entered as the original's set-up
-\ would (tools/passlog.py calls the original's &7913 at the same point).
-.teleport
-    LDA #0 : STA dbg_room
-    JSR enter_room
-    JMP save_checkpoint
 
 \ Draw the room (&7913). Nothing of Harry is on screen.
 .show_room
@@ -135,22 +136,20 @@
     JSR enter_room
     \ Riding a lift out of a room becomes a jump.
     LDA h_state : CMP #8 : BNE not_lift
-    LDA #7 : STA h_state
-    LDA #0 : STA h_cnt
-    LDA #1 : STA h_mom
+    DEC h_state                     ; 7
+    LDX #0 : STX h_cnt
+    INX : STX h_mom
 .not_lift
     \ Unless he went up, a floor under the feet sets walking or pipe.
     LDA room_delta : CMP #&F6 : BEQ take_checkpoint
     JSR harry_ptrs
-    LDA h_xf : LSR A : CLC : ADC #&40 : TAY
+    LDA h_xf : LSR A : ORA #&40 : TAY      ; (xf < 128: the ORA adds)
     LDA (hptr),Y : AND #&12 : BNE take_checkpoint
     LDA (hptr),Y : JSR set_standing
 .take_checkpoint
     LDA #0 : STA room_delta
     \ The take_checkpoint only if he came in walking or on a ladder.
-    LDA h_state : AND #&FD : CMP #1 : BNE done  ; states 1 and 3
-    JMP save_checkpoint
-.done
+    LDA h_state : AND #&FD : CMP #1 : BEQ save_checkpoint  ; states 1 and 3
     RTS
 }
 
@@ -260,9 +259,8 @@ CHECKPOINT_VARS = h_frame + 2 - h_cell    ; h_cell .. h_frame
     LDA h_yf : STA d_yf
     LDA h_frame : STA d_frame
     LDA h_frame+1 : STA d_frame+1
-    LDA #6 : LDX #d_cell : JSR sp_draw_ink    ; yellow
     LDA #&80 : STA drawn
-    RTS
+    LDA #6 : LDX #d_cell : JMP sp_draw_ink    ; yellow
 }
 
 \ The keys (&78C1), the Spectrum's for now (decision 7), into ctrl: bit 7
@@ -281,7 +279,7 @@ CHECKPOINT_VARS = h_frame + 2 - h_cell    ; h_cell .. h_frame
     LDA cheat : AND #8 : BEQ actions
     LDX #0 : JSR key_down : BEQ actions        ; SHIFT
     LDA ctrl : AND #6 : BEQ actions            ; left (4), right (2)
-    SEC : SBC #3 : EOR #&FF : CLC : ADC #1     ; -1, +1 or -3
+    EOR #&FF : SEC : ADC #3                    ; -1, +1 or -3
     CLC : ADC room : BNE not0
     LDA #120
 .not0
@@ -329,12 +327,11 @@ IF DEFINED(STREAM)
     JSR choose_frame
     LDA m_frame_lo,X : STA m_oframe_lo,X
     LDA m_frame_hi,X : STA m_oframe_hi,X
-    JMP monster
+    BPL monster                     ; (always: main RAM)
 .monsters_done
+    \ (The lift's l_oframe isn't read before run_lift sets it.)
     LDA l_type : BEQ no_lift
-    CLC : ADC #&95 : JSR sprite_frame
-    STA l_frame : STA l_oframe
-    STX l_frame+1 : STX l_oframe+1
+    JSR setup_lift.frame            ; (l_width again, as it was)
 .no_lift
 }
 ENDIF

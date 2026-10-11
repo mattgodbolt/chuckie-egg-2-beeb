@@ -1392,3 +1392,26 @@ tiles turned to noise.
   notes, so `prefetch` reads only those (11 bytes back). Rooms 1 and 2
   still can't both be held: ideas in issue #3.
 
+### A fleet of reviewers, and two bugs they found
+
+Nine agents went through the source for bytes and cycles, each a patch of
+files, and one for the big picture (their lessons: `docs/optimising.md`).
+Together about 1,380 bytes and a faster room draw; CE2S's cache would
+roughly double. Two of them found bugs in the published disc first:
+
+- **The 8271 could hang for good.** After 2.8s idle the 8271 unloads the
+  head, and a B makes a drive ready only on the second index pulse after
+  it's selected. The reader's answer to "not ready" was a Read Drive
+  Status and the read again at once, and in jsbeeb that never let the
+  drive come up: with the cache a little bigger, the croc's room (27)
+  hung after its first read, retrying hundreds of times a second (the
+  head kept loaded, it didn't). Now it waits half a second between tries
+  (`fdc_state` 3, in the 8271 reader's spare room in the slot).
+- **The cache's age wrapped.** `epoch` is a byte, so a room untouched for
+  256 room entries (deaths count) looked like this visit's and could
+  never go; when the room being entered then didn't fit, `rb` pointed at
+  nothing (reproduced: `rb = &00FF`). `framecheck.mjs 1 120`, which dies
+  over and over in every room, trapped in room 74 with a frame no group
+  gave. Such an item now becomes the oldest; room 74 passes. A candidate
+  for the corruption Matt saw.
+

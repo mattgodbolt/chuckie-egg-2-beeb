@@ -332,6 +332,15 @@ ARR_BUF = screen
     STA fb_room
     JSR disc_wait               ; an item under way: finish it
     INC epoch
+    \ An item untouched for 256 visits would look like this one's, never to
+    \ be dropped: it becomes the oldest instead.
+    LDX it_n
+.age
+    DEX : BMI aged
+    LDA it_use,X : CMP epoch : BNE age
+    INC it_use,X
+    JMP age
+.aged
     LDX fb_room : DEX : STX fb_id
     TXA : JSR item_find : BCS here
     LDA fb_id : JSR read_now

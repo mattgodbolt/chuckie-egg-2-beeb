@@ -161,17 +161,26 @@ I_LOAD   = &E8
 .i_poll
 {
     LDA fdc_state : BEQ done    ; (carry clear: CMP or LDA leaves it)
+    CMP #3 : BNE reading
+    \ Waiting for the drive (below): half a second on, the read again.
+    LDA vsyncs : SEC : SBC i_since : CMP #25 : BCC still
+    JMP i_start
+.reading
     \ The result drops its interrupt.
     BIT I_STATUS : BMI still
     LDA I_RESULT : AND #&1E
     CMP #&10 : BNE finished
-    \ Not ready (a B makes the drive ready on the second index pulse after
-    \ it is selected), latched until a Read Drive Status: that, and again.
+    \ Not ready: a B makes the drive ready on the second index pulse after
+    \ it is selected, and the 8271 latches not ready until a Read Drive
+    \ Status. That, then a wait while the drive comes up (once the head had
+    \ unloaded, reading again at once, over and over, never let it: in
+    \ jsbeeb, a croc's room after 2.8s idle hung for good), then again.
     LDA #&6C : STA I_COMMAND
 .rds
     BIT I_STATUS : BMI rds
     LDA I_RESULT
-    JSR i_start
+    LDA vsyncs : STA i_since
+    LDA #3 : STA fdc_state
 .still
     SEC
     RTS

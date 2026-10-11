@@ -227,10 +227,11 @@ SECTION Scratch, org = &90, guard = &FC, virtual = TRUE
 IF DEFINED(STREAM)
 \ (disc.6502: the reader, and what fetch reads)
 .fdc_type      SKIP 1          ; FDC_8271 or FDC_1770
-.fdc_state     SKIP 1          ; 0 idle, 1 seeking (1770), 2 reading
+.fdc_state     SKIP 1          ; 0 idle, 1 seeking (1770), 2 reading, 3 waiting (8271)
 .fdc_track     SKIP 1          ; the read's track and sector
 .fdc_sect      SKIP 1
 .fdc_cur       SKIP 1          ; 1770: the head's track (&FF: not known)
+i_since = fdc_cur               ; (8271: when the wait for the drive began)
 .fe_pos        SKIP 2          ; where in CE2ROOM: sector, track
 .fe_len        SKIP 2          ; how many bytes
 .fe_dst        SKIP 2          ; to where

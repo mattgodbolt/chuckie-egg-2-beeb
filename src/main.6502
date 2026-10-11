@@ -219,6 +219,7 @@ IF DEFINED(STREAM)
 .epoch      SKIP 1              ; on one at each room entered
 .pf_cur     SKIP 1              ; the room the cache was set up for
 .nr_rooms   SKIP 4              ; (next_room: the room's neighbours)
+.nr_n       SKIP 1              ; how many
 .arena
     SKIP CODE_TOP - P%
 .arena_end

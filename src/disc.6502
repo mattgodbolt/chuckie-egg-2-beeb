@@ -183,12 +183,18 @@ ENDIF
 
 \ Start reading item A at item_top: carry clear if it fits, or fits once
 \ the items at the top go (the oldest, after arrange), but never one this
-\ visit to the room uses (it_use = epoch); carry set if not.
+\ visit to the room uses (it_use = epoch); carry set, and nothing gone, if
+\ not.
 .item_add
 {
     ZA_AUTO2 end
     STA ia_id
     JSR item_where
+    \ Dropping only moves the top down, so if it doesn't fit even then, all
+    \ that was dropped goes back: it_n and item_top, kept here.
+    LDA it_n : PHA
+    LDA item_top+1 : PHA
+    LDA item_top : PHA
 .try
     LDX it_n : CPX #NI : BCS full
     CLC : LDA item_top : ADC fe_len : STA end
@@ -204,6 +210,7 @@ ENDIF
     LDA end+1 : STA item_top+1
     INC it_n
     LDA #1 : STA ld_on          ; (carry clear)
+    PLA : PLA : PLA
     RTS
 .full
     LDX it_n : DEX : BMI cant
@@ -213,6 +220,9 @@ ENDIF
     LDA it_hi,X : STA item_top+1
     JMP try
 .cant
+    PLA : STA item_top
+    PLA : STA item_top+1
+    PLA : STA it_n
     SEC
     RTS
 }
@@ -368,7 +378,7 @@ IF NOT(DEFINED(VIEWER))
 {
     LDA pf_cur : BEQ done       ; (before the first room)
     JSR next_room
-    LDY #4
+    LDY nr_n
 .try
     SEC : SBC #1 : BCC next     ; (0: no room)
     JSR item_find : BCC missing ; (which keeps A)
@@ -392,7 +402,6 @@ IF NOT(DEFINED(VIEWER))
     ZA_AUTO1 best
     ZA_AUTO1 dist
     ZA_AUTO1 exits
-    ZA_AUTO1 n
     ZA_AUTO1 row
     ZA_AUTO1 col
     LDA h_cell : AND #31 : STA col
@@ -401,8 +410,7 @@ IF NOT(DEFINED(VIEWER))
     ASL A : ROL row : ASL A : ROL row : ASL A : ROL row
     LDY #0 : LDA (rb),Y : STA exits
     LDA #&FF : STA dist
-    LDA #0 : STA best : STA n
-    STA nr_rooms : STA nr_rooms+1 : STA nr_rooms+2 : STA nr_rooms+3
+    LDA #0 : STA best : STA nr_n
     LSR exits : BCC no_left
     LDA col : LDX h_face : CPX #4 : JSR facing
     LDX pf_cur : DEX
@@ -450,7 +458,7 @@ IF NOT(DEFINED(VIEWER))
     CPX #1 : BCC not
     CPX #121 : BCS not
     PHA : TXA
-    LDY n : INC n
+    LDY nr_n : INC nr_n
     STA nr_rooms,Y
     PLA
     CMP dist : BCS not

@@ -1384,4 +1384,11 @@ tiles turned to noise.
   own commit comes after. A release flow is being looked at.
 - jsbeeb, beebjit and b2 all make a WD1770's status valid at once after
   a command: filed as jsbeeb#1230.
+- Matt: rooms 3 and 4 read every time. The reading ahead in room 3 tried
+  room 2 (936 bytes), which can't fit beside 3 and 4, and dropped room 5
+  on the way to finding that out; room 4 then read room 5 again. Dropping
+  only lowers the top, so `item_add` now puts back what it dropped when
+  the item doesn't fit after all. `next_room` counts the neighbours it
+  notes, so `prefetch` reads only those (11 bytes back). Rooms 1 and 2
+  still can't both be held: ideas in issue #3.
 

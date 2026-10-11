@@ -65,13 +65,11 @@ IF DEFINED(STREAM)
 .copy
     STA fdc_slot,X
     DEX : BPL reader
-    LDA mb_fdc : STA fdc_type
     LDA #0 : STA fdc_state
-    STA it_n : STA ld_on : STA pf_cur
+    STA it_n : STA pf_cur
     LDA #LO(arena) : STA item_top
     LDA #HI(arena) : STA item_top+1
-    LDA #0
-    LDA fdc_type : BNE w
+    LDA mb_fdc : BNE w
     LDA #LO(I_DATA) : STA nmi_data + 1
     LDA #HI(I_DATA) : STA nmi_data + 2
     LDA #1 : STA I_RESET
@@ -134,42 +132,34 @@ I_LOAD   = &E8
 \ The 8271's reader (disc.6502's fdc_slot, where stream_init copies it).
 .reader_8271
     SECTION Fdc8271, org = fdc_slot, guard = fdc_slot + FDC_SLOT
-    JMP i_read
-    JMP i_poll
-.i_read
-    STA fdc_track : STX fdc_sect
-.i_start
-{
-    JSR arm
-.idle
-    BIT I_STATUS : BMI idle
-    LDA #&53 : STA I_COMMAND                    ; Read Data, drive 0
-    LDA fdc_track : JSR i_param
-    LDA fdc_sect : JSR i_param
-    LDA #&21                                    ; one 256-byte sector
-    \ Fall into i_param.
-}
-\ An 8271 command's parameter, once the register is free.
-.i_param
-{
-    PHA
-.full
-    LDA I_STATUS : AND #&20 : BNE full
-    PLA : STA I_PARAM
-    RTS
-}
-.i_poll
-{
-    LDA fdc_state : BEQ done    ; (carry clear: CMP or LDA leaves it)
-    CMP #3 : BNE reading
-    \ Waiting for the drive (below): half a second on, the read again.
-    LDA vsyncs : SEC : SBC i_since : CMP #25 : BCC still
     JMP i_start
+    ASSERT P% = fdc_poll
+{
+    LDA I_STATUS : ASL A : BCS i_rts            ; busy (carry set)
+    LDA fdc_state : CMP #3 : BCC reading
+    BEQ waiting
+    \ 4: the seek to track 0 (below) is done: its result dropped, the
+    \ read again.
+    LDA I_RESULT
+    JMP i_start
+.waiting
+    \ 3: waiting for the drive (below): half a second on, the read again.
+    LDA vsyncs : SEC : SBC i_since : CMP #25 : BCS i_start
+    SEC                                         ; (busy)
+    RTS
 .reading
     \ The result drops its interrupt.
-    BIT I_STATUS : BMI still
-    LDA I_RESULT : AND #&1E
-    CMP #&10 : BNE finished
+    LDA I_RESULT : AND #&1E : BEQ finished
+    CMP #&10 : BEQ not_ready
+    \ Another error: where the head is may not be where the 8271 thinks
+    \ (steps taken while the drive wasn't ready go nowhere), so a seek to
+    \ track 0, which finds it, then the read again.
+    LDA #&69 : STA I_COMMAND                    ; Seek, drive 0
+    LDX #0 : JSR i_param
+    LDA #4 : STA fdc_state
+    SEC                                         ; (busy)
+    RTS
+.not_ready
     \ Not ready: a B makes the drive ready on the second index pulse after
     \ it is selected, and the 8271 latches not ready until a Read Drive
     \ Status. That, then a wait while the drive comes up (once the head had
@@ -181,15 +171,34 @@ I_LOAD   = &E8
     LDA I_RESULT
     LDA vsyncs : STA i_since
     LDA #3 : STA fdc_state
-.still
-    SEC
+    SEC                                         ; (busy)
     RTS
 .finished
     LDX #0 : STX fdc_state
-.done
-    CLC
+    CLC : TAX                                   ; (Z from A)
     RTS
 }
+.i_start
+{
+    JSR arm
+.idle
+    BIT I_STATUS : BMI idle
+    LDA #&53 : STA I_COMMAND                    ; Read Data, drive 0
+    LDX fdc_track : JSR i_param
+    LDX fdc_sect : JSR i_param
+    LDX #&21                                    ; one 256-byte sector
+    \ Fall into i_param.
+}
+\ An 8271 command's parameter X, once the register is free.
+.i_param
+{
+    LDA #&20
+.full
+    BIT I_STATUS : BNE full                     ; parameter register full
+    STX I_PARAM
+}
+.i_rts
+    RTS
     ENDSECTION
 
 \ The 1770's: it can't seek within a read, so a read on another track is
@@ -198,57 +207,56 @@ I_LOAD   = &E8
 .reader_1770
     SECTION Fdc1770, org = fdc_slot, guard = fdc_slot + FDC_SLOT
     JMP w_read
-    JMP w_poll
-.w_read
+    ASSERT P% = fdc_poll
 {
-    STA fdc_track : STX fdc_sect
-    CMP fdc_cur : BEQ w_start
-    LDA fdc_cur : BPL known
-    LDA #&00 + W_RATE : BPL go                  ; Restore, then the seek
-.known
-    LDA fdc_track : STA W_DATA
-    LDA #&10 + W_RATE
-.go
-    JSR w_command
-    LDA #1 : STA fdc_state
-    RTS
+    LDA W_STATUS : LSR A : BCS w_rts            ; busy (reading drops INTRQ)
+    LDA fdc_state : LSR A : BCC read            ; 2: the read is done
+    \ The seek (or restore) is done (carry set).
+    LDA fdc_track
+    BIT fdc_cur : BPL sought
+    INC fdc_cur : BEQ w_seek                    ; restored (from &FF): now the seek
+.sought
+    STA fdc_cur
 }
 .w_start
     JSR arm
     LDA fdc_sect : STA W_SECTOR
-    LDA #&80 : JSR w_command                    ; Read Sector
-    RTS
-.w_poll
+    LDA #&80                                    ; Read Sector
+\ Give the 1770 command A. Its status isn't valid for a while after (the
+\ WD1770's data sheet), and a poll straight away would find it not busy, the
+\ command done before it's begun: a read taken as read before a byte came,
+\ its bytes landing later in a page that's moved on. (jsbeeb takes a command
+\ at once, which hid it; a real Master doesn't.) Some 70us. Keeps carry.
+.w_command
 {
-    LDA fdc_state : BEQ done
-    LDA W_STATUS : LSR A : BCS still            ; busy (reading drops INTRQ)
-    LDA fdc_state : CMP #1 : BNE read
-    \ The seek (or restore) is done: now the read.
-    LDA fdc_cur : BPL sought
-    LDA #0 : STA fdc_cur                        ; restored: now the seek
-    LDA fdc_track : STA W_DATA
-    LDA #&10 + W_RATE : JSR w_command
-.still
-    SEC
-    RTS
-.sought
-    LDA fdc_track : STA fdc_cur
-    JSR w_start
-    SEC
+    STA W_COMMAND
+    LDX #28
+.wait
+    DEX : BNE wait
+}
+.w_rts
     RTS
 .read
-    LDA W_STATUS : AND #&1C                     ; record not found, CRC, lost data
     LDX #0 : STX fdc_state
-.done
-    CLC
-    RTS
-}
+    LDA W_STATUS : AND #&1C                     ; record not found, CRC, lost data
+    RTS                                         ; (carry clear)
+.w_read
+    LDA fdc_track
+    CMP fdc_cur : BEQ w_start
+    INC fdc_state                               ; 1: seeking (from 0)
+    LDX #&00 + W_RATE                           ; Restore, then the seek
+    BIT fdc_cur : BMI w_go
+.w_seek
+    STA W_DATA
+    LDX #&10 + W_RATE                           ; Seek
+.w_go
+    TXA : BPL w_command                         ; (always)
     ENDSECTION
 
 \ The NMI routine, copied to NMI_AREA: the same on both controllers but for
 \ the data register stream_init puts in. Its first byte is RTI until a read
-\ arms it (disc.6502's arm). 4 + 4 + 4 + 6 + 2 + 2 + 6 = 28 cycles a byte,
-\ and 7 to take the NMI: 35 of the 128 between bytes. A is kept in the
+\ arms it (disc.6502's arm). 4 + 4 + 4 + 6 + 3 + 5 + 2 + 2 + 6 = 36 cycles
+\ a byte, and 7 to take the NMI: 43 of the 128 between bytes. A is kept in the
 \ LDA # (Tom Seddon's), so no zero page. The 256th byte makes it an RTI
 \ again, so the controller's end-of-command NMI does nothing, and fdc_poll
 \ reads the result, which drops the interrupt.
@@ -264,13 +272,13 @@ I_LOAD   = &E8
     INC nmi_dst + 2
 .nmi_count
     DEC nmi_left
-    BNE nmi_restore
-    LDA #BIT_ABS : STA nmi_dst
+    BEQ nmi_last
 .nmi_restore
     LDA #0
     RTI
-.nmi_left
-    EQUB 0
+.nmi_last
+    LDA #BIT_ABS : STA nmi_dst
+    BNE nmi_restore             ; (always)
 .nmi_end
     ENDSECTION
 ENDIF
@@ -332,6 +340,15 @@ ENDIF
     EQUB 8, CRTC_BLANK
 .crtc_end
 
+\ The status bar's six: logical 1, then 0, each beside 0, 1 and 3
+\ (install_irq copies them to status_ula in zero page).
+.status_ula_init
+    FOR l = {1, 0}
+        FOR n = {0, 1, 3}
+            EQUB ula_entry(l, n, STATUS_COLOURS[l])
+        NEXT
+    NEXT
+
 \ Put irq_handler on IRQ1V: VSync and User VIA T1 only.
 .install_irq
 {
@@ -344,6 +361,10 @@ ENDIF
     STA usrvia_acr
     LDA #&82 : STA sysvia_ier                   ; CA1: VSync
     LDA #&C0 : STA usrvia_ier                   ; T1
+    LDX #5
+.status
+    LDA status_ula_init,X : STA status_ula,X
+    DEX : BPL status
     CLI
     RTS
 }

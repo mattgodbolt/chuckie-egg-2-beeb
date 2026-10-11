@@ -13,15 +13,33 @@ ZA_AUTO2 glyph              ; the tile's 8 bytes
 ZA_AUTO1 paper              ; a byte of four paper pixels
 ZA_AUTO1 diff               ; ink pixels EOR paper pixels
 
+\ A Spectrum nibble (its leftmost pixel in bit 3) spread into both halves
+\ of a MODE 1 byte, where a pixel's colour bits are 4 apart. (The top
+\ nibble of a byte b is spread_lo[b >> 4].)
+.spread_lo
+FOR n = 0..15
+    EQUB n * &11
+NEXT
+\ The same with the nibble turned over (its leftmost pixel in bit 0), for
+\ drawing a mirror image (sprite.6502's sprite_mode patches it in).
+.spread_rev
+FOR n = 0..15
+    EQUB ((n AND 1) * 8 + (n AND 2) * 2 + (n AND 4) DIV 2 + (n AND 8) DIV 8) * &11
+NEXT
+\ Which of them sprite.6502 spreads an image's nibbles with: a frame as it
+\ is, and turned over. (sprite_mode patches only the low byte.)
+.mode_spread
+    EQUB LO(spread_lo), LO(spread_rev)
+    ASSERT HI(spread_lo) = HI(spread_rev) AND HI(spread_lo) = HI(spread_rev + 15)
+
 \ Set the palette and colour maps for the room (rooms.6502's room_load).
 .set_room_palette
 {
     \ sb_p = room_palettes + 4 * the palette's number, which is in bits 3-7
     \ of the room's packed first byte (tools/packrooms.py), where setup_bands'
     \ map reader (bands.6502) can read the colour map too.
-    JSR room_stream
-    LDY #0 : LDA (bp),Y : LSR A : AND #&FC
-    CLC : ADC #LO(room_palettes) : STA sb_p
+    LDY #0 : LDA (bp),Y : AND #&F8 : LSR A     ; (carry clear; bp: room_load)
+    ADC #LO(room_palettes) : STA sb_p
     LDA #HI(room_palettes) : ADC #0 : STA sb_p+1
     \ Logical colours 0-3, a nibble each, low nibble first.
     LDX #3
@@ -34,7 +52,7 @@ ZA_AUTO1 diff               ; ink pixels EOR paper pixels
     AND #15 : JSR set_logical
     DEX : BPL logical
     \ The colour map, two bits a colour, as a band's.
-    LDX #0
+    INX                         ; X = 0 (set_logical keeps X)
     LDY #2 : JSR setup_bands.sb_map
     LDY #3 : JSR setup_bands.sb_map
     JMP setup_bands
@@ -68,9 +86,9 @@ ZA_AUTO1 diff               ; ink pixels EOR paper pixels
 .cls
 {
     ZA_AUTO2 p
-    LDA #LO(screen) : STA p
+    LDY #0 : STY p              ; (LO(screen) = 0: cell_screen)
     LDA #HI(screen) : STA p+1
-    LDY #0 : TYA
+    TYA
 .loop
     STA (p),Y
     INY : BNE loop
@@ -84,32 +102,35 @@ ZA_AUTO1 diff               ; ink pixels EOR paper pixels
 \ paper and diff alone (erase_image wants the glyph only for some cells).
 .cell_colours
 {
-    ZA_AUTO2 ap
-    LDA cell : STA ap
-    CLC : LDA cell+1 : ADC #HI(attr_map) : STA ap+1
-    LDY #0 : LDA (ap),Y
+    \ (attr_map + cell: its page patched in)
+    LDA cell+1 : ORA #HI(attr_map) : STA map+2    ; (cell+1 < 4)
+    ASSERT LO(attr_map) = 0 AND (HI(attr_map) AND 3) = 0
+    LDY cell
+.map
+    LDA attr_map,Y
     \ Fall into attr_colours.
 }
 \ paper and diff for Spectrum attribute A in `cell`'s band.
 .attr_colours
-    TAY                         ; (cell_band keeps Y)
-    JSR cell_band : STX dg_band
+    TAY                         ; (cell_row keeps Y)
+    LDA cell : LDX cell+1 : JSR cell_row : TAX
+    LDA band_off,X : STA dg_band    ; 8 * the band of `cell`'s row
     TYA
     LSR A : LSR A : LSR A : AND #7 : ORA dg_band : TAX
-    LDA band_cmaps,X
-    TAX : LDA colour_bytes,X : STA paper
+    LDA band_cmaps,X : STA paper
     TYA : AND #7 : ORA dg_band : TAX
-    LDA band_cmaps,X
-    TAX : LDA colour_bytes,X : EOR paper : STA diff
+    LDA band_cmaps,X : EOR paper : STA diff
     RTS
 
 \ glyph alone: `cell`'s tile's 8 bytes.
 .cell_glyph
 {
-    ZA_AUTO2 mp
-    LDA cell : STA mp
-    CLC : LDA cell+1 : ADC #HI(tile_map) : STA mp+1
-    LDY #0 : LDA (mp),Y
+    \ (tile_map + cell: its page patched in)
+    CLC : LDA cell+1 : ADC #HI(tile_map) : STA map+2
+    ASSERT LO(tile_map) = 0
+    LDY cell
+.map
+    LDA tile_map,Y
 .code_glyph                     ; (glyph for code A: status.6502)
     \ glyph = 8 * the code + its font_lo/hi entry, by its top three bits.
     TAY
@@ -138,14 +159,6 @@ FOR x = 4..7
     EQUB HI(x * 256 + text_font - 8 * &A0)
 NEXT
 
-\ X = 8 * the band of `cell`'s row: the offset of its colour map in
-\ band_cmaps.
-.cell_band
-    LDA cell : LSR A : LSR A : LSR A : LSR A : LSR A
-    LDX cell+1 : ORA row_hi,X : TAX         ; the row
-    LDA band_off,X : TAX
-    RTS
-
 \ A = the row of the cell whose low byte is A and high byte X.
 .cell_row
     LSR A : LSR A : LSR A : LSR A : LSR A
@@ -169,11 +182,11 @@ NEXT
     ORA #8 : STA scr8
     LDY #7
 .line
-    LDA (glyph),Y : STA gbyte
+    LDA (glyph),Y
     LSR A : LSR A : LSR A : LSR A : TAX
     LDA spread_lo,X             ; the left four pixels, in both nibbles
     AND diff : EOR paper : STA (scr),Y
-    LDA gbyte : AND #15 : TAX
+    LDA (glyph),Y : AND #15 : TAX
     LDA spread_lo,X             ; the right four
     AND diff : EOR paper : STA (scr8),Y
     DEY : BPL line
@@ -197,21 +210,3 @@ NEXT
 .colour_bytes
     EQUB cbyte(0), cbyte(1), cbyte(2), cbyte(3)
 
-\ A Spectrum nibble (its leftmost pixel in bit 3) spread into both halves
-\ of a MODE 1 byte, where a pixel's colour bits are 4 apart. (The top
-\ nibble of a byte b is spread_lo[b >> 4].)
-.spread_lo
-FOR n = 0..15
-    EQUB n * &11
-NEXT
-\ The same with the nibble turned over (its leftmost pixel in bit 0), for
-\ drawing a mirror image (sprite.6502's sprite_mode patches it in).
-.spread_rev
-FOR n = 0..15
-    EQUB ((n AND 1) * 8 + (n AND 2) * 2 + (n AND 4) DIV 2 + (n AND 8) DIV 8) * &11
-NEXT
-\ Which of them sprite.6502 spreads an image's nibbles with: a frame as it
-\ is, and turned over. (sprite_mode patches only the low byte.)
-.mode_spread
-    EQUB LO(spread_lo), LO(spread_rev)
-    ASSERT HI(spread_lo) = HI(spread_rev) AND HI(spread_lo) = HI(spread_rev + 15)

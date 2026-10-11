@@ -19,7 +19,7 @@ DATA_MAGIC = "CE2DATA"
 IF DEFINED(SPLIT_SWEEP)
     SPLIT_ADJ = SPLIT_SWEEP
 ELSE
-    SPLIT_ADJ = 96              ; the middle of 84-108, the window that works
+    SPLIT_ADJ = 98              ; the middle of 86-110, the window that works
 ENDIF
 SPLIT_T1 = 83 * SL - 2 + SPLIT_ADJ
 \ A band's split (bands.6502) fires this much later in its row than the
@@ -29,7 +29,7 @@ SPLIT_T1 = 83 * SL - 2 + SPLIT_ADJ
 IF DEFINED(BAND_SWEEP)
     BAND_ADJ = BAND_SWEEP
 ELSE
-    BAND_ADJ = -8
+    BAND_ADJ = -4
 ENDIF
 STATUS_PAPER = 0            ; black (1, red, shows where the split lands)
 
@@ -142,15 +142,16 @@ ENDIF
     INCLUDE "data/packed.6502"      ; the unpacker's tables
 \ The sprite frames' headers (&91B7): monsters, truck, train, lifts. A
 \ monster type's base frame indexes this. room_load points the entries
-\ at the room's graphics groups, and the rest at nothing.
-.sprite_frames SKIP 2 * 152
+\ at the room's graphics groups, and the rest at nothing. (Low and high
+\ bytes apart, so that a frame number indexes both.)
+.sprite_lo SKIP 152
+.sprite_hi SKIP 152
     \ Harry's frames, and the tile font.
 \ Where the parts of the room's body start, from rb (rooms.6502's
 \ room_load), and its fixed things' numbers, in order.
 .rb_mon     SKIP 1
 .rb_bands   SKIP 1
 .rb_things  SKIP 1
-.rb_stream  SKIP 1
 .room_fixed SKIP FIXED_MAX
 .harry_gfx
     INCBIN "data/harry.bin"
@@ -181,18 +182,18 @@ ENDMACRO
 \ of LowState so that &0D9F-&0DEF, a Master's extended vectors, survive a
 \ BREAK (decision 22).
 \ (band_ula, 56 bytes on, must not cross a page: below.)
-IF HI(P% + 52) <> HI(P% + 63)
-    SKIP &100 - LO(P% + 52)
+IF HI(P% + 56) <> HI(P% + 63)
+    SKIP &100 - LO(P% + 56)
 ENDIF
 .band_cmaps SKIP 24             ; band k's colour map at 8k (band 0 = the room's)
 .band_off   SKIP 32             ; for each screen row (and a little beyond), 8 * its band
-.band_ula   SKIP 8              ; bands 1 and 2: logical 2's four &FE21 values
+.band_ula   SKIP 8              ; logical 2's four &FE21 values, each for bands 1 and 2
 \ T1's latch values (irq.6502): from the status bar's split to band 1, and
 \ from band 1 to band 2; &FFFF (past the next VSync) where there's no band.
 .band_t1    SKIP 4
-\ The interrupt reads band_ula - 4 + i,X for X = 4 or 8: within one page,
+\ The interrupt reads band_ula - 1 + 2i,X for X = 1 or 2: within one page,
 \ so no read takes the extra cycle that would move the splits.
-    ASSERT HI(band_ula - 4) = HI(band_ula + 7)
+    ASSERT HI(band_ula) = HI(band_ula + 7)
 .objgfx
     INCBIN "data/objgfx.bin"
 
@@ -204,21 +205,12 @@ IF DEFINED(STREAM)
     \ the file (stream_init sets it up).
     SECTION Cache, org = code_end, guard = CODE_TOP, virtual = TRUE
     NI = 6                      ; rooms at most
-    \ (it_id to it_use in this order: disc.6502's swap.)
+    \ (it_id to it_use in this order: disc.6502's arrange swaps them.)
 .it_id      SKIP NI             ; the room - 1
 .it_lo      SKIP NI             ; where
 .it_hi      SKIP NI
-.it_nlo     SKIP NI             ; how long
-.it_nhi     SKIP NI
 .it_use     SKIP NI             ; the visit (epoch) that last used it
-.it_n       SKIP 1
-.ld_on      SKIP 1              ; an item is being read
-.ia_id      SKIP 1
-.fb_room    SKIP 1
-.fb_id      SKIP 1
-.epoch      SKIP 1              ; on one at each room entered
-.pf_cur     SKIP 1              ; the room the cache was set up for
-.nr_rooms   SKIP 4              ; (next_room: the room's neighbours)
+.nr_rooms   SKIP 4              ; (prefetch: the room's neighbours' ids)
 .nr_n       SKIP 1              ; how many
 .arena
     SKIP CODE_TOP - P%
@@ -230,8 +222,11 @@ ENDIF
 
     \ Constant tables for the OS's pages 1-3.
 IF DEFINED(STREAM)
-    \ (Above where stream_init puts the mailbox back over the loaded file.)
-    ASSERT P% >= MB_STREAM + REC_BASE
+    \ (Above where stream_init puts the mailbox back over the loaded file:
+    \ the file padded up to there if the code ends before it.)
+    IF P% < MB_STREAM + REC_BASE
+        SKIP MB_STREAM + REC_BASE - P%
+    ENDIF
 ENDIF
     INCLUDE "pages.6502"
 .payload_end

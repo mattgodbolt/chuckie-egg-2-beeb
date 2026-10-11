@@ -27,28 +27,16 @@ W_LATCH  = &25              ; drive 0, not reset, side 0, single density
 W_RATE   = 0                ; 6ms steps (r1 r0)
 
 \ The reader for the machine's controller, which stream_init (startup.6502)
-\ copies here from its two: fdc_read starts reading sector X of track A
-\ (arm says where to) and returns at once; fdc_poll says when it's done (carry set
-\ while it's reading; then carry clear and A = 0, or the controller's error
-\ bits).
-FDC_SLOT = 112
+\ copies here from its two: fdc_read starts reading fe_pos's sector (arm
+\ says where to) and returns at once; fdc_poll, only while fdc_state isn't
+\ 0, says when it's done (carry set while it's reading; then carry clear,
+\ and Z set, or A the controller's error bits). A JMP to fdc_read, then
+\ fdc_poll.
+FDC_SLOT = 127
 .fdc_slot   SKIP FDC_SLOT
 fdc_read = fdc_slot
 fdc_poll = fdc_slot + 3
-
-\ Give the 1770 command A. Its status isn't valid for a while after (the
-\ WD1770's data sheet), and a poll straight away would find it not busy, the
-\ command done before it's begun: a read taken as read before a byte came,
-\ its bytes landing later in a page that's moved on. (jsbeeb takes a command
-\ at once, which hid it; a real Master doesn't.) Some 70us.
-.w_command
-{
-    STA W_COMMAND
-    LDX #28
-.wait
-    DEX : BNE wait
-    RTS
-}
+sector_start = fdc_read     ; (tools/cachetrace.mjs, roomwait.mjs: a sector)
 
 \ Arm the NMI routine for the read command: the sector's bytes to fe_dst,
 \ as many as are wanted of it (fe_len, all 256 if more), the rest read and
@@ -58,12 +46,9 @@ fdc_poll = fdc_slot + 3
 {
     LDA fe_dst : STA nmi_dst + 1
     LDA fe_dst+1 : STA nmi_dst + 2
-    LDA fe_len+1 : BEQ part
+    LDA fe_len : LDX fe_len+1 : BEQ part
     LDA #0                      ; (256)
-    BEQ wanted                  ; (always)
 .part
-    LDA fe_len
-.wanted
     STA nmi_left
     LDA #STA_ABS : STA nmi_dst : STA NMI_AREA
     LDA #2 : STA fdc_state
@@ -73,59 +58,32 @@ fdc_poll = fdc_slot + 3
 \ --- The loader: one item at a time, a sector at a time -------------------
 
 \ disc_tick moves it on, from wait_vsync's wait (in the background) or
-\ disc_wait (waiting): ld_on says an item is being read, fe_pos (its
-\ sector and track), fe_len and fe_dst what's left of it. A room's
-\ record starts a sector, so its sectors are read straight into place, one
-\ after another, with nothing to do between.
-
-\ Start reading fe_pos's sector of CE2ROOM, which starts track mb_disc.
-.sector_start
-    LDX fe_pos
-    LDA fe_pos+1 : CLC : ADC mb_disc
-    JMP fdc_read
+\ disc_wait (waiting): an item is being read while fdc_state isn't 0 (item_add
+\ starts it), fe_pos (its sector and track on the disc), fe_len and fe_dst what's
+\ left of it. A room's record starts a sector, so its sectors are read
+\ straight into place, one after another, with nothing to do between.
 
 \ Move the loader on as far as it can without waiting: carry set while
 \ it's still reading an item.
 .disc_step
 {
-    LDA ld_on : BEQ idle
-    LDA fdc_state : BEQ next
+    LDA fdc_state : BEQ idle
     JSR fdc_poll : BCS busy
-    CMP #0 : BNE next           ; an error: read the sector again
+    BNE next                    ; an error: read the sector again
     \ The sector is in: the next, unless that was the last.
-    LDA fe_len+1 : BEQ finished
-    DEC fe_len+1
+    DEC fe_len+1 : BMI idle     ; (the item's all here)
     INC fe_dst+1
     INC fe_pos                  ; (a record never crosses a track)
-    LDA fe_len : ORA fe_len+1 : BEQ finished
+    LDA fe_len : ORA fe_len+1 : BEQ idle
 .next
-    JSR sector_start
+    JSR fdc_read
 .busy
     SEC
     RTS
-.finished
-    LDA #0 : STA ld_on          ; the item's all here
 .idle
     CLC
     RTS
 }
-
-\ From wait_vsync's wait: the loader on, or if it's idle, reading ahead.
-\ (The viewer, which only draws rooms, doesn't read ahead.)
-.disc_tick
-IF DEFINED(VIEWER)
-    JMP disc_step
-ELSE
-    JSR disc_step : BCS ticked
-    JMP prefetch
-.ticked
-    RTS
-ENDIF
-
-\ Wait for the loader to finish its item.
-.disc_wait
-    JSR disc_step : BCS disc_wait
-    RTS
 
 \ --- The cache ------------------------------------------------------------
 
@@ -141,45 +99,118 @@ ENDIF
 .loop
     DEX : BMI none
     CMP it_id,X : BNE loop
-    SEC
-    RTS
+    RTS                         ; (carry set: equal)
 .none
     CLC
     RTS
 }
 
-\ Room A + 1's record's place in CE2ROOM (fe_pos: sector, then track) and
-\ length (fe_len, room_len4 + 1 fours). Each record takes (room_len4 + 64)
-\ / 64 sectors from the one after the last room's, or from the next
-\ track's first if it wouldn't fit in this one (tools/mkrecords.py).
-.item_where
+\ Wait for the loader to finish its item.
+.disc_wait
+    JSR disc_step : BCS disc_wait
+.disc_rts
+    RTS
+
+\ From wait_vsync's wait: the loader on, or if it's idle, reading ahead.
+\ (The viewer, which only draws rooms, doesn't read ahead.)
+IF DEFINED(VIEWER)
+disc_tick = disc_step
+ELSE
+\ --- Reading ahead ----------------------------------------------------------
+
+.disc_tick
+    JSR disc_step : BCS disc_rts
+    \ Fall into prefetch.
+
+\ With nothing being read: the room Harry is likeliest to go to next, then
+\ the room's other neighbours, the first not here read if there's room.
+\ What it finds or reads becomes this visit's, so reading ahead for another
+\ room won't drop it, and Harry turning about doesn't read two rooms over
+\ and over.
+\ The likeliest is the room through the exit Harry is nearest, or heading
+\ for. The body's first byte says which of the room's edges can be crossed.
+\ The distance to each, in cells, is shortened by 8 for the side he faces,
+\ and halved for up when he's climbing and down when he's falling.
+.prefetch
 {
-    ZA_AUTO1 last
-    ZA_AUTO1 n
-    STA last
-    LDX #0 : STX fe_pos : STX fe_pos+1
-.each
-    LDA room_len4,X : CLC : ADC #64
-    ROR A : LSR A : LSR A : LSR A : LSR A : LSR A
-    STA n
-    CLC : ADC fe_pos : CMP #11 : BCC fits
-    INC fe_pos+1
-    LDA #0 : STA fe_pos
-.fits
-    CPX last : BEQ found
-    LDA fe_pos : CLC : ADC n : STA fe_pos
-    INX
-    JMP each
-.found
-    LDA #0 : STA fe_len+1
-    LDA room_len4,X : STA fe_len
-    INC fe_len : BNE fours
-    INC fe_len+1
-.fours
-    ASL fe_len : ROL fe_len+1
-    ASL fe_len : ROL fe_len+1
+    ZA_AUTO1 best               ; its item id (the room - 1), &FF if none
+    ZA_AUTO1 dist
+    ZA_AUTO1 exits
+    ZA_AUTO1 row
+    ZA_AUTO1 col
+    LDA pf_cur : BEQ disc_rts   ; (before the first room)
+    LDA h_cell : AND #31 : STA col
+    LDA h_cell+1 : STA row
+    LDA h_cell
+    ASL A : ROL row : ASL A : ROL row : ASL A : ROL row
+    LDY #0 : LDA (rb),Y : STA exits
+    STY nr_n
+    LDA #&FF : STA dist : STA best
+    LSR exits : BCC no_left
+    LDA col : LDX h_face : CPX #4 : JSR facing
+    LDX pf_cur : DEX
+    CPX #70 : BNE left
+    LDX #80
+.left
+    JSR consider
+.no_left
+    LSR exits : BCC no_right
+    LDA #30 : SEC : SBC col : LDX h_face : JSR facing
+    LDX pf_cur : INX
+    CPX #81 : BNE right
+    LDX #71
+.right
+    JSR consider
+.no_right
+    LSR exits : BCC no_up
+    LDA pf_cur : SBC #10 : TAX  ; (carry set; and clear only for no room)
+    LDA row : SBC #2
+    LDY h_face : CPY #8 : BNE up
+    LSR A
+.up
+    JSR consider
+.no_up
+    LSR exits : BCC no_down
+    LDA pf_cur : ADC #10 - 1 : TAX  ; (carry set)
+    LDA #21 : SEC : SBC row
+    LDY h_state : BNE down
+    LSR A
+.down
+    JSR consider
+.no_down
+    LDA best
+    LDY nr_n
+.try
+    CMP #120 : BCS next         ; (none)
+    JSR item_find : BCC item_add ; (which keeps A)
+    LDA epoch : STA it_use,X
+.next
+    DEY : BMI done
+    LDA nr_rooms,Y
+    BPL try                     ; (always)
+.done
+    RTS
+\ A less 8 (not below 0) if Z is set: he faces that way.
+.facing
+    BNE faced
+    SEC : SBC #8 : BCS faced
+    LDA #0
+.faced
+    RTS
+\ Room X, A away: the best if it's a room and nearer. (Each room in
+\ nr_rooms too.)
+.consider
+    DEX : CPX #120 : BCS not    ; (rooms 1-120: ids 0-119)
+    PHA : TXA
+    LDY nr_n : INC nr_n
+    STA nr_rooms,Y
+    PLA
+    CMP dist : BCS not
+    STA dist : STX best
+.not
     RTS
 }
+ENDIF
 
 \ Start reading item A at item_top: carry clear if it fits, or fits once
 \ the items at the top go (the oldest, after arrange), but never one this
@@ -187,9 +218,29 @@ ENDIF
 \ not.
 .item_add
 {
-    ZA_AUTO2 end
-    STA ia_id
-    JSR item_where
+    ZA_AUTO1 id
+    STA id
+    \ Room id + 1's record's place on the disc (fe_pos: sector, then track,
+    \ from CE2ROOM's, mb_disc) and length (fe_len). Each record takes
+    \ room_len4 / 64 + 1 sectors from the one after the last room's, or from
+    \ the next track's first if it wouldn't fit in this one
+    \ (tools/mkrecords.py).
+    LDX #0 : STX fe_pos
+    LDA mb_disc : STA fe_pos+1
+.each
+    LDA room_len4,X : ROL A : ROL A : ROL A : AND #3
+    TAY                         ; its sectors, less 1
+    SEC : ADC fe_pos            ; where the next would start
+    CMP #11 : BCC fits
+    INC fe_pos+1                ; from the next track's first
+    LDA #0 : STA fe_pos
+    TYA : ADC #0                ; (carry set)
+.fits
+    CPX id : BEQ found
+    STA fe_pos
+    INX : BNE each              ; (always)
+.found
+    TXA : TAY : JSR item_len
     \ Dropping only moves the top down, so if it doesn't fit even then, all
     \ that was dropped goes back: it_n and item_top, kept here.
     LDA it_n : PHA
@@ -197,20 +248,22 @@ ENDIF
     LDA item_top : PHA
 .try
     LDX it_n : CPX #NI : BCS full
-    CLC : LDA item_top : ADC fe_len : STA end
-    LDA item_top+1 : ADC fe_len+1 : STA end+1
-    LDA end : CMP #LO(arena_end + 1) : LDA end+1 : SBC #HI(arena_end + 1) : BCS full
-    LDA ia_id : STA it_id,X
+    \ The top moves up by the item (dropping puts it back), unless that's
+    \ past the arena's end.
+    LDA item_top : STA fe_dst
+    CLC : ADC fe_len : STA item_top
+    TAY
+    LDA item_top+1 : STA fe_dst+1
+    ADC fe_len+1 : STA item_top+1
+    CPY #LO(arena_end + 1) : SBC #HI(arena_end + 1) : BCS full
+    LDA id : STA it_id,X
     LDA epoch : STA it_use,X
-    LDA fe_len : STA it_nlo,X
-    LDA fe_len+1 : STA it_nhi,X
-    LDA item_top : STA it_lo,X : STA fe_dst
-    LDA item_top+1 : STA it_hi,X : STA fe_dst+1
-    LDA end : STA item_top
-    LDA end+1 : STA item_top+1
+    LDA fe_dst : STA it_lo,X
+    LDA fe_dst+1 : STA it_hi,X
     INC it_n
-    LDA #1 : STA ld_on          ; (carry clear)
+    JSR fdc_read
     PLA : PLA : PLA
+    CLC
     RTS
 .full
     LDX it_n : DEX : BMI cant
@@ -218,34 +271,45 @@ ENDIF
     STX it_n
     LDA it_lo,X : STA item_top
     LDA it_hi,X : STA item_top+1
-    JMP try
+    BNE try                     ; (always)
 .cant
     PLA : STA item_top
     PLA : STA item_top+1
     PLA : STA it_n
-    SEC
+    RTS                         ; (carry set: by each way here)
+}
+
+\ fe_len = item Y's length: room Y + 1's record, room_len4 + 1 fours.
+.item_len
+{
+    LDA #0 : STA fe_len+1
+    LDA room_len4,Y
+    ASL A : ROL fe_len+1
+    ASL A : ROL fe_len+1
+    ADC #4 : STA fe_len         ; (carry clear)
+    BCC done
+    INC fe_len+1
+.done
     RTS
 }
 
 \ Copy fe_len bytes from fe_pos to fe_dst (with nothing being read: the
-\ loader's pointers). X is kept.
+\ loader's pointers, which it moves on, and fe_len, which it uses up). X
+\ is kept.
 .mem_copy
 {
-    TXA : PHA
     LDY #0
-    LDX fe_len+1 : BEQ part
+    LDA fe_len+1 : BEQ part
 .page
     LDA (fe_pos),Y : STA (fe_dst),Y
     INY : BNE page
     INC fe_pos+1 : INC fe_dst+1
-    DEX : BNE page
+    DEC fe_len+1 : BNE page
 .part
-    LDX fe_len : BEQ done
-.byte
+    CPY fe_len : BEQ done
     LDA (fe_pos),Y : STA (fe_dst),Y
-    INY : DEX : BNE byte
+    INY : BNE part              ; (always)
 .done
-    PLA : TAX
     RTS
 }
 
@@ -261,44 +325,46 @@ ARR_BUF = screen
     ZA_AUTO1 best
     ZA_AUTO1 latest
     LDA #8 : STA crtc_reg : LDA #CRTC_BLANK : STA crtc_data
-    \ The table sorted: for each place, the item after it used latest
-    \ (it_use - epoch - 1 the largest, 255 this visit's), swapped in.
+    LDA #LO(arena) : STA item_top
+    LDA #HI(arena) : STA item_top+1
+    \ For each place, the item after it used latest (it_use - epoch - 1 the
+    \ largest, 255 this visit's) swapped in, and its bytes into the buffer,
+    \ at item_top's place in it.
     LDX #0
 .sort
-    STX j
     CPX it_n : BCS sorted
-    STX best
+    STX j : STX best
     LDA it_use,X : CLC : SBC epoch : STA latest
 .scan
     INX : CPX it_n : BCS scanned
     LDA it_use,X : CLC : SBC epoch
     CMP latest : BEQ scan : BCC scan
     STA latest : STX best
-    JMP scan
+    BCS scan                    ; (always)
 .scanned
+    \ Items j and best swap places in the table (it_id to it_use, NI apart).
     LDX j : LDY best
-    JSR swap
-    LDX j : INX
-    JMP sort
-.sorted
-    \ Their bytes in that order into the buffer, at item_top's place in it.
-    LDA #LO(arena) : STA item_top
-    LDA #HI(arena) : STA item_top+1
-    LDX #0
-.item
-    CPX it_n : BEQ packed
+    CLC                         ; (and after: no add carries)
+.field
+    LDA it_id,X : PHA
+    LDA it_id,Y : STA it_id,X
+    PLA : STA it_id,Y
+    TXA : ADC #NI : TAX
+    TYA : ADC #NI : TAY
+    CPX #4 * NI : BCC field
+    LDX j
     LDA it_lo,X : STA fe_pos
     LDA it_hi,X : STA fe_pos+1
     LDA item_top : STA it_lo,X
     CLC : ADC #LO(ARR_BUF - arena) : STA fe_dst
     LDA item_top+1 : STA it_hi,X
     ADC #HI(ARR_BUF - arena) : STA fe_dst+1
-    CLC : LDA it_nlo,X : STA fe_len : ADC item_top : STA item_top
-    LDA it_nhi,X : STA fe_len+1 : ADC item_top+1 : STA item_top+1
+    LDY it_id,X : JSR item_len
+    CLC : LDA fe_len : ADC item_top : STA item_top
+    LDA fe_len+1 : ADC item_top+1 : STA item_top+1
     JSR mem_copy
-    INX
-    JMP item
-.packed
+    INX : JMP sort
+.sorted
     LDA #LO(ARR_BUF) : STA fe_pos
     LDA #HI(ARR_BUF) : STA fe_pos+1
     LDA #LO(arena) : STA fe_dst
@@ -308,28 +374,14 @@ ARR_BUF = screen
     JMP mem_copy
 }
 
-\ Swap items X and Y's places in the table (it_id to it_use, NI apart).
-.swap
-{
-    ZA_AUTO1 n
-    LDA #6 : STA n
-.field
-    LDA it_id,X : PHA
-    LDA it_id,Y : STA it_id,X
-    PLA : STA it_id,Y
-    TXA : CLC : ADC #NI : TAX
-    TYA : ADC #NI : TAY
-    DEC n : BNE field
-    RTS
-}
-
 \ --- Entering a room --------------------------------------------------------
 
 \ rb = room A's record (its body first), read now if it isn't here, the
 \ game waiting, in place of the rooms used longest ago.
 .find_body
 {
-    STA fb_room
+    ZA_AUTO1 id
+    STA pf_cur                  ; (nothing reads it before this returns)
     JSR disc_wait               ; an item under way: finish it
     INC epoch
     \ An item untouched for 256 visits would look like this one's, never to
@@ -341,27 +393,25 @@ ARR_BUF = screen
     INC it_use,X
     JMP age
 .aged
-    LDX fb_room : DEX : STX fb_id
+    LDX pf_cur : DEX : STX id
     TXA : JSR item_find : BCS here
-    LDA fb_id : JSR read_now
+\ Read it now, the game waiting (the display blanked by arrange). The
+\ rest go up first, the oldest at the top, where item_add drops from.
+.miss
+    JSR arrange
+    LDA id : JSR item_add
+    JSR disc_wait
+    LDA id : JSR item_find
 .here
     \ This visit's, at the bottom, where reading ahead won't move it.
-    LDA fb_id : JSR item_find
     LDA epoch : STA it_use,X
     JSR arrange
-    LDA fb_id : JSR item_find
+    LDA id : JSR item_find
     LDA it_lo,X : STA rb
     LDA it_hi,X : STA rb+1
-    LDA fb_room : STA pf_cur
     RTS
 }
-
-\ Read item A now, the game waiting (the display blanked by arrange). The
-\ rest go up first, the oldest at the top, where item_add drops from.
-.read_now
-    PHA : JSR arrange : PLA
-    JSR item_add
-    JMP disc_wait
+read_now = find_body.miss       ; (tools/cachetrace.mjs, roomwait.mjs: a miss)
 
 \ gp = group X of the room's: X fours into its record.
 .find_group
@@ -375,104 +425,3 @@ ARR_BUF = screen
     RTS
 }
 
-IF NOT(DEFINED(VIEWER))
-\ --- Reading ahead ----------------------------------------------------------
-
-\ With nothing being read: the room Harry is likeliest to go to next, then
-\ the room's other neighbours, the first not here read if there's room.
-\ What it finds or reads becomes this visit's, so reading ahead for another
-\ room won't drop it, and Harry turning about doesn't read two rooms over
-\ and over.
-.prefetch
-{
-    LDA pf_cur : BEQ done       ; (before the first room)
-    JSR next_room
-    LDY nr_n
-.try
-    SEC : SBC #1 : BCC next     ; (0: no room)
-    JSR item_find : BCC missing ; (which keeps A)
-    LDA epoch : STA it_use,X
-.next
-    DEY : BMI done
-    LDA nr_rooms,Y
-    JMP try
-.done
-    RTS
-.missing
-    JMP item_add
-}
-
-\ The room through the exit Harry is nearest, or heading for: 0 if none.
-\ The body's first byte says which of the room's edges can be crossed. The
-\ distance to each, in cells, is shortened by 8 for the side he faces, and
-\ halved for up when he's climbing and down when he's falling.
-.next_room
-{
-    ZA_AUTO1 best
-    ZA_AUTO1 dist
-    ZA_AUTO1 exits
-    ZA_AUTO1 row
-    ZA_AUTO1 col
-    LDA h_cell : AND #31 : STA col
-    LDA h_cell+1 : STA row
-    LDA h_cell
-    ASL A : ROL row : ASL A : ROL row : ASL A : ROL row
-    LDY #0 : LDA (rb),Y : STA exits
-    LDA #&FF : STA dist
-    LDA #0 : STA best : STA nr_n
-    LSR exits : BCC no_left
-    LDA col : LDX h_face : CPX #4 : JSR facing
-    LDX pf_cur : DEX
-    CPX #70 : BNE left
-    LDX #80
-.left
-    JSR consider
-.no_left
-    LSR exits : BCC no_right
-    LDA #30 : SEC : SBC col : LDX h_face : CPX #0 : JSR facing
-    LDX pf_cur : INX
-    CPX #81 : BNE right
-    LDX #71
-.right
-    JSR consider
-.no_right
-    LSR exits : BCC no_up
-    LDA row : SEC : SBC #2
-    LDX h_face : CPX #8 : BNE up
-    LSR A
-.up
-    TAY : LDA pf_cur : SEC : SBC #10 : TAX : TYA
-    JSR consider
-.no_up
-    LSR exits : BCC no_down
-    LDA #21 : SEC : SBC row
-    LDX h_state : BNE down
-    LSR A
-.down
-    TAY : LDA pf_cur : CLC : ADC #10 : TAX : TYA
-    JSR consider
-.no_down
-    LDA best
-    RTS
-\ A less 8 (not below 0) if Z is set: he faces that way.
-.facing
-    BNE faced
-    SEC : SBC #8 : BCS faced
-    LDA #0
-.faced
-    RTS
-\ Room X, A away: the best if it's a room and nearer. (Each room in
-\ nr_rooms too.)
-.consider
-    CPX #1 : BCC not
-    CPX #121 : BCS not
-    PHA : TXA
-    LDY nr_n : INC nr_n
-    STA nr_rooms,Y
-    PLA
-    CMP dist : BCS not
-    STA dist : STX best
-.not
-    RTS
-}
-ENDIF

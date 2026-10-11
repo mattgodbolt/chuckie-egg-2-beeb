@@ -155,14 +155,11 @@ ENDSECTION
 \ OS calls once it owns the interrupts (decision 11), and the OS's IRQ entry
 \ only uses &FC. Nothing here is used before install_irq.
 SECTION Scratch, org = &90, guard = &FC, virtual = TRUE
-\ (irq.6502)
-.room_ula      SKIP 16
 \ (screen.6502)
 .dg_band       SKIP 1          ; draw_glyph's band offset
 .sp_row        SKIP 1          ; the row draw_sprite or erase_image is at
 .sb_p          SKIP 2          ; setup_bands' pointer (bands.6502: no allocator there)
 .irq_split     SKIP 1          ; the next T1 split: 0 the status bar's, then bands 1, 2
-.gbyte         SKIP 1
 \ (status.6502)
 .status_i      SKIP 1
 .status_x      SKIP 1
@@ -190,13 +187,11 @@ SECTION Scratch, org = &90, guard = &FC, virtual = TRUE
 \ (objects.6502)
 .tl_t          SKIP 1
 .drop_x        SKIP 1
-\ &D0 is the Master's VDU status, which its soft BREAK reads (decision 22).
-    ASSERT P% <= &D0
-    SKIP &D0 - P%
-.vdu_status    SKIP 1          ; (not the game's)
-.drop_row      SKIP 1
-.drop_col      SKIP 1
-.drop_g        SKIP 1
+\ (sound.6502)
+.dt_i          SKIP 1
+.dt_n          SKIP 1
+.ms_n          SKIP 1
+.noise_on      SKIP 1
 \ (machines.6502)
 .ds_ink        SKIP 1
 .ds_rows       SKIP 1
@@ -207,31 +202,40 @@ SECTION Scratch, org = &90, guard = &FC, virtual = TRUE
 .rc_b          SKIP 1
 .ta_b          SKIP 1
 .w10_n         SKIP 1
-\ (game.6502)
-.ed_n          SKIP 1
-.save_armed    SKIP 1
-\ (sound.6502)
-.dt_i          SKIP 1
-.dt_n          SKIP 1
-.ms_n          SKIP 1
-.noise_on      SKIP 1
 \ (bands.6502: set when a room is drawn)
 .band_count    SKIP 1          ; how many splits, 0-2
 .band_rows     SKIP 2          ; bands 1 and 2: the first row of each
+\ &D0 is the Master's VDU status, which its soft BREAK reads (decision 22).
+    ASSERT P% <= &D0
+    SKIP &D0 - P%
+.vdu_status    SKIP 1          ; (not the game's)
+\ (irq.6502: install_irq fills status_ula; VSync writes it and the first
+\ ten of room_ula, after it, in one go)
+.status_ula    SKIP 6
+.room_ula      SKIP 16
+.drop_row      SKIP 1
+.drop_col      SKIP 1
+.drop_g        SKIP 1
+\ (game.6502)
+.ed_n          SKIP 1
+.save_armed    SKIP 1
 \ (rooms.6502: room_load's graphics group)
 .gp            SKIP 2
 IF DEFINED(STREAM)
 \ (disc.6502: the reader, and what fetch reads)
-.fdc_type      SKIP 1          ; FDC_8271 or FDC_1770
-.fdc_state     SKIP 1          ; 0 idle, 1 seeking (1770), 2 reading, 3 waiting (8271)
-.fdc_track     SKIP 1          ; the read's track and sector
-.fdc_sect      SKIP 1
+.fdc_state     SKIP 1          ; 0 idle, 1 seeking (1770), 2 reading, (8271:) 3 waiting, 4 to track 0
 .fdc_cur       SKIP 1          ; 1770: the head's track (&FF: not known)
 i_since = fdc_cur               ; (8271: when the wait for the drive began)
-.fe_pos        SKIP 2          ; where in CE2ROOM: sector, track
+.nmi_left      SKIP 1          ; (startup.6502's Nmi: the bytes still wanted)
+.fe_pos                        ; where on the disc: sector, track (the reader's)
+.fdc_sect      SKIP 1
+.fdc_track     SKIP 1
 .fe_len        SKIP 2          ; how many bytes
 .fe_dst        SKIP 2          ; to where
 .item_top      SKIP 2          ; (disc.6502: the cache's next free byte)
+.it_n          SKIP 1          ; (disc.6502: items in the cache)
+.epoch         SKIP 1          ; on one at each room entered
+.pf_cur        SKIP 1          ; the room the cache was set up for
 ENDIF
 ENDSECTION
 

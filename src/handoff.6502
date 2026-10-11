@@ -23,9 +23,9 @@
     ZA_AUTO2 sr_mem
     ZA_AUTO2 sr_blk
     PHP
-    LDA #LO(STATE) : STA sr_blk
+    LDX #0 : STX sr_blk
+    ASSERT LO(STATE) = 0
     LDA #HI(STATE) : STA sr_blk+1
-    LDX #0
 .region
     LDA state_regions,X : STA sr_mem
     LDA state_regions+1,X : STA sr_mem+1
@@ -39,12 +39,10 @@
 .next
     INY
     TYA : CMP state_regions+2,X : BNE byte
-    CLC : TYA : BNE add
-    INC sr_blk+1                ; a whole page
-    BNE done_add                ; (always)
-.add
-    ADC sr_blk : STA sr_blk
+    TYA : BEQ page              ; (0: a whole page)
+    CLC : ADC sr_blk : STA sr_blk
     BCC done_add
+.page
     INC sr_blk+1
 .done_add
     INX : INX : INX
@@ -58,10 +56,10 @@
 {
     SEI
     STA mb_reason
-    LDA #0 : STA mb_game
     LDA lives : BEQ no_game
-    INC mb_game
+    LDA #1
 .no_game
+    STA mb_game
     LDX #9
 .keep_score
     LDA score,X : STA mb_score,X
@@ -77,12 +75,13 @@
     \ system); SHIFT would stop the boot, CTRL make it a hard reset.
 .keys
     JSR any_key : BNE keys
-    LDX #0 : JSR key_down : BNE keys
-    LDX #1 : JSR key_down : BNE keys
+    LDX #1                      ; CTRL, then SHIFT
+.ctrl_shift
+    JSR key_down : BNE keys
+    DEX : BPL ctrl_shift
     \ The keyboard as the OS left it (sound_write leaves port A all
     \ outputs, and the reset's boot reads keys through bit 7): bit 7 an
-    \ input again, and auto-scan back on.
-    LDA #&7F : STA sysvia_ddra
+    \ input again (key_down's), and auto-scan back on.
     LDA #&0B : STA sysvia_orb
     LDX #OS_KEPT_LEN - 1
 .os

@@ -5,7 +5,6 @@
 \ ***************************************************************************
 
 \ `room` (memory.6502) is the room to show, 1-120.
-ZA_AUTO1 shown              ; the room on screen
 
 .viewer
 {
@@ -29,3 +28,5 @@ ZA_AUTO1 shown              ; the room on screen
     DEC room : BNE draw
     LDA #120 : STA room : JMP draw
 }
+.shown EQUB 0                ; the room on screen (not zero page: the
+                            ; streaming edition's has none to spare)

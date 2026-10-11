@@ -10,8 +10,10 @@
 \ ***************************************************************************
 
 ZA_AUTO2 bp                 ; the next byte of the bit stream
-ZA_AUTO1 bbyte              ; the byte being read, used bits shifted out
-ZA_AUTO1 bleft              ; bits left in bbyte
+\ The byte being read, used bits shifted out and a 1 shifted in behind
+\ them: when only that 1 is left, an ASL leaves 0 (as it does from 0, the
+\ start), and the next byte is read.
+ZA_AUTO1 bbyte
 \ The move-to-front lists, three entries each: the last three attributes,
 \ tiles and types seen in this room, the most recent first.
 ZA_AUTO 9, mtf
@@ -19,22 +21,27 @@ MTF_ATTR = 0
 MTF_TILE = 3
 MTF_TYPE = 6
 
-\ Read X bits (1-8) as a number in A (Z set if it's 0).
+\ Read X bits (1-8) as a number in A and Y (Z set if it's 0). Fewer than 8
+\ leave the carry clear (the last ROL shifts out a 0), which the callers'
+\ ADCs rely on.
+.getbit
+    LDX #1
 .getbits
 {
-    ZA_AUTO1 val
-    LDA #0 : STA val
+    LDA #0
 .loop
-    DEC bleft : BPL have
-    LDY #0 : LDA (bp),Y : STA bbyte
+    ASL bbyte : BNE have
+    PHA
+    LDY #0 : LDA (bp),Y
     INC bp : BNE refilled
     INC bp+1
 .refilled
-    LDA #7 : STA bleft
+    SEC : ROL A : STA bbyte     ; the top bit out, the 1 in behind
+    PLA                         ; (keeps the carry)
 .have
-    ASL bbyte : ROL val
+    ROL A
     DEX : BNE loop
-    LDA val
+    TAY                         ; (Z for A)
     RTS
 }
 
@@ -66,16 +73,14 @@ MTF_TYPE = 6
 {
     ZA_AUTO1 tier
     STX tier
-    LDX #1 : JSR getbits : BEQ got
-    INC tier
-    LDX #1 : JSR getbits : BEQ got
-    INC tier
+    JSR getbit : BEQ got
+    JSR getbit : SEC : ADC tier : STA tier     ; 10 or 11: on 1 or 2
 .got
     LDY tier
     LDA #0 : LDX tier_width,Y : BEQ none
     JSR getbits
 .none
-    LDY tier : CLC : ADC tier_base,Y : TAY
+    LDY tier : ADC tier_base,Y : TAY    ; (carry clear: getbits)
     LDA tier_syms,Y
     RTS
 }
@@ -93,48 +98,39 @@ MTF_TYPE = 6
     STX base
     LDA #0 : STA n
 .count
-    LDX #1 : JSR getbits : BEQ hit
+    JSR getbit : BEQ hit
     INC n : LDA n : CMP #3 : BNE count
     \ A miss: a value from the field's vocabulary, and the rest shift down.
     LDY base : LDX vocab_width,Y : JSR getbits
-    LDY base : CLC : ADC vocab_off,Y : TAY
+    LDY base : ADC vocab_off,Y : TAY    ; (carry clear: getbits)
     LDA vocab,Y : STA v
-    LDA base : CLC : ADC #2 : TAX
-    JMP shift
-.hit
-    \ Entry n comes to the front; the ones before it shift down.
-    LDA n : CLC : ADC base : TAX
-    LDA mtf,X
-    ZA_INDEXEDBY 0..8
-    STA v
+    LDX base : INX : INX
+    BNE test                    ; (always)
 .shift
-    CPX base : BEQ front
     DEX
     LDA mtf,X
     ZA_INDEXEDBY 0..7
     STA mtf+1,X
     ZA_INDEXEDBY 0..7
-    JMP shift
-.front
+.test
+    CPX base : BNE shift
     LDA v : STA mtf,X           ; X = base here
     ZA_INDEXEDBY 0..6
     JMP emit
+.hit
+    \ Entry n comes to the front; the ones before it shift down.
+    LDA n : ADC base : TAX      ; (carry clear: getbits)
+    LDA mtf,X
+    ZA_INDEXEDBY 0..8
+    STA v
+    JMP test
 }
 
-\ bp = the room's bit stream, in its body (rooms.6502's room_load).
-.room_stream
-{
-    LDA rb_stream
-    CLC : ADC rb : STA bp
-    LDA rb+1 : ADC #0 : STA bp+1
-    RTS
-}
-
-\ Start unpacking the room: its first record is the background.
+\ Start unpacking the room (bp set by rooms.6502's room_load): its first
+\ record is the background.
 .unpack_room
 {
-    JSR room_stream
-    LDA #0 : STA bleft : STA rec_len : STA rec_pos
+    LDA #0 : STA bbyte : STA rec_len : STA rec_pos
     \ The lists start empty. (Clearing them shows the allocator, and the
     \ ZA_DISCARD tells it the clearing writes all of them: without it, it
     \ keeps their bytes from everything, all the time.)
@@ -150,13 +146,13 @@ MTF_TYPE = 6
 \ The next byte of the room's bytecode (the drawer's fetch).
 .fetch
 {
-    LDY rec_pos : CPY rec_len : BCC have
-    LDA #0 : STA rec_len : STA rec_pos
+    LDX rec_pos : CPX rec_len : BCC have
+    LDX #0 : STX rec_len
     JSR unpack_record
-    LDY #0
+    LDX #0
 .have
-    LDA rec_buf,Y
-    INY : STY rec_pos
+    LDA rec_buf,X
+    INX : STX rec_pos
     RTS
 }
 
@@ -178,20 +174,19 @@ MTF_TYPE = 6
     \ one more bit picks one of a pair. kind = 2 * ones + that bit, or 0.
     LDA #0 : STA ones
 .count
-    LDX #1 : JSR getbits : BEQ counted
+    JSR getbit : BEQ counted
     INC ones : LDA ones : CMP #5 : BNE count
     LDA #0 : JMP emit           ; 11111: the end
 .counted
     LDA ones : STA kind : BEQ runs      ; 0: a run
-    ASL A : STA kind
-    LDX #1 : JSR getbits
-    ORA kind : STA kind
+    JSR getbit
+    LSR A : ROL kind : LDA kind
     CMP #2 : BEQ runs           ; 2: a capped run
     \ 3-9: the command byte (a bend's from 2 bits), the attribute, a
     \ single's tile, row and column.
     CMP #8 : BNE fixed
     LDX #2 : JSR getbits
-    CLC : ADC #3                ; &03-&06
+    ADC #3                      ; &03-&06 (carry clear: getbits)
     BNE command                 ; (always)
 .fixed
     LDX kind : LDA kind_cmds-3,X
@@ -210,7 +205,7 @@ MTF_TYPE = 6
 .fives
     DEC n : BMI type_last
     LDX #5 : JSR emit_bits
-    JMP fives
+    BPL fives                   ; (always: emit leaves N clear)
 .hopper
     LDX #5 : JSR emit_bits      ; rows(5) width(6)
     LDX #6 : JMP emit_bits
@@ -220,26 +215,26 @@ MTF_TYPE = 6
     LDX #MTF_TILE : JSR emit_mtf
     LDX #MTF_ATTR : JSR emit_mtf
     JSR emit_place
-    LDX #1 : JSR getbits
-    TAY : LDX len_tier,Y                ; across or down: its own lengths' code
+    JSR getbit                          ; (in Y too)
+    LDX len_tier,Y                      ; across or down: its own lengths' code
     LSR A : ROR A : STA unpack_vert     ; to bit 7
     JSR get_tiered
-    CLC : ADC #1 : ORA unpack_vert : JSR emit
+    ADC #1 : ORA unpack_vert : JSR emit ; (carry clear: get_tiered's ADC)
     LDA kind : BEQ type_last
     LDX #TIER_ENDS : JSR emit_tiered
 .type_last
     LDX #MTF_TYPE : JMP emit_mtf
 
-\ text: characters (5 bits) until 31
+\ text: characters (5 bits) until 31, which emits the &80 that ends it
 .text
-    LDX #5 : JSR getbits
-    CMP #31 : BEQ text_end
-    TAX : LDA text_chars,X : JSR emit
-    JMP text
-.text_end
-    LDA #&80 : JMP emit
+    LDX #5 : JSR getbits                ; (in Y too)
+    LDA text_chars,Y : JSR emit         ; (emit keeps A)
+    CMP #&80 : BNE text
+    RTS
 }
 
-\ TEXT_CHARS in tools/packrooms.py.
+\ TEXT_CHARS in tools/packrooms.py, then (at 31) the end.
 .text_chars
     EQUS " &ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+    SKIP 31 - (P% - text_chars)
+    EQUB &80

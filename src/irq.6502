@@ -31,19 +31,13 @@ FUNCTION ula_entry(l, n, phys) = ((l AND 2) * 4 + (n AND 2) * 2 + (l AND 1) * 2 
 
 \ The room's sixteen values (set_room_palette fills them): the ten the
 \ status bar never shows first, then the six it does, which T1 writes.
-\ The status bar's six: logical 1, then 0, each beside 0, 1 and 3.
-.status_ula
-    FOR l = {1, 0}
-        FOR n = {0, 1, 3}
-            EQUB ula_entry(l, n, STATUS_COLOURS[l])
-        NEXT
-    NEXT
+\ (The status bar's six are in zero page: status_ula, memory.6502.)
 
 .irq_handler
 {
     ZA_INTERRUPT
     TXA : PHA
-    LDA usrvia_ifr : AND #&40 : BEQ not_t1
+    BIT usrvia_ifr : BVC not_t1     ; (T1's flag is bit 6)
     LDA usrvia_t1cl             ; acknowledge
     LDX irq_split : BNE band
     \ The status bar's split, and the latch for the period after next.
@@ -51,18 +45,18 @@ FUNCTION ula_entry(l, n, phys) = ((l AND 2) * 4 + (n AND 2) * 2 + (l AND 1) * 2 
         LDA room_ula + i : STA ula_pal
     NEXT
     LDA band_t1+2 : STA usrvia_t1ll
-    LDA band_t1+3 : STA usrvia_t1lh
-    INC irq_split
-    BNE done                    ; (always: 1-3)
+    LDA band_t1+3               ; (never 0: &FF, or band 2 a row or more on)
+    BNE latch                   ; (always)
 .band
     \ A band's split (decision 15): logical 2's four entries for band X.
-    TXA : ASL A : ASL A : TAX
     FOR i = 0..3
-        LDA band_ula - 4 + i,X : STA ula_pal
+        LDA band_ula - 1 + 2 * i,X : STA ula_pal
     NEXT
-    LDA #&FF : STA usrvia_t1ll : STA usrvia_t1lh
+    LDA #&FF : STA usrvia_t1ll
+.latch
+    STA usrvia_t1lh
     INC irq_split
-    BNE done                    ; (always)
+    BNE done                    ; (always: 1-3)
 .not_t1
     LDA sysvia_ifr : AND #2 : BEQ done
     STA sysvia_ifr              ; acknowledge
@@ -71,15 +65,12 @@ FUNCTION ula_entry(l, n, phys) = ((l AND 2) * 4 + (n AND 2) * 2 + (l AND 1) * 2 
     LDA #HI(SPLIT_T1) : STA usrvia_t1ch     ; starts the count
     LDA band_t1 : STA usrvia_t1ll           ; ... then from the status bar's
     LDA band_t1+1 : STA usrvia_t1lh         ; split to band 1's
-    LDA #0 : STA irq_split
-    LDX #9
-.room_entries
-    LDA room_ula,X : STA ula_pal
-    DEX : BPL room_entries
-    LDX #5
-.status
-    LDA status_ula,X : STA ula_pal
-    DEX : BPL status
+    ASSERT room_ula = status_ula + 6
+    LDX #15
+.entries
+    LDA status_ula,X : STA ula_pal  ; room_ula's ten, then the status bar's
+    DEX : BPL entries
+    INX : STX irq_split         ; 0
 .done
     PLA : TAX
     LDA &FC                     ; the interrupted A, saved by the OS

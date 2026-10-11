@@ -21,35 +21,33 @@
 \ reads the header bytes masked to 3 and 4 bits.
 \
 \ Both routines work a cell row at a time, and in it a column at a time
-\ from the right: a frame byte's two screen bytes are touched by no other
-\ byte, so the order doesn't change what's drawn. Y is the line in the
-\ cell, which indexes the screen bytes from the cell's top, the tile's
-\ lines, and the frame's column through sp_p.
+\ from the right and a line at a time from the bottom: a frame byte's two
+\ screen bytes are touched by no other byte, so the order doesn't change
+\ what's drawn. Y counts the row's lines down to 0, its first (sp_yf in
+\ the cell): it indexes the screen bytes, the tile's lines and the
+\ frame's column, each pointer offset to that first line.
 \ ***************************************************************************
 
 ZA_AUTO2 sp_frame           ; the frame's header
-ZA_AUTO2 sp_cell            ; the top-left cell
-ZA_AUTO1 sp_yf              ; the pixel line in that cell, 0-7
+ZA_AUTO2 sp_cell            ; the top-left cell (the drawing moves it: below)
+ZA_AUTO1 sp_yf              ; the pixel line in that cell, 0-7 (likewise)
 ZA_AUTO1 sp_ink             ; the sprite's Spectrum colour, 0-7
 ZA_AUTO1 sp_colour          ; that colour in this row's band: a byte of four pixels
 
 \ The frame as it is drawn (sp_row is in memory.6502's scratch): ...
 ZA_AUTO1 sp_h8              ; its lines: a column's bytes
-ZA_AUTO1 sp_width           ; its width in bytes
-ZA_AUTO1 sp_w16             ; 16 * (width - 1): its last column on the screen
+ZA_AUTO1 sp_wm1             ; its width in bytes, less 1
 ZA_AUTO1 sp_lines           ; its lines below this cell row
 ZA_AUTO2 sp_step            ; sp_p's step to the column on the left: -sp_h8, or a mirror's +sp_h8
 ZA_AUTO1 sp_half            ; which half of a cell sp_scr is: 0 the left, a mirror's 8 the right
-\ ... this cell row ...
-ZA_AUTO2 sp_rowcell         ; its first cell
-ZA_AUTO2 sp_rowscr          ; its screen address
+\ ... this cell row (sp_cell its first cell, sp_yf its first line) ...
+ZA_AUTO2 sp_rowscr          ; the screen address of its last column, in sp_half
 ZA_AUTO2 sp_rowp            ; sp_p for its last column
-ZA_AUTO1 sp_y               ; its first line
-ZA_AUTO1 sp_end             ; Y after its last line
-\ ... and the column.
+ZA_AUTO1 sp_top             ; its lines less 1: Y at a column's start
+\ ... and the column, Y = 0 at the row's first line.
 ZA_AUTO1 sp_c               ; from width - 1 down to 0
 ZA_AUTO2 sp_p               ; its frame bytes, for Y = 0
-ZA_AUTO2 sp_scr             ; the screen: this cell's top, its left four pixels
+ZA_AUTO2 sp_scr             ; the screen: this cell's line sp_yf, its left four pixels
 ZA_AUTO2 sp_scr8            ; ... and its right four (sp_scr EOR 8; a mirror's the other way)
 ZA_AUTO1 sp_yl              ; (erase_image's Y, kept through a look-up)
 
@@ -57,16 +55,14 @@ ZA_AUTO1 sp_yl              ; (erase_image's Y, kept through a look-up)
 \ looked up afresh in each row's band (decision 15).
 .draw_sprite
 {
-    ZA_AUTO1 img
     JSR sprite_start
 .each_row
     \ The colour in this row's band.
     LDX sp_row : LDA band_off,X : ORA sp_ink : TAX
-    LDA band_cmaps,X : TAX : LDA colour_bytes,X : STA sp_colour
+    LDA band_cmaps,X : STA sp_colour
     JSR sprite_row
 .line
     LDA (sp_p),Y : BEQ next
-    STA img
     LSR A : LSR A : LSR A : LSR A : BEQ right
     TAX                         ; the left four pixels (sprite_mode patches
                                 ; the spread_lo of .dl, .dr for a mirror)
@@ -74,15 +70,15 @@ ZA_AUTO1 sp_yl              ; (erase_image's Y, kept through a look-up)
 .dl AND spread_lo,X
     EOR (sp_scr),Y : STA (sp_scr),Y
 .right
-    LDA img : AND #15 : BEQ next
+    LDA (sp_p),Y : AND #15 : BEQ next
     TAX                         ; the right four
     LDA (sp_scr8),Y : EOR sp_colour
 .dr AND spread_lo,X
     EOR (sp_scr8),Y : STA (sp_scr8),Y
 .next
-    INY : CPY sp_end : BNE line
-    JSR sprite_left : BCC line
-    JSR sprite_down : BCC each_row
+    DEY : BPL line
+    JSR sprite_left : BPL line
+    JSR sprite_down : BNE each_row
     RTS
 }
 
@@ -93,7 +89,6 @@ ZA_AUTO1 sp_yl              ; (erase_image's Y, kept through a look-up)
 \ shape out of them, as in the original, until they are redrawn.
 .erase_image
 {
-    ZA_AUTO1 img
     ZA_AUTO1 tb
     ZA_AUTO1 mask
     JSR sprite_start
@@ -102,20 +97,47 @@ ZA_AUTO1 sp_yl              ; (erase_image's Y, kept through a look-up)
 .column
     \ A cell is looked up only if the column has a pixel in it.
     LDA (sp_p),Y : BNE found
-    INY : CPY sp_end : BNE column
-    JMP column_done
+    DEY : BPL column
+    BMI column_done                 ; (always)
 .found
     \ The cell: the row's first plus the column (past column 31 the next
     \ row's, as the maps have it).
     STY sp_yl
-    CLC : LDA sp_rowcell : ADC sp_c : STA cell
-    LDA sp_rowcell+1 : ADC #0 : STA cell+1
-    JSR cell_colours                ; paper, diff
-    LDA paper : ORA diff : BEQ clear
+    CLC : LDA sp_cell : ADC sp_c : STA cell
+    LDA sp_cell+1 : ADC #0 : STA cell+1
+    JSR cell_colours                ; paper, diff (A = diff)
+    ORA paper : BEQ clear
     JSR cell_glyph
+    \ The tile's lines from the row's first (cell_glyph leaves carry clear).
+    LDA glyph : ADC sp_yf : STA glyph
+    BCC glyph_at
+    INC glyph+1
+.glyph_at
     LDY sp_yl
-    LDA (sp_p),Y
-    JMP have
+.line
+    LDA (sp_p),Y : BEQ next
+    LDA (glyph),Y
+.to_tiled
+    BNE tiled                       ; (tiled_m for a mirror: sprite_mode)
+    ZA_CANJUMP tiled, tiled_m
+    \ The tile's line is blank: the room's pixels here are paper.
+    LDA (sp_p),Y : LSR A : LSR A : LSR A : LSR A : BEQ plain_right
+    TAX
+    LDA (sp_scr),Y : EOR paper
+.pl AND spread_lo,X
+    EOR (sp_scr),Y : STA (sp_scr),Y
+.plain_right
+    LDA (sp_p),Y : AND #15 : BEQ next
+    TAX
+    LDA (sp_scr8),Y : EOR paper
+.pr AND spread_lo,X
+    EOR (sp_scr8),Y : STA (sp_scr8),Y
+.next
+    DEY : BPL line
+.column_done
+    JSR sprite_left : BPL column
+    JSR sprite_down : BNE each_row
+    RTS
 .clear
     \ Paper 0 and ink the same, as in most of a room: the room's pixels
     \ here are all 0, so the image's pixels are cleared (AND NOT spread(n)
@@ -123,51 +145,21 @@ ZA_AUTO1 sp_yl              ; (erase_image's Y, kept through a look-up)
     LDY sp_yl
     LDA (sp_p),Y
 .clear_have
-    STA img
     \ (sprite_mode patches the spread_lo of .cl to .tr for a mirror.)
     LSR A : LSR A : LSR A : LSR A : EOR #15 : TAX
     LDA (sp_scr),Y
 .cl AND spread_lo,X
     STA (sp_scr),Y
-    LDA img : AND #15 : EOR #15 : TAX
+    LDA (sp_p),Y : AND #15 : EOR #15 : TAX
     LDA (sp_scr8),Y
 .cr AND spread_lo,X
     STA (sp_scr8),Y
 .clear_next
-    INY : CPY sp_end : BEQ column_done
+    DEY : BMI column_done
     LDA (sp_p),Y : BNE clear_have
     JMP clear_next                  ; (not BEQ: the allocator would see a
-                                    ; way on into .line, which reads glyph)
-.line
-    LDA (sp_p),Y : BEQ next
-.have
-    STA img
-    LDA (glyph),Y
-.to_tiled
-    BNE tiled                       ; (tiled_m for a mirror: sprite_mode)
-    ZA_CANJUMP tiled, tiled_m
-    \ The tile's line is blank: the room's pixels here are paper.
-    LDA img : LSR A : LSR A : LSR A : LSR A : BEQ plain_right
-    TAX
-    LDA (sp_scr),Y : EOR paper
-.pl AND spread_lo,X
-    EOR (sp_scr),Y : STA (sp_scr),Y
-.plain_right
-    LDA img : AND #15 : BEQ next
-    TAX
-    LDA (sp_scr8),Y : EOR paper
-.pr AND spread_lo,X
-    EOR (sp_scr8),Y : STA (sp_scr8),Y
-.next
-    INY : CPY sp_end : BNE line
-.column_done
-    JSR sprite_left : BCS row_done
-    JMP column
-.row_done
-    JSR sprite_down : BCS done
-    JMP each_row
-.done
-    RTS
+                                    ; way on, through .tiled_m, into .line,
+                                    ; which reads glyph)
 .tiled_m
     \ A mirror's screen halves are the other way round (sp_half), so the
     \ tile's are too: its byte with the nibbles swapped.
@@ -177,7 +169,7 @@ ZA_AUTO1 sp_yl              ; (erase_image's Y, kept through a look-up)
     \ image's pixels by .tl and .tr, which sprite_mode patches; the tile's
     \ by spread_lo always).
     STA tb
-    LDA img : LSR A : LSR A : LSR A : LSR A : BEQ tiled_right
+    LDA (sp_p),Y : LSR A : LSR A : LSR A : LSR A : BEQ tiled_right
     TAX
 .tl LDA spread_lo,X
     STA mask
@@ -185,7 +177,7 @@ ZA_AUTO1 sp_yl              ; (erase_image's Y, kept through a look-up)
     LDA spread_lo,X : AND diff : EOR paper
     EOR (sp_scr),Y : AND mask : EOR (sp_scr),Y : STA (sp_scr),Y
 .tiled_right
-    LDA img : AND #15 : BEQ next
+    LDA (sp_p),Y : AND #15 : BEQ next
     TAX
 .tr LDA spread_lo,X
     STA mask
@@ -200,13 +192,9 @@ ZA_AUTO1 sp_yl              ; (erase_image's Y, kept through a look-up)
 .sprite_start
 {
     ZA_AUTO1 top
-    \ Its first line: sp_cell, sp_yf (a packed frame's, lower: below).
-    LDA sp_cell : STA sp_rowcell
-    LDA sp_cell+1 : STA sp_rowcell+1
-    LDA sp_yf : STA sp_y
     \ The header: height + 8 * top, width + 16 * bottom (+ MIRROR).
     LDY #1 : LDA (sp_frame),Y : TAX
-    AND #15 : STA sp_width
+    AND #15 : STA sp_wm1 : DEC sp_wm1
     DEY : LDA (sp_frame),Y
     CPX #16 : BCS packed
     CMP #8 : BCS packed
@@ -216,41 +204,44 @@ ZA_AUTO1 sp_yl              ; (erase_image's Y, kept through a look-up)
     BCC own                         ; (always: height < 8)
 .packed
     LSR A : LSR A : LSR A : STA top                             ; the lines left out above
-    LDA (sp_frame),Y : AND #7 : ASL A : ASL A : ASL A : SEC : SBC top : STA sp_h8
-    TXA : LSR A : LSR A : LSR A : LSR A : AND #7                ; ... and below
-    EOR #&FF : SEC : ADC sp_h8 : STA sp_h8 : STA sp_lines       ; the lines a column holds
+    TXA : AND #&70 : LSR A : LSR A : LSR A : LSR A              ; ... and below
+    ADC top : STA sp_h8                                         ; (carry clear)
+    LDA (sp_frame),Y : AND #7 : ASL A : ASL A : ASL A
+    SEC : SBC sp_h8 : STA sp_h8 : STA sp_lines                  ; the lines a column holds
     \ The first of them is `top` lines down: whole cell rows of 32 cells,
     \ then the line in the cell.
     LDA top : BEQ moved
     CLC : ADC sp_yf : STA top
-    AND #7 : STA sp_y
+    AND #7 : STA sp_yf
     LDA top : AND #&F8 : BEQ moved
-    ASL A : ASL A
-    CLC : ADC sp_rowcell : STA sp_rowcell
+    ASL A : ASL A                   ; (carry clear: top < 64)
+    ADC sp_cell : STA sp_cell
     BCC moved
-    INC sp_rowcell+1
+    INC sp_cell+1
 .moved
     \ sp_rowp: the first line held of the column drawn first (the screen's
-    \ last), less sp_y.
+    \ last).
     TXA : BMI mirror
 .own
     \ Its own pixels follow the header, a column at a time from the left;
     \ the last column is frame + 2 + (width - 1) * lines, and the columns
     \ go leftwards from there.
-    CLC : LDA sp_frame : ADC #2 : STA sp_rowp
-    LDA sp_frame+1 : ADC #0 : STA sp_rowp+1
-    LDX sp_width
+    LDA sp_frame : LDY sp_frame+1
+    LDX sp_wm1
+    CLC : ADC #2
 .across
-    DEX : BEQ back
-    CLC : LDA sp_rowp : ADC sp_h8 : STA sp_rowp
-    BCC across
-    INC sp_rowp+1
-    BCS across                      ; (always)
+    BCC added
+    INY
+.added
+    DEX : BMI back
+    CLC : ADC sp_h8
+    JMP across
 .back
-    SEC : TXA : SBC sp_h8 : STA sp_step         ; (X = 0)
-    DEX : STX sp_step+1
+    STA sp_rowp : STY sp_rowp+1
+    STX sp_step+1                   ; (X = &FF)
     INX : STX sp_half               ; X = 0: drawn as it is
-    BEQ pixels                      ; (always)
+    TXA : SEC : SBC sp_h8 : STA sp_step
+    BCC pixels                      ; (always: 0 - sp_h8 borrows)
 .mirror
     \ A mirror image: its twin's pixels, which its next two bytes say
     \ where, from the header. Each column is the twin's from the other
@@ -267,15 +258,15 @@ ZA_AUTO1 sp_yl              ; (erase_image's Y, kept through a look-up)
     LDA mode_spread,X : CMP draw_sprite.dl+1 : BEQ moded
     JSR sprite_mode
 .moded
-    SEC : LDA sp_rowp : SBC sp_y : STA sp_rowp
-    BCS screen_addr
-    DEC sp_rowp+1
-.screen_addr
-    \ The first cell's screen address; the last column 16 * (width - 1) on.
-    LDA sp_width : SEC : SBC #1 : ASL A : ASL A : ASL A : ASL A : STA sp_w16
-    LDA sp_rowcell : LDX sp_rowcell+1 : JSR cell_screen
-    STA sp_rowscr : STY sp_rowscr+1
-    LDA sp_rowcell : LDX sp_rowcell+1 : JSR cell_row : STA sp_row
+    \ The last column's screen address, screen + 16 * (cell + width - 1)
+    \ (cell_screen), in the half drawn first.
+    LDA sp_wm1 : CLC : ADC sp_cell
+    LDX sp_cell+1 : BCC column_cell
+    INX
+.column_cell
+    JSR cell_screen
+    ORA sp_half : STA sp_rowscr : STY sp_rowscr+1
+    LDA sp_cell : LDX sp_cell+1 : JSR cell_row : STA sp_row
     RTS
 }
 
@@ -290,90 +281,80 @@ ZA_AUTO1 sp_yl              ; (erase_image's Y, kept through a look-up)
     STA erase_image.cl+1 : STA erase_image.cr+1
     STA erase_image.pl+1 : STA erase_image.pr+1
     STA erase_image.tl+1 : STA erase_image.tr+1
-    LDA #erase_image.tiled - erase_image.to_tiled - 2
-    CPX #1 : BCC as_is
-    LDA #erase_image.tiled_m - erase_image.to_tiled - 2
-.as_is
-    STA erase_image.to_tiled+1
+    LDA mode_tiled,X : STA erase_image.to_tiled+1
     RTS
+.mode_tiled
+    EQUB erase_image.tiled - erase_image.to_tiled - 2
+    EQUB erase_image.tiled_m - erase_image.to_tiled - 2
 }
 
-\ Start a cell row: its lines are Y = sp_y up to sp_end (the frame's lines
-\ below it left in sp_lines), at its last column (sp_c).
+\ Start a cell row: its lines are sp_yf on to the cell's foot or the
+\ frame's (those below it left in sp_lines); Y = their count less 1
+\ (sp_top), at its last column (sp_c). Y counts down to 0, the row's
+\ first line: the screen pointers are offset by sp_yf to match.
 .sprite_row
 {
-    LDA sp_y : CLC : ADC sp_lines
-    SEC : SBC #8 : BCC last
+    LDA sp_yf : EOR #7 : STA sp_top         ; 7 - sp_yf: to the cell's foot
+    LDA sp_lines : CLC : SBC sp_top         ; the lines below the cell
+    BCS full
+    ADC sp_top : STA sp_top                 ; none: to the frame's foot,
+    LDA #0                                  ; sp_lines - 1
+.full
     STA sp_lines
-    LDA #8
-    JMP ended
-.last
-    ADC #8                          ; (carry clear)
-    LDX #0 : STX sp_lines
-.ended
-    STA sp_end
-    LDX sp_width : DEX : STX sp_c
+    LDY sp_top
+    LDA sp_wm1 : STA sp_c
     LDA sp_rowp : STA sp_p
     LDA sp_rowp+1 : STA sp_p+1
-    CLC : LDA sp_rowscr : ADC sp_w16 : ORA sp_half : STA sp_scr : EOR #8 : STA sp_scr8
-    LDA sp_rowscr+1 : ADC #0 : STA sp_scr+1 : STA sp_scr8+1
-    LDY sp_y
+    LDA sp_rowscr : ORA sp_yf : STA sp_scr : EOR #8 : STA sp_scr8
+    LDA sp_rowscr+1 : STA sp_scr+1 : STA sp_scr8+1
     RTS
 }
 
-\ On to the column on the left, Y back at the row's first line: carry
-\ clear, or carry set when the row is done.
+\ On to the column on the left, Y back at sp_top: N clear, or N set when
+\ the row is done.
 .sprite_left
 {
     DEC sp_c : BMI done
     CLC : LDA sp_p : ADC sp_step : STA sp_p
     LDA sp_p+1 : ADC sp_step+1 : STA sp_p+1
     SEC : LDA sp_scr : SBC #16 : STA sp_scr : EOR #8 : STA sp_scr8
-    LDA sp_scr+1 : SBC #0 : STA sp_scr+1 : STA sp_scr8+1
-    LDY sp_y
-    CLC
-    RTS
+    BCS same_page
+    DEC sp_scr+1 : DEC sp_scr8+1
+.same_page
+    LDY sp_top                      ; (N clear: under 8)
 .done
-    SEC
     RTS
 }
 
-\ After a cell row: on to the one below, carry clear; carry set when the
-\ frame is done.
+\ After a cell row: on to the one below, Z clear; Z set when the frame is
+\ done.
 .sprite_down
 {
     LDA sp_lines : BEQ done
-    \ Y goes back 8, to the top of the cells below, so sp_p goes on 8.
-    CLC : LDA sp_rowp : ADC #8 : STA sp_rowp
-    BCC screen_row
+    \ Y = 0 is the next line: sp_p goes on by this row's lines.
+    LDA sp_rowp : SEC : ADC sp_top : STA sp_rowp
+    BCC next_cell
     INC sp_rowp+1
+.next_cell
+    CLC : LDA sp_cell : ADC #32 : STA sp_cell
+    BCC screen_row
+    INC sp_cell+1
 .screen_row
-    ASSERT LO(ROW_BYTES) = 0
-    CLC : LDA sp_rowscr+1 : ADC #HI(ROW_BYTES) : STA sp_rowscr+1
-    CLC : LDA sp_rowcell : ADC #32 : STA sp_rowcell
-    BCC row
-    INC sp_rowcell+1
-.row
-    INC sp_row
-    LDA #0 : STA sp_y
-    CLC
-    RTS
+    ASSERT ROW_BYTES = &200
+    INC sp_rowscr+1 : INC sp_rowscr+1
+    LDA #0 : STA sp_yf
+    INC sp_row                      ; (Z clear: a row below the first)
 .done
-    SEC
     RTS
 }
 
-\ Sprite frame A's header: low byte in A, high in X. The table has 152
-\ entries, so frame numbers from &80 index its second page (as the
-\ original's &8BDE carries into its high byte).
+\ Sprite frame A's header: low byte in A, high in X. (The table has 152
+\ entries: the original's &8BDE carries into its high byte for frame
+\ numbers from &80; here the two halves are indexed by the number.)
 .sprite_frame
 {
-    ASL A : TAY : BCS high
-    LDX sprite_frames+1,Y : LDA sprite_frames,Y
-    JMP got
-.high
-    LDX sprite_frames+257,Y : LDA sprite_frames+256,Y
-.got
+    TAY
+    LDX sprite_hi,Y : LDA sprite_lo,Y
 IF DEFINED(DIRECT)
     \ The tests' build: a frame no group of the room's gave (rooms.6502's
     \ room_load) stops the game here, where the tests see it.

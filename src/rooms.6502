@@ -11,26 +11,25 @@
 \ ***************************************************************************
 
 ZA_AUTO2 cell               ; the attribute/screen pointer (&7F84), a cell
-ZA_AUTO2 tcell              ; the cell-type pointer (&7F86), a cell
+ZA_AUTO2 tcell              ; the cell-type pointer (&7F86), in type_map
 ZA_AUTO1 attr               ; the current attribute (ATTR_P, &5C8D)
 ZA_AUTO1 ctype              ; the type ORed into the type map (E)
+ZA_AUTO1 run_down           ; bit 7: put_step goes down, not right
 
 \ Find room A's (1-120) body in the records (main.6502), rb, and point
-\ sprite_frames at its graphics groups' frames, the rest at nothing
+\ sprite_lo/hi at its graphics groups' frames, the rest at nothing
 \ (tools/mkrecords.py describes both). The sideways edition has them all in
 \ the bank; the streaming edition has a cache of them (disc.6502).
 .room_load
 {
-    ZA_AUTO1 groups             ; groups left
     ZA_AUTO1 gi                 ; the body's group list, at rb + gi
     ZA_AUTO1 frames             ; the group's frames left
-    ZA_AUTO1 lo
     ZA_AUTO1 n
     STA n
     JSR find_body
     \ Where its parts start: exits (at 0), groups (at 1), monsters, bands,
     \ fixed things, the packed room.
-    LDY #1 : LDA (rb),Y : CLC : ADC #2 : STA rb_mon
+    LDY #1 : STY gi : LDA (rb),Y : CLC : ADC #2 : STA rb_mon
     TAY : LDA (rb),Y : ASL A : ASL A : SEC : ADC rb_mon : STA rb_bands
     TAY
 .bands
@@ -46,36 +45,30 @@ ZA_AUTO1 ctype              ; the type ORed into the type map (E)
     INY
 .not_here
     INX : BNE fixed
+    \ bp = the packed room's bit stream (unpack.6502), after them.
     STY n : TYA : ASL A : ADC n     ; 3 a thing (carry clear)
-    ADC rb_things : STA rb_stream
+    ADC rb_things                   ; (carry clear: the body's offsets fit a byte)
+    ADC rb : STA bp
+    LDA rb+1 : ADC #0 : STA bp+1
     \ No frame until a group gives it one: a frame drawn without one
     \ shows (sprite.6502's sprite_frame, in the tests' build).
-    LDX #151 : LDA #0
+    LDX #152 : LDA #0
 .clear
-    STA sprite_frames,X : STA sprite_frames+152,X
-    DEX : CPX #&FF : BNE clear
-    LDY #1 : LDA (rb),Y : STA groups
-    STY gi
+    STA sprite_lo-1,X : STA sprite_hi-1,X
+    DEX : BNE clear
 .group
-    DEC groups : BMI done
-    INC gi : LDY gi
+    \ The group list is at rb + 2 up to the monsters, at rb_mon.
+    INC gi : LDY gi : CPY rb_mon : BCS done
     LDA (rb),Y : TAX
     JSR find_group
     LDY #0 : LDA (gp),Y : STA frames
 .frame
-    \ Its number (from &80, the table's second page), and where it is.
-    INY : LDA (gp),Y : ASL A : TAX
-    PHP
-    INY : LDA (gp),Y : CLC : ADC gp : STA lo
-    INY : LDA (gp),Y : ADC gp+1
-    PLP : BCS second
-    STA sprite_frames+1,X : LDA lo : STA sprite_frames,X
-    JMP next
-.second
-    STA sprite_frames+257,X : LDA lo : STA sprite_frames+256,X
-.next
+    \ Its number, and where it is.
+    INY : LDA (gp),Y : TAX
+    INY : LDA (gp),Y : CLC : ADC gp : STA sprite_lo,X
+    INY : LDA (gp),Y : ADC gp+1 : STA sprite_hi,X
     DEC frames : BNE frame
-    JMP group
+    BEQ group                   ; (always)
 .done
     RTS
 }
@@ -106,23 +99,22 @@ ENDIF
 .draw_room
 {
     ZA_AUTO1 bg
-    PHA : JSR room_load : PLA
+    JSR room_load
     \ The round robin starts again from thing 0 (&7920: LD (&A400),&6600).
     LDX #0 : STX o_index
-    PHA
     JSR set_room_palette
     JSR cls
     LDA #8 : STA crtc_reg : LDA #0 : STA crtc_data  ; shown (blank from start-up)
     JSR draw_status_bar
-    PLA : JSR unpack_room
+    JSR unpack_room
     \ The background: its paper as both paper and ink. (Packed, the paper
     \ is in bits 0-2, beside the palette's number: tools/packrooms.py.)
     JSR fetch : AND #7 : STA bg
-    ASL A : ASL A : ASL A : ORA bg : STA attr
+    ASL A : ASL A : ASL A : ORA bg : TAY
     \ The maps: background attribute, tile &37, type 0.
     LDX #0
 .fill
-    LDA attr
+    TYA
     STA attr_map,X : STA attr_map+256,X : STA attr_map+512,X
     LDA #&37
     STA tile_map,X : STA tile_map+256,X : STA tile_map+512,X
@@ -167,21 +159,11 @@ ENDIF
     ZA_AUTO1 tile
     STA tile
     JSR fetch_place
-    JSR fetch : STA len
+    JSR fetch : STA run_down : AND #&7F : STA len
     JSR fetch : STA ctype
-    LDA len : BMI down
-.across
-    LDA tile : JSR put
-    JSR type_right
-    DEC len : BNE across
-    RTS
-.down
-    AND #&7F : STA len
-.down_loop
-    LDA tile : JSR put
-    JSR type_down
-    JSR next_row
-    DEC len : BNE down_loop
+.loop
+    LDA tile : JSR put_step
+    DEC len : BNE loop
     RTS
 }
 
@@ -198,37 +180,81 @@ ENDIF
     ZA_AUTO1 four
     STA dtile
     JSR fetch_place
-    JSR fetch : STA len
+    JSR fetch : STA run_down : AND #&7F : SEC : SBC #2 : STA len
     JSR fetch : STA ends
     JSR fetch : STA ctype
-    LDX #&22
-    LDA len : BPL across
-    LDX #&23
-.across
-    STX joint
-    AND #&7F : SEC : SBC #2 : STA len
+    LDA run_down : ASL A : LDA #&11 : ROL A : STA joint    ; &22, or &23 down
     LDA #1 : STA four
     LDA ends : LSR A : LSR A : LSR A : LSR A : ORA #&20
 .loop
-    JSR put : JSR step
+    JSR put_step
     DEC len : BEQ last
     LDA dtile
     DEC four : BNE loop
     LDA #4 : STA four
     LDA joint
-    JMP loop
+    BNE loop                    ; (always)
 .last
-    LDA joint : JSR put : JSR step
+    LDA joint : JSR put_step
     LDA ends : AND #15 : ORA #&20
+    \ Fall into put_step.
+}
+\ Put tile A, then step: across, the type pointer right; or if run_down has
+\ bit 7 set, down, the type pointer and the cell down a row.
+.put_step
+    BIT run_down : BPL put_right
     JSR put
-    \ Fall into step.
-\ Across: the type pointer right. Down: type pointer and cell down a row.
-.step
-    LDA joint : CMP #&23 : BEQ step_down
-    JMP type_right
-.step_down
     JSR type_down
-    JMP next_row
+    \ Fall into next_row.
+
+\ The attribute pointer down a row, from just right of the cell last put
+\ (&7D97: +31), up a row and right one (&7DB1: -33), back A cells (the
+\ bends' DF_CC adjustment), or on by A, signed: N must be A's on entry,
+\ as every caller has just loaded or computed it.
+.next_row
+    LDA #31 : BNE cell_add
+.up_row
+    LDA #-33 AND &FF : BNE cell_add
+.back_cells
+    EOR #&FF : SEC : ADC #0     ; -A
+.cell_add
+{
+    BPL forward
+    DEC cell+1                  ; a step back: -256, then A added
+.forward
+    CLC : ADC cell : STA cell
+    BCC done
+    INC cell+1
+.done
+    RTS
+}
+
+\ OR the current type into the type map at tcell, then step the type
+\ pointer right (&7DFA), left (&7E05), down (&7E10) or up (&7E22): by X,
+\ signed.
+.type_left
+    LDX #&FF : BNE type_step    ; (always)
+.type_down
+    LDX #32 : BNE type_step
+.type_up
+    LDX #-32 AND &FF : BNE type_step
+\ Put tile A, then the type pointer right.
+.put_right
+    JSR put
+.type_right
+    LDX #1
+.type_step
+{
+    LDY #0
+    LDA (tcell),Y : ORA ctype : STA (tcell),Y
+    TXA : BPL forward
+    DEC tcell+1                 ; a step back: -256, then X added
+.forward
+    CLC : ADC tcell : STA tcell
+    BCC done
+    INC tcell+1
+.done
+    RTS
 }
 
 \ Read attribute, row and column, and put both pointers on that cell.
@@ -241,16 +267,18 @@ ENDIF
     PLA : JSR row_col_cell
     STA cell : STY cell+1
     \ Fall into sync_type.
-\ The type pointer to the attribute pointer (&7DEF).
+\ The type pointer to the attribute pointer (&7DEF). (tcell is kept as the
+\ address in type_map, which type_step steps as the original steps the cell.)
 .sync_type
     LDA cell : STA tcell
-    LDA cell+1 : STA tcell+1
+    CLC : LDA cell+1 : ADC #HI(type_map) : STA tcell+1
     RTS
 
 \ Put tile A in the current cell in the current attribute, record it in the
 \ attribute and tile maps, and step right (&7E71). Text comes with bit 7
 \ set (cmd_text), which the tile map keeps; the cell is drawn as cell_looks
 \ reads it back from the maps, text from the OS's font (decision 4).
+\ Returns with Z clear (cmd_text).
 .put
 {
     ZA_AUTO2 mp
@@ -266,53 +294,6 @@ ENDIF
     INC cell : BNE done
     INC cell+1
 .done
-    RTS
-}
-
-\ OR the current type into the type map at tcell, then step the type
-\ pointer right (&7DFA), left (&7E05), down (&7E10) or up (&7E22): by A,
-\ signed.
-.type_right
-    LDA #1 : BNE type_step
-.type_left
-    LDA #&FF : BNE type_step
-.type_down
-    LDA #32 : BNE type_step
-.type_up
-    LDA #-32 AND &FF
-.type_step
-{
-    ZA_AUTO2 tp
-    TAX
-    LDA tcell : STA tp
-    CLC : LDA tcell+1 : ADC #HI(type_map) : STA tp+1
-    LDY #0
-    LDA (tp),Y : ORA ctype : STA (tp),Y
-    TXA : BPL forward
-    DEY                         ; Y = &FF: the step's high byte
-.forward
-    CLC : ADC tcell : STA tcell
-    TYA : ADC tcell+1 : STA tcell+1
-    RTS
-}
-
-\ The attribute pointer down a row, from just right of the cell last put
-\ (&7D97: +31), up a row and right one (&7DB1: -33), back A cells (the
-\ bends' DF_CC adjustment), or on by A, signed.
-.next_row
-    LDA #31 : BNE cell_add
-.up_row
-    LDA #-33 AND &FF : BNE cell_add
-.back_cells
-    EOR #&FF : SEC : ADC #0     ; -A
-.cell_add
-{
-    LDX #0
-    CMP #&80 : BCC forward
-    DEX
-.forward
-    CLC : ADC cell : STA cell
-    TXA : ADC cell+1 : STA cell+1
     RTS
 }
 
@@ -333,8 +314,7 @@ ENDIF
 .row
     LDA w : STA n
 .across
-    LDA #&37 : JSR put
-    JSR type_right
+    LDA #&37 : JSR put_right
     DEC n : BNE across
     \ The next row: the original's +1 then +31 from the row's start, which
     \ is w cells back.
@@ -353,7 +333,7 @@ ENDIF
     JSR fetch
     EOR #&80 : BEQ done         ; &80 ends it; the rest gain bit 7, text
     JSR put
-    JMP loop
+    BNE loop                    ; (always: put returns Z clear)
 .done
     RTS
 }
@@ -370,26 +350,23 @@ BEND_BACK3 = 3 * 8          ; ... three
 {
     ZA_AUTO1 i
     ZA_AUTO1 n
-    ZA_AUTO1 step
-    SEC : SBC #3 : STA i        ; i = 5 * (cmd - 3)
+    STA i                       ; i = 5 * cmd, 15 on from bend_steps
     ASL A : ASL A : ADC i : STA i
     JSR fetch_place
     JSR fetch : STA ctype
     LDA #5 : STA n
 .loop
-    LDX i : LDA bend_steps,X : STA step
-    AND #&27 : JSR put
-    BIT step : BMI down : BVS left
-    JSR type_right
+    \ The step in run_down, so that put_step goes right or down.
+    LDX i : LDA bend_steps - 15,X : STA run_down
+    AND #&27
+    BIT run_down : BVS left
+    JSR put_step
     JMP next
 .left
+    JSR put
     JSR type_left
-    LDA step : LSR A : LSR A : LSR A : AND #3
+    LDA run_down : LSR A : LSR A : LSR A : AND #3
     JSR back_cells
-    JMP next
-.down
-    JSR type_down
-    JSR next_row
 .next
     INC i
     DEC n : BNE loop
@@ -414,15 +391,15 @@ BEND_BACK3 = 3 * 8          ; ... three
 .row
     LDA cell : STA ctype
     DEC width
-    LDA #&38 : JSR put : JSR type_right
-    LDA width : SEC : SBC #1 : STA n
+    LDA #&38 : JSR put_right
+    LDX width : DEX : STX n
     BEQ edge
     LDA attr : STA saved
     AND #7 : ASL A : ASL A : ASL A : STA attr
     LDA saved : AND #&38 : LSR A : LSR A : LSR A : ORA attr : STA attr
     LDA #&80 : STA ctype
 .inside
-    LDA #&37 : JSR put : JSR type_right
+    LDA #&37 : JSR put_right
     DEC n : BNE inside
     LDA saved : STA attr
 .edge
@@ -442,39 +419,34 @@ BEND_BACK3 = 3 * 8          ; ... three
 .cmd_diag
 {
     ZA_AUTO1 n
-    ZA_AUTO1 dir                ; bit 0 set: down
-    STA dir
+    ZA_AUTO1 tile
+    PHA : EOR #&5D : STA tile   ; &55 up, &54 down
+    PLA : LSR A : ROR A : STA run_down  ; bit 7: down (put_step)
     JSR fetch_place
     JSR fetch : STA n
     JSR fetch : STA ctype
 .loop
-    LDA #&5D : SEC : SBC dir : JSR put      ; &55 up, &54 down
+    \ Each slope tile but the last, then down or right.
     DEC n : BEQ last
-    LDA dir : LSR A : BCS down
-    JSR type_right
+    LDA tile : JSR put_step
+    BIT run_down : BMI down
     LDA #&39 : JSR put
     JSR type_up : JSR up_row
     JMP loop
 .down
-    JSR type_down : JSR next_row
-    LDA #&38 : JSR put
-    JSR type_right
+    LDA #&38 : JSR put_right
     JMP loop
 .last
-    JMP type_right
+    LDA tile : JMP put_right
 }
 
 \ &0A, 6 bytes: 0A attr tile row col type. One tile (&7D73).
 .cmd_single
-{
-    ZA_AUTO1 tile
     JSR fetch : STA attr
-    JSR fetch : STA tile
+    JSR fetch : PHA             ; the tile
     JSR fetch_cell
     JSR fetch : STA ctype
-    LDA tile : JSR put
-    JMP type_right
-}
+    PLA : JMP put_right
 
 \ Commands 1-10's handlers (draw_cmds), less one for the RTS.
 .command_lo

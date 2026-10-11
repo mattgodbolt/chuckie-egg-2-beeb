@@ -1414,4 +1414,19 @@ roughly double. Two of them found bugs in the published disc first:
   over and over in every room, trapped in room 74 with a frame no group
   gave. Such an item now becomes the oldest; room 74 passes. A candidate
   for the corruption Matt saw.
+- The fleet's patches went in in two groups, each patch tested alone by its
+  agent, merged by hand where they met (bands: the sprite patch's band_ula
+  order with the rooms patch's records read through `rb`; the disc patch's
+  reader with the wait above). `screencmp` against the old build: 6,458
+  screens over 95 rooms, all the same. CE2S's cache went from 1,371 to
+  2,548 bytes (rooms 1 and 2, 1,904, fit together). The loader file now
+  pads itself past where the mailbox goes back, as the code shrank below
+  it. The data agent's patch (resident tables into the records) waits for
+  a redo on top of this.
+- With the merge, `train-still` hung on the B: the first read stepped the
+  head out to track 31 while the drive wasn't ready, the steps went
+  nowhere, and every read then found no sector (&18), forever. An error
+  that isn't "not ready" now seeks to track 0, which finds the head, then
+  reads again (`fdc_state` 4). From a cold drive that case takes 3.6s to
+  its first sector.
 

@@ -22,8 +22,8 @@ Each room is a stream of bits, most significant first:
 
 Class codes (a prefix code, commonest shortest), and fields:
 
-    0       run      tile* attr* row+ col vert len-1+ type*
-    100     capped   tile* attr* row+ col vert len-1+ ends+ type*
+    0       run      tile* attr* row+ col vert len+ type*
+    100     capped   tile* attr* row+ col vert len+ ends+ type*
     101     single   attr* tile* row+ col type*
     1100    diag up      attr* row+ col len(5) type*
     1101    diag down    attr* row+ col len(5) type*
@@ -40,9 +40,11 @@ Fields marked + are tier coded (Tiers): the values the field takes in the
 whole game, commonest first, fall into three tiers, '0', '10' and '11',
 each followed by a fixed number of bits indexing that tier. One code for
 rows, one for the ends of capped runs, and one each for the lengths of
-horizontal and vertical runs. The rest of row is near-flat: col stays 5
-bits. (Rows 1352 bytes plain become 1195, run lengths 1136 become 952,
-ends 232 become 125.)
+horizontal and vertical runs, chosen by vert; a length's values are the
+bytecode's whole byte (the length, vert in bit 7), so the unpacker emits
+what the code gives. The rest of row is near-flat: col stays 5 bits.
+(Rows 1352 bytes plain become 1195, run lengths 1136 become 952, ends 232
+become 125.)
 
 col is 5 bits. One run in the whole game (room 33) says column 32
 of row 11; the original's arithmetic makes that row 12 column 0, so it is
@@ -219,6 +221,9 @@ class Tiers:
             if best is None or bits < best[0]:
                 best = (bits, ws)
         self.widths = best[1]
+        # unpack.6502's emit_tiered reads a tier's bits with getbits,
+        # which takes 1-8 (0 would read 256).
+        assert all(w > 0 for w in self.widths), self.widths
         self.bases = [0, 2 ** self.widths[0], 2 ** self.widths[0] + 2 ** self.widths[1]]
 
     def encode(self, bits, v):
@@ -275,9 +280,8 @@ def encode_room(room, vocabs=None, seen=None):
             tiers["row"].encode(b, row)
             b.put(col, 5)
             b.put(ln >> 7, 1)
-            n = ln & 0x7F
-            assert 1 <= n <= 32, n
-            tiers["len%d" % (ln >> 7)].encode(b, n - 1)
+            assert 1 <= ln & 0x7F <= 32, ln
+            tiers["len%d" % (ln >> 7)].encode(b, ln)
             if capped:
                 tiers["ends"].encode(b, ends)
             types.encode(b, typ)
@@ -375,7 +379,7 @@ def decode_room(data, vocabs):
         if k in ("run", "capped"):
             out += [tiles.decode(rd), attrs.decode(rd), row(rd), rd.get(5)]
             vert = rd.get(1)
-            out.append(vert << 7 | (vocabs[3][f"len{vert}"].decode(rd) + 1))
+            out.append(vocabs[3][f"len{vert}"].decode(rd))
             if k == "capped":
                 out.append(vocabs[3]["ends"].decode(rd))
             out.append(types.decode(rd))
@@ -431,7 +435,7 @@ def main():
             starts += [len(syms) + b for b in tiers[k].bases]
             syms += tiers[k].syms
         assert len(syms) <= 256
-        lines += ["\\ The tier codes (row, ends, horizontal and vertical run lengths - 1):",
+        lines += ["\\ The tier codes (row, ends, horizontal and vertical runs' length bytes):",
                   "\\ each one's three tiers' widths in bits, and where they start in",
                   "\\ tier_syms, where each code's values are, commonest first.",
                   " : ".join(f"TIER_{k.upper()} = {3 * i}" for i, k in enumerate(TIER_FIELDS)),
@@ -444,10 +448,13 @@ def main():
         vocabs = vocabs[:3]
         widths = [MTF(v).width for v in vocabs]
         offs = [0, len(vocabs[0]), len(vocabs[0]) + len(vocabs[1])]
+        # Indexed by list base, each width is followed by its offset:
+        # vocab_off = vocab_width + 1, in the gaps between the bases.
         lines += ["", "\\ The fields' vocabularies (attribute, tile, type) and, by list",
-                  "\\ base (0, 3, 6), each one's index width and offset into vocab.",
-                  f".vocab_width EQUB {widths[0]}, 0, 0, {widths[1]}, 0, 0, {widths[2]}",
-                  f".vocab_off EQUB {offs[0]}, 0, 0, {offs[1]}, 0, 0, {offs[2]}",
+                  "\\ base (0, 3, 6), each one's index width (vocab_width + base) and",
+                  "\\ offset into vocab (vocab_off + base, the byte after).",
+                  f".vocab_width EQUB {widths[0]}",
+                  f".vocab_off EQUB {offs[0]}, 0, {widths[1]}, {offs[1]}, 0, {widths[2]}, {offs[2]}",
                   ".vocab"]
         flat = [v for voc in vocabs for v in voc]
         for i in range(0, len(flat), 16):

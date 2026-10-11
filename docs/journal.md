@@ -1430,3 +1430,15 @@ roughly double. Two of them found bugs in the published disc first:
   reads again (`fdc_state` 4). From a cold drive that case takes 3.6s to
   its first sector.
 
+### A second round
+
+Four more agents, each owning its files, on the merged code with the
+method written down (`docs/optimising.md`): harry 83 bytes, objects and
+status 125 (the boat's graphics kept once: decision 36), unpack and handoff
+94, collide, machines, game and sound 134. They found two bugs on the way:
+round one's `ORA #&40` in `change_room` assumed `h_xf` under 128, but
+sliding off the bottom of a room on a slope leaves it at 255 (a new
+scenario, `slope-slide-off`, differs from the original at pass 22 without
+the fix); and with a short build stamp CE2S never started, as the
+mailbox's restore wrapped and overwrote the loader (fixed in 2d7631d).
+

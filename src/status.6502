@@ -20,41 +20,40 @@
 .draw_status_bar
 {
     LDA #5 : JSR status_at
-    LDX #0
+    STA status_i                ; (status_at leaves A = 0)
 .labels
+    LDX status_i
     LDA status_labels,X : BEQ done
-    STX status_i
     JSR status_char
-    LDX status_i : INX
-    BNE labels                  ; (always)
+    INC status_i : BNE labels   ; (always)
 .done
-    JSR draw_room_number
     JSR draw_score
-    JSR visit_bonus
     JSR draw_carrying
-    JMP draw_lives
+    JSR draw_lives
+    \ Fall into draw_room_number, then visit_bonus. (Each draws cells of
+    \ its own, and visit_bonus the score's digits it changes: any order.)
 }
 
 \ With the developers' cheats on, "R" and the room's three digits at row
 \ 0, columns 0-3 (decision 27: Matt, finding his way with the room skip).
 .draw_room_number
 {
-    LDA cheat : BEQ done
+    LDA cheat : BEQ visit_bonus
     LDA #0 : JSR status_at
     LDA #'R' : JSR status_char
-    LDA room : LDX #'0' - 1
+    LDA room : LDX #'0'
+    CMP #100 : BCC hundreds         ; (rooms 1-120: one hundred at most)
+    SBC #100 : INX
 .hundreds
-    INX : SEC : SBC #100 : BCS hundreds
-    ADC #100 : STA status_x         ; (carry clear) what's left
+    STA status_x                    ; what's left
     TXA : JSR status_char
-    LDA status_x : LDX #'0' - 1
+    LDA status_x : LDX #'0' - 1 : SEC
 .tens
-    INX : SEC : SBC #10 : BCS tens
-    ADC #10 : STA status_x
+    INX : SBC #10 : BCS tens
+    ADC #'0' + 10 : STA status_x    ; the units (carry clear), as a character
     TXA : JSR status_char
-    LDA status_x : ORA #'0' : JMP status_char
-.done
-    RTS
+    LDA status_x : JSR status_char
+    \ Fall into visit_bonus.
 }
 
 \ A room's first visit this egg (&A139): its value x egg hundreds. The
@@ -97,30 +96,32 @@
     \ Fall into draw_digit.
 }
 
-\ Redraw score digit X (add_score does, as the digits change).
+\ Redraw score digit X (add_score does, as the digits change). X kept (so
+\ add_score keeps it too).
 .draw_digit
-    TXA : CLC : ADC #32 : JSR status_at
-    LDA score,X : ORA #'0' : JMP status_char
+    LDA score,X : ORA #'0'
+\ Character A at row 1, column X < 32 (the score's). X kept.
+.score_char
+    STX status_x
+    TAY : TXA : ORA #32 : JSR status_at : TYA   ; (status_at keeps Y)
+    JSR status_char
+    LDX status_x
+    RTS
 
 \ (status_labels is in page 1: pages.6502.)
 
 \ The score at row 1, columns 0-9.
 .draw_score
 {
-    LDA #32 : JSR status_at
     LDX #0
 .lead
     \ Leading zeros in the first five as spaces.
     LDA score,X : BNE digits
-    STX status_x
-    LDA #' ' : JSR status_char
-    LDX status_x : INX
-    CPX #5 : BNE lead
+    LDA #' ' : JSR score_char
+    INX : CPX #5 : BNE lead
 .digits
-    STX status_x
     JSR draw_digit
-    LDX status_x : INX
-    CPX #10 : BNE digits
+    INX : CPX #10 : BNE digits
     RTS
 }
 
@@ -166,36 +167,34 @@
 .icon
     DEC status_x : BMI blank
     LDA #&56 : JSR status_tile
-    JMP icon
+    BNE icon                    ; (always: tile_glyph leaves cell non-zero)
 .blank
-    LDA #&37
-    \ Fall into status_tile.
+    \ (The original's tile &37, which is blank: as a space is.)
+    LDA #' '
+    \ Fall into status_char.
 }
+\ Character A (ASCII) from the OS's font (decision 4), on black at `cell`,
+\ in white, or in yellow (the EGGS DELIVERED screen's: yellow_char); step
+\ right.
+.status_char
+    ORA #&80                    ; text in the tile map's codes (screen.6502)
 \ Tile A, white on black, at `cell`; step right.
 .status_tile
     LDX #cbyte(1) EOR cbyte(0)
-    BNE tile_glyph              ; (always)
-\ Character A (ASCII) from the OS's font (decision 4), on black at `cell`,
-\ in yellow (the EGGS DELIVERED screen's) or white; step right.
-.yellow_char
-    LDX #cbyte(3) EOR cbyte(0)
-    BNE text_char               ; (always)
-.status_char
-    LDX #cbyte(1) EOR cbyte(0)
-.text_char
-    ORA #&80                    ; text in the tile map's codes (screen.6502)
 \ Tile map code A drawn in X's colour (diff) on logical 0.
 .tile_glyph
-{
     STX diff
     JSR cell_glyph.code_glyph
     LDA #cbyte(0) : STA paper
     JSR draw_glyph_pd
-    INC cell : BNE done
-    INC cell+1
-.done
+    \ (No line of text crosses a 256-cell boundary: the status bar's are
+    \ cells 0-63, the EGGS DELIVERED screen's 359-377.)
+    INC cell
     RTS
-}
+.yellow_char
+    ORA #&80
+    LDX #cbyte(3) EOR cbyte(0)
+    BNE tile_glyph              ; (always)
 
 \ The objects' names, 8 characters each (the original's, at &999E).
 .object_names

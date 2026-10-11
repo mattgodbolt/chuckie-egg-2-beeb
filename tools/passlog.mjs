@@ -58,9 +58,11 @@ try {
             await b.write("carried", [carry]);
             await b.write(b.addr("t_room") + carry, [(await b.peek(b.addr("t_room") + carry)) | 0x80]);
             const type = await b.peek(b.addr("t_type") + carry);
-            const [, gfx, kind] = await b.read(b.addr("thing_types") + 3 * type, 3);
-            const frame = await b.read(b.addr("object_frames") + 2 * gfx, 2);
-            await b.write("carried_h", [(await b.peek(frame[0] | (frame[1] << 8))) & 7]);   // (sprite.6502's header)
+            // (The types' inks, graphics and kinds are three tables of 67.)
+            const gfx = await b.peek(b.addr("thing_types") + 67 + type);
+            const kind = await b.peek(b.addr("thing_types") + 134 + type);
+            const frame = (await b.peek(b.addr("object_lo") + gfx)) | ((await b.peek(b.addr("object_hi") + gfx)) << 8);
+            await b.write("carried_h", [(await b.peek(frame)) & 7]);   // (sprite.6502's header)
             await b.write("carrying_name", [(kind & 15) + 1]);
         }
         await b.breakpoint("game_loop");    // (runUntil cleared it)

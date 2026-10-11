@@ -15,10 +15,7 @@
 
 ZA_AUTO1 vD                 ; VCollide's D: xf + dx + 1
 ZA_AUTO1 vB                 ; ColumnBlocked's count of rows
-ZA_AUTO1 vC                 ; the column a slope snap looks at
-ZA_AUTO1 vTile              ; the slope tile a landing found
 ZA_AUTO1 vH                 ; the lift tests' scratch
-ZA_AUTO1 vL
 ZA_AUTO2 pp                 ; SideWalls' column pointer
 
 \ hptr = type_map + h_cell; hptr_up = hptr - 32.
@@ -44,7 +41,7 @@ ZA_AUTO2 pp                 ; SideWalls' column pointer
 .dispatch
     LDA states_hi,X : PHA
     LDA states_lo,X : PHA
-    RTS                         ; to the state's routine
+    RTS                         ; to the state's routine, with X = h_state
     ZA_CANJUMP st_fall, st_walk, st_pipe, st_ladder, st_rope, st_slope_up, st_slide, st_jump, st_lift
 }
 \ dx from the right and left keys (ctrl bits 1, 2), dy from down and up
@@ -70,46 +67,46 @@ key_dy = key_dx + 1
 {
     \ (X = h_state, from harry_update)
     CPX #4 : BNE not_rope
-    LDA h_dx : BNE not_rope
-    JMP st_rope                     ; no jumping straight off a rope
+    LDA h_dx : BEQ harry_update.dispatch    ; no jumping straight off a rope
+                                    ; (X = 4: on with st_rope)
 .not_rope
     CPX #6 : BNE not_slide
     LDA h_mom : STA h_dx            ; jump the way the slide goes
 .not_slide
-    CPX #3 : BEQ zero_xf
-    CPX #4 : BNE xf_ok
-.zero_xf
-    LDA #0 : STA h_xf
+    LDA #0
+    DEX : DEX : DEX : CPX #2 : BCS xf_ok   ; states 3 and 4: xf 0
+    STA h_xf
 .xf_ok
+    STA h_cnt                       ; (h_fall is 0: harry_update)
     LDA #7 : STA h_state
     LDA h_dx : STA h_mom : BEQ no_face
     AND #4 : STA h_face             ; (dx is 1 or -1: face 0 or 4)
 .no_face
-    LDA #0 : STA h_cnt : STA h_fall
     LDA carried : AND #&FC : CMP #&20 : BNE st_jump
     LDA #3 : STA h_cnt              ; a basket (&20-&23): a lower jump
     \ Fall into st_jump.
 }
 \ StJump (&832A): state 7.
 .st_jump
-{
     LDA h_mom : STA h_dx
     LDX h_cnt : INX : STX h_cnt
-    CPX #22 : BCC arc
-    LDA #0 : STA h_state
-    LDA #5 : STA h_fall
-    JMP st_fall
-.arc
+    CPX #22 : BCC jump_arc_dy
+    LDA #5 : STA h_fall             ; the jump's end: falling
+    \ Fall into st_fall.
+\ StFall (&82B2): state 0, and so h_state 0 for the jump's end and
+\ slope_aligned.
+.st_fall
+    LDA #0 : STA h_state : STA h_dx
+    JMP fall_dy
+.jump_arc_dy
     LDA jump_arc-1,X : STA h_dy
     \ Fall into vcollide.
-}
 
 \ VCollide (&8355): ceilings, landings, grabbing, walls.
 .vcollide
 {
     LDA h_xf : SEC : ADC h_dx : STA vD   ; xf + dx + 1
-    LDA h_dy : BEQ descend
-    BMI descend
+    LDX h_dy : DEX : BMI descend    ; dy 0 or less (it is -4 to 4)
     \ Rising.
     LDA h_yf : SEC : SBC h_dy : BPL lg  ; the head stays in this cell row
     LDA vD : SBC #0 : AND #3 : BEQ ceil_col     ; (C clear: it borrowed)
@@ -140,17 +137,19 @@ key_dy = key_dx + 1
 .descend
     LDA l_type : BEQ slope_snap
 \ LiftLand (the rest of &83FA): over the lift, the feet near its top?
-    \ Across: from the column left of it (if he reaches in) to its last.
-    LDA l_cell : AND #31 : SEC : SBC #1 : STA vH
-    CLC : ADC l_width : STA vL
-    LDA h_cell : AND #31
-    CMP vH : BCC slope_snap
-    BNE not_left_end
-    LDX vD : CPX #3 : BCC slope_snap
-.not_left_end
-    CMP vL : BCC across
+    \ Across: from the column left of it (if he reaches in) to its last,
+    \ so his column - (its column - 1) is 0 to its width. One unsigned
+    \ compare does the original's two, against its column - 1 and that +
+    \ width: the lifts are never in column 0 (machines.6502's lift_col) and
+    \ are at least 1 wide, and left of it wraps to 226 or more.
+    LDA l_cell : AND #31 : TAX : DEX : STX vH
+    LDA h_cell : AND #31 : SEC : SBC vH : BEQ left_end
+    CMP l_width : BCC across
     BNE slope_snap
-    LDX vD : CPX #4 : BCS slope_snap
+    LDX vD : CPX #4 : BCS slope_snap    ; the last column: if he reaches in
+    BCC across                      ; (always)
+.left_end
+    LDX vD : CPX #3 : BCC slope_snap    ; the column left of it: the same
 .across
     \ Down: (its top line - 13) - his top line must be 0-5. (Rows are
     \ under 32, so each ASL clears the carry.)
@@ -169,38 +168,38 @@ key_dy = key_dx + 1
     LDA #8 : STA h_state
     LDA h_fall : CMP #20 : BCS die
     LDY #0 : LDA (hptr_up),Y : LSR A : BCS die
-    JMP move
+    BCC to_move                     ; (always)
 
 \ SlopeSnap (&8489): a slope tile under the feet snaps Harry onto it.
 .slope_snap
-    LDA h_xf : LSR A : AND #1 : STA vC
-    ORA #&20                        ; T(&20 + vC), or T(&40 + vC) off the
-    LDX h_yf : BEQ tile_test        ; cell's top line
+    LDA h_xf : LSR A : AND #1 : TAX ; X: the column under the feet, 0 or 1
+    ORA #&20                        ; T(&20 + X), or T(&40 + X) off the
+    LDY h_yf : BEQ tile_test        ; cell's top line
     EOR #&60
 .tile_test
     TAY
     \ The tile map is three pages below the type map.
     LDA hptr : STA pp
     LDA hptr+1 : SEC : SBC #HI(type_map) - HI(tile_map) : STA pp+1
-    LDA (pp),Y : STA vTile
+    LDA (pp),Y : TAY                ; Y: the tile, to set_slope_state
     LSR A : EOR #&38 / 2 : BEQ snap38_39    ; (C: the tile's bit 0)
     EOR #(&38 EOR &54) / 2 : BNE land_test  ; not &54 or &55
 
-\ The slope snaps (&84C0, &84F8, &8535). vC is the column Harry's feet are
-\ over (0 or 1), vTile the slope tile there.
+\ The slope snaps (&84C0, &84F8, &8535). X is the column Harry's feet are
+\ over (0 or 1), Y the slope tile there (add_cell keeps Y).
 .snap_surface
     LDA #0 : STA h_xf
-    LDA vC : JSR add_cell
+    TXA : JSR add_cell
     LDA #4 : STA h_yf
     BNE snap_done                   ; (always)
 .snap38_39
     LDA #&38 : BCC snap_row         ; &38 (sic: xf &38, which apply_delta
                                     ;  turns into xf 0 and a column right)
-    DEC vC                          ; &39: one column left of the feet
+    DEX                             ; &39: one column left of the feet
     LDA #2
 .snap_row
     STA h_xf
-    LDA vC : JSR add_cell
+    TXA : JSR add_cell
     \ Up a row, to its top line. The original subtracts 32 from (attribute
     \ low byte, screen high byte with yf cleared), so leaving the top row
     \ of a screen third (rows 8, 16) borrows into the third's bits and
@@ -214,14 +213,15 @@ key_dy = key_dx + 1
 .snap_done
     LDA #0 : STA h_dx : STA h_dy
     LDA h_face : AND #&F7 : STA h_face
-\ SetSlopeState (&87E8): slope tile vTile (&38, &54 '\', or &39, &55 '/',
+\ SetSlopeState (&87E8): slope tile Y (&38, &54 '\', or &39, &55 '/',
 \ all that the snaps pass); climb it or slide down it.
-    LDA vTile : LSR A : BCS fwd
+    TYA : LSR A
+    LDA h_mom : BCS fwd
     \ '\'
-    LDA h_mom : BMI climb
+    BMI climb
     LDA #1 : BNE slide              ; slide right
 .fwd                                ; '/'
-    LDA h_mom : BMI slide_left
+    BMI slide_left
     BNE climb
 .slide_left
     LDA #&FF
@@ -232,6 +232,7 @@ key_dy = key_dx + 1
     LDA #5
 .set_state
     STA h_state
+.to_move
     JMP move_nosave
 .die_land
     JMP harry_died
@@ -243,23 +244,23 @@ key_dy = key_dx + 1
     CMP #8 : BCC ladder_grab                ; the feet stay in the cell
     LDY #&60                                ; the feet enter the next row
 .test
-    LDA vD : CMP #4 : BCS land_right
-    LDA (hptr),Y : TAX              ; X: the type for SetStanding
+    LDX vD : CPX #4 : BCS land_right
+    LDA (hptr),Y
     BMI die_land
     AND #&21 : BNE land
+    CPX #3 : BCC ladder_grab
 \ LandRight (&859D)
 .land_right
-    LDA vD : CMP #3 : BCC ladder_grab
-    INY : LDA (hptr),Y : TAX
+    INY : LDA (hptr),Y
     BMI die_land
     AND #&2D : BEQ ladder_grab
 \ Land (&8570)
 .land
+    JSR set_standing                ; (it ANDs with &21: the type's bits)
     LDA h_yf : BEQ on_surface
     ORA #&F8                        ; yf - 8
 .on_surface
     STA h_dy                        ; finish exactly on the surface
-    TXA : JSR set_standing
     LDA h_fall : CMP #15 : BCS die_land     ; fell too far
     LDX #0 : STX h_fall
     LDA h_face : CMP #8 : BNE ladder_grab
@@ -313,6 +314,8 @@ key_dy = key_dx + 1
     BNE right
     LDY h_xf : CPY #1 : BEQ right
     CPY #3 : BNE move
+.lift_walk                          ; (st_lift: C clear to go right; here
+    BCC right                       ;  C is set, by the CPY)
 .left
     LDY h_xf : BNE left_p
     SEC : SBC #1 : BCS left_p       ; a column left
@@ -328,7 +331,7 @@ key_dy = key_dx + 1
     LDA #&FF
 .bounce
     STA h_dx
-    LDA #0 : SEC : SBC h_mom : STA h_mom
+    LDA #1 : SBC h_mom : STA h_mom  ; (C clear: column_blocked) - mom
     \ Fall into move.
 }
 
@@ -369,17 +372,18 @@ key_dy = key_dx + 1
     \ Fall into edges.
 }
 
-\ The room edges (&8890-&89BC), after the move.
+\ The room edges (&8890-&89BC), after the move. (The original zeroes
+\ room_delta when Harry crosses no edge: here it is 0 already, as nothing
+\ else sets it and game_loop's change_room zeroes it after a change.)
 .edges
 {
     LDA h_cell : AND #31 : BEQ left_col
     CMP #31 : BNE top
-    LDA h_dx : BEQ top
-    BMI top
+    LDX h_dx : DEX : BMI top        ; dx < 1 (it is -2 to 2)
     \ Right: to column 0, xf 2.
     LDA #-31 AND &FF : JSR add_cell
-    LDA #2 : STA h_xf
     LDA #1 : STA room_delta
+    ASL A : STA h_xf
     LDA h_state : CMP #5 : BNE done
     LDA #-31 AND &FF : JSR add_cell             ; on a slope: up a row,
     LDA #0 : STA h_yf                           ; column 1
@@ -395,11 +399,11 @@ key_dy = key_dx + 1
     RTS
 .top
     LDA h_cell+1 : BNE bottom
-    LDA h_cell : CMP #64 : BCS bottom
+    LDA h_cell : CMP #64 : BCS done ; (rows 2-7: not the bottom either)
     \ Top: to row 21, yf 4.
     AND #31 : ORA #LO(21 * 32) : STA h_cell
     LDA #HI(21 * 32) : STA h_cell+1
-    LDA #4 : STA h_yf
+    ASL A : STA h_yf                ; 4
     LDA #&F6 : STA room_delta
     LDA h_state : CMP #5 : BNE done
     LDA h_dx : ASL A
@@ -407,20 +411,17 @@ key_dy = key_dx + 1
     JSR add_cell
     LDA h_xf : CLC : ADC h_dx : STA h_xf        ; (left unnormalised)
     RTS
-.bottom
-    LDA h_cell : CMP #LO(21 * 32)               ; row 21 or below?
-    LDA h_cell+1 : SBC #HI(21 * 32) : BCC none
-    LDA h_yf : CMP #4 : BCC none
-    LDA h_dy : BPL none
+.bottom                             ; (A = h_cell+1)
+    LDX h_cell : CPX #LO(21 * 32)               ; row 21 or below?
+    SBC #HI(21 * 32) : BCC done
+    LDA h_yf : CMP #4 : BCC done
+    LDA h_dy : BPL done
     \ Bottom: to row 2, yf 0.
-    LDA h_cell : AND #31 : ORA #64 : STA h_cell
+    TXA : AND #31 : ORA #64 : STA h_cell        ; (X = h_cell)
     LDA #0 : STA h_cell+1 : STA h_yf
     LDA #10 : STA room_delta
     LDA h_state : CMP #6 : BNE done
     LDA h_dx : ASL A : CLC : ADC h_dx : JMP slope
-.none
-    LDA #0 : STA room_delta
-    RTS
 }
 
 \ ColumnBlocked (&8699): any of vB cells down from X:A solid? Z clear if so.
@@ -453,11 +454,13 @@ key_dy = key_dx + 1
     LDY #0 : LDA (ahead),Y
     BMI die
     AND #&2D : BEQ legs
-    LDA h_state : CMP #5 : BNE stop
+    CPX #5 : BNE stop               ; on a slope? (X: h_state, 5 or 6, from
+                                    ;  slope_aligned; 1-4 from st_walk)
     \ Climbing a slope into a wall: turn back, and abandon the caller.
-    LDA #0 : SEC : SBC h_mom : STA h_dx
+    \ (The original sets dx = -mom and goes to StSlopeUp, which, dx not
+    \ being mom, turns him back.)
     PLA : PLA
-    JMP st_slope_up
+    LDA h_mom : JMP st_slope_up.reverse
 .legs
     LDY #&20 : LDA (ahead),Y        ; a row down, with the carry (&89BD)
     BMI die
@@ -479,14 +482,16 @@ die = column_blocked.die
     LDA l_cell : AND #31
     LDX h_dx : BEQ walk
     BMI going_left
-    CLC : ADC l_width               ; going right: its last column
+    ADC l_width                     ; going right: its last column (C set:
+                                    ;  the CMP; no carry, so SBC takes 2)
 .going_left
-    SEC : SBC #1                    ; going left: the column left of it
-    STA vH
-    LDA h_cell : AND #31 : CMP vH : BNE walk
+    SBC #1                          ; going left: the column left of it
+                                    ;  (C set: the CMP)
+    EOR h_cell : AND #31 : BNE walk ; his column? (Those columns are 6-24:
+                                    ;  lift_col, and widths 2 and 7.)
     \ Off the end: falling, through the vertical collisions.
     LDA #0 : STA h_state : STA h_cnt
-    LDA #1 : STA h_fall
+    INC h_fall                      ; 1 (riding, h_fall is 0: harry_update)
     JMP vcollide
 .walk
     LDA h_dx : BEQ facing
@@ -494,10 +499,8 @@ die = column_blocked.die
 .facing
     LDA #2 : STA vB
     LDA hptr : LDX hptr+1
-    LDY h_face : BEQ right
-    JMP ladder_grab.left
-.right
-    JMP ladder_grab.right
+    LDY h_face : CPY #1             ; C clear: face 0, right
+    JMP ladder_grab.lift_walk
 }
 
 \ StRope (&8249): state 4. Ropes only slide: 1, 2 or 3 pixels a pass.
@@ -526,35 +529,39 @@ die = column_blocked.die
     BPL st_walk                     ; (always: LSR and INY leave N clear)
 .on
     LDA #0 : STA h_dx               ; (for rope_tail too)
-    LDA h_state : CMP #4 : BEQ rope_tail
+    CPX #4 : BEQ rope_tail          ; (X = h_state, from the dispatch)
     LDA h_yf : LSR A : STA h_xf     ; the climbing frame
     LDA h_dy : BEQ go
     BPL up
     LDY #&40 : LDA (hptr),Y : AND #2 : BNE go       ; ladder below
     BEQ stop                                        ; (always)
 .up
-    LDA h_yf : BNE go
-    TAY
+    LDY h_yf : BNE go
     LDA (hptr),Y : AND #2 : BEQ stop                ; head cell not ladder
     LDA (hptr_up),Y                                 ; the cell above it
     TAX : AND #&2D : BEQ go
     TXA : AND #2 : BNE go
 .stop
     STA h_dy                        ; (A = 0)
-.go
-    JMP move
+    BEQ go                          ; (always)
+go = st_walk.go
 }
 
 \ RopeTail (&8262)
 .rope_tail
 {
-    LDA h_yf : CMP #5 : BCC st_ladder.go
-    LDY #&60 : LDA (hptr),Y : AND #&10 : BNE st_ladder.go  ; rope below the feet
-    LDA h_yf : SBC #8 : STA h_dy    ; (C set: the CMP)
-    LDA #0 : STA h_state : STA h_xf
-    LDA #2 : STA h_fall             ; 1, and FallCount's INC (dx is 0)
-    JMP vcollide
+    LDX h_yf : CPX #5 : BCC st_walk.go
+    LDY #&60 : LDA (hptr),Y : AND #&10 : BNE st_walk.go    ; rope below the feet
+    TXA : SBC #8 : STA h_dy         ; yf - 8 (C set: the CPX)
+    INC h_fall                      ; 1 (it was 0: harry_update), then
+    LDA #0 : STA h_state : STA h_xf ;  FallCount's INC; dx is 0 (st_ladder),
+    BEQ fall_count                  ;  so on to vcollide (always)
 }
+
+\ StPipe (&81B0): state 2, a slippery pipe holds Harry only while he walks.
+.st_pipe
+    LDA h_dx : BEQ walk_off
+    \ Fall into st_walk.
 
 \ StWalk (&8113): state 1, on a platform.
 .st_walk
@@ -601,24 +608,15 @@ die = column_blocked.die
     BNE go                          ; (always)
 .no_slope
     TYA : ADC #&20 : TAY            ; (C clear) a row down
-    LDA (hptr),Y : AND #&21 : BEQ walk_off  ; no floor ahead
-    BNE go                          ; (always)
+    LDA (hptr),Y : AND #&21 : BNE go        ; a floor ahead
 go = st_walk.go
+    \ Fall into walk_off.
 }
 
-\ StFall (&82B2): state 0.
-.st_fall
-    LDA #0 : STA h_dx
-    BEQ fall_dy                     ; (always)
-
-\ StPipe (&81B0): state 2, a slippery pipe holds Harry only while he walks.
-.st_pipe
-    LDA h_dx : BNE st_walk
-    \ Fall into walk_off.
-
-\ WalkOff (&829A): one 4 x 4 step off the edge, then a fall.
+\ WalkOff (&829A): one 4 x 4 step off the edge, then a fall. (Walking or
+\ on a pipe: h_fall is 0, from harry_update.)
 .walk_off
-    LDA #0 : STA h_cnt : STA h_state : STA h_fall
+    STA h_cnt : STA h_state         ; (A = 0: st_pipe's dx, walk_mid's floor)
     ASL h_dx
 .fall_dy
     LDA #&FC : STA h_dy
@@ -632,9 +630,10 @@ go = st_walk.go
 .st_slope_up
 {
     LDA h_mom : CMP h_dx : BEQ uphill
-    LDA #0 : SEC : SBC h_mom : STA h_mom : STA h_dx
+.reverse
+    EOR #&FE : STA h_mom : STA h_dx ; -mom (mom is 1 or -1 on a slope)
     LDA #&FE : STA h_dy
-    LDA #6 : STA h_state
+    INX : STX h_state               ; 6 (X = 5: the dispatch, or wall_check)
 .go
     JMP move
 .uphill
@@ -646,11 +645,10 @@ go = st_walk.go
 .slope_aligned
 {
     LDY #&40 : LDA (hptr),Y : AND #&2D : BNE supported
-    STA h_state                     ; (A = 0)
-    BEQ st_fall                     ; (always)
+    JMP st_fall
 .supported
-    JSR wall_check
-    LDA h_state : CMP #5 : BEQ st_slope_up.go
+    JSR wall_check                  ; (it keeps X = h_state)
+    CPX #5 : BEQ st_slope_up.go
     BNE slope_end                   ; (always)
 }
 \ StSlide (&873A): state 6.
@@ -662,7 +660,9 @@ go = st_walk.go
 .slope_end
 {
     LDA h_yf : BNE go
-    LDA h_mom : CLC : ADC #1 : LSR A : ORA #&40 : TAY
+    LDY #&40 : LDX h_mom : BMI left ; T(&40), or T(&41) going right
+    INY                             ; (mom is 1 or -1 on a slope)
+.left
     LDA (hptr),Y : AND #&21 : BEQ go        ; (SetStanding ANDs again)
     JSR set_standing
     LDA #0 : STA h_dy

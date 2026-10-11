@@ -21,14 +21,53 @@ MTF_ATTR = 0
 MTF_TILE = 3
 MTF_TYPE = 6
 
-\ Read X bits (1-8) as a number in A and Y (Z set if it's 0). Fewer than 8
-\ leave the carry clear (the last ROL shifts out a 0), which the callers'
-\ ADCs rely on.
+\ Start unpacking the room (bp set by rooms.6502's room_load): its first
+\ record is the background.
+.unpack_room
+{
+    LDA #0 : STA bbyte : STA rec_len : STA rec_pos
+    \ The lists start empty, but needn't be cleared: the packer codes a hit
+    \ only on an entry this room has put there, and the shifts keep those
+    \ at the front, so what was there before only shifts down unused. The
+    \ ZA_DISCARD tells the allocator so (without it, it keeps their bytes
+    \ from everything, all the time), and one store it can see stands in
+    \ for the clearing (else it warns that the lists are read unwritten).
+    ZA_DISCARD mtf
+    LDX #8 : STA mtf,X
+    ZA_INDEXEDBY 8
+    BNE emit_bits               ; (always: X) the background
+}
+    \ (The allocator also follows the BNE on, into emit_tiered: harmless.)
+
+\ A value in the tier code at X (TIER_ROW, _ENDS, _LEN0 or _LEN1: tools/
+\ packrooms.py's Tiers), emitted. '0', '10' or '11' picks one of the code's
+\ three tiers, then its tier_width bits (never 0: packrooms.py) pick the
+\ value in that tier.
+.emit_tiered
+{
+    ZA_AUTO1 tier
+    STX tier
+    JSR getbit : BEQ got        ; (A = 0, carry clear: getbits)
+    JSR getbit : SEC            ; 10 or 11: on 1 or 2
+.got
+    ADC tier : STA tier : TAY
+    LDX tier_width,Y : JSR getbits
+    LDY tier : ADC tier_base,Y : TAY    ; (carry clear: getbits)
+    LDA tier_syms,Y
+    BCC emit                    ; (always: the ADC is within tier_syms)
+}
+    \ (Here, not before unpack_room: the allocator follows the branch both
+    \ ways, and falling into getbit is harmless.)
+
+\ Read X bits (1-8) as a number in A and Y (Z set if it's 0), X left 0.
+\ Fewer than 8 leave the carry clear (the last ROL shifts out a 0), which
+\ the callers' ADCs rely on. getbits_on reads them in below A's bits.
 .getbit
     LDX #1
 .getbits
-{
     LDA #0
+.getbits_on
+{
 .loop
     ASL bbyte : BNE have
     PHA
@@ -45,102 +84,21 @@ MTF_TYPE = 6
     RTS
 }
 
+\ Row (tier coded) and column (five bits).
+.emit_place
+    LDX #TIER_ROW : JSR emit_tiered
+    LDX #5
+    \ Fall into emit_bits.
 \ Copy X bits to the unpacked room.
 .emit_bits
     JSR getbits
     \ Fall into emit.
-\ Append A to the record being unpacked.
+\ Append A to the record being unpacked (keeps A and Y; N clear).
 .emit
 {
-    LDY rec_len : STA rec_buf,Y
+    LDX rec_len : STA rec_buf,X
     INC rec_len
     RTS
-}
-
-\ Row (tier coded) and column (five bits).
-.emit_place
-    LDX #TIER_ROW : JSR emit_tiered
-    LDX #5 : JMP emit_bits
-
-\ A value in the tier code at X (TIER_ROW, _ENDS, _LEN0 or _LEN1: tools/
-\ packrooms.py's Tiers), emitted; get_tiered returns it in A. '0', '10' or
-\ '11' picks one of the code's three tiers, then its tier_width bits pick
-\ the value in that tier.
-.emit_tiered
-    JSR get_tiered
-    JMP emit
-.get_tiered
-{
-    ZA_AUTO1 tier
-    STX tier
-    JSR getbit : BEQ got
-    JSR getbit : SEC : ADC tier : STA tier     ; 10 or 11: on 1 or 2
-.got
-    LDY tier
-    LDA #0 : LDX tier_width,Y : BEQ none
-    JSR getbits
-.none
-    LDY tier : ADC tier_base,Y : TAY    ; (carry clear: getbits)
-    LDA tier_syms,Y
-    RTS
-}
-.len_tier EQUB TIER_LEN0, TIER_LEN1
-
-\ A move-to-front coded value from the list at mtf + X (MTF_ATTR, _TILE or
-\ _TYPE): 0 = the front entry, 10 = the second, 110 = the third, 111 = a
-\ value from the field's vocabulary, its index in the bits that follow.
-\ Whatever it is moves to the front, and is emitted.
-.emit_mtf
-{
-    ZA_AUTO1 base
-    ZA_AUTO1 n
-    ZA_AUTO1 v
-    STX base
-    LDA #0 : STA n
-.count
-    JSR getbit : BEQ hit
-    INC n : LDA n : CMP #3 : BNE count
-    \ A miss: a value from the field's vocabulary, and the rest shift down.
-    LDY base : LDX vocab_width,Y : JSR getbits
-    LDY base : ADC vocab_off,Y : TAY    ; (carry clear: getbits)
-    LDA vocab,Y : STA v
-    LDX base : INX : INX
-    BNE test                    ; (always)
-.shift
-    DEX
-    LDA mtf,X
-    ZA_INDEXEDBY 0..7
-    STA mtf+1,X
-    ZA_INDEXEDBY 0..7
-.test
-    CPX base : BNE shift
-    LDA v : STA mtf,X           ; X = base here
-    ZA_INDEXEDBY 0..6
-    JMP emit
-.hit
-    \ Entry n comes to the front; the ones before it shift down.
-    LDA n : ADC base : TAX      ; (carry clear: getbits)
-    LDA mtf,X
-    ZA_INDEXEDBY 0..8
-    STA v
-    JMP test
-}
-
-\ Start unpacking the room (bp set by rooms.6502's room_load): its first
-\ record is the background.
-.unpack_room
-{
-    LDA #0 : STA bbyte : STA rec_len : STA rec_pos
-    \ The lists start empty. (Clearing them shows the allocator, and the
-    \ ZA_DISCARD tells it the clearing writes all of them: without it, it
-    \ keeps their bytes from everything, all the time.)
-    ZA_DISCARD mtf
-    LDX #8
-.clear
-    STA mtf,X
-    ZA_INDEXEDBY 0..8
-    DEX : BPL clear
-    LDX #8 : JMP emit_bits      ; the background
 }
 
 \ The next byte of the room's bytecode (the drawer's fetch).
@@ -157,39 +115,40 @@ MTF_TYPE = 6
 }
 
 \ unpack_record's kinds from 3: single, diagonal up and down, text, block,
-\ bend, hopper. The command byte (a bend's is in its bits)...
+\ bend, hopper. The command byte (a bend's is in its bits: its entry
+\ goes unused)...
 .kind_cmds
     EQUB 10, 8, 9, 2, 1, 0, 7
-\ ... and how many 5-bit fields come before the type.
+\ ... and how many 5-bit fields come before the type, times two (a text
+\ &80, a hopper 1: they have their own fields).
 .kind_fives
-    EQUB 0, 1, 1, 0, 2, 0
+    EQUB 0, 2, 2, &80, 4, 0, 1
+\ A run's length: the tier code across, and down.
+.len_tier EQUB TIER_LEN0, TIER_LEN1
+\ A text's characters 0 and 1 (the rest are letters).
+.text_punct EQUS " &"
 
 \ Unpack the next record into rec_buf.
 .unpack_record
 {
-    ZA_AUTO1 ones
     ZA_AUTO1 kind
-    ZA_AUTO1 n
     \ The class: count 1s up to five; then, unless that was none or five,
     \ one more bit picks one of a pair. kind = 2 * ones + that bit, or 0.
-    LDA #0 : STA ones
+    STX kind                    ; (X = 0: fetch, the only caller)
 .count
     JSR getbit : BEQ counted
-    INC ones : LDA ones : CMP #5 : BNE count
-    LDA #0 : JMP emit           ; 11111: the end
+    INC kind : LDA kind : CMP #5 : BNE count
+    TXA : BEQ emit              ; 11111: the end, 0 (X = 0: getbits)
 .counted
-    LDA ones : STA kind : BEQ runs      ; 0: a run
-    JSR getbit
-    LSR A : ROL kind : LDA kind
+    LDA kind : BEQ runs         ; 0: a run
+    LDX #1 : JSR getbits_on : STA kind
     CMP #2 : BEQ runs           ; 2: a capped run
     \ 3-9: the command byte (a bend's from 2 bits), the attribute, a
     \ single's tile, row and column.
-    CMP #8 : BNE fixed
+    TAX : LDA kind_cmds-3,X
+    CPX #8 : BNE command
     LDX #2 : JSR getbits
     ADC #3                      ; &03-&06 (carry clear: getbits)
-    BNE command                 ; (always)
-.fixed
-    LDX kind : LDA kind_cmds-3,X
 .command
     JSR emit
     LDX #MTF_ATTR : JSR emit_mtf
@@ -197,44 +156,85 @@ MTF_TYPE = 6
     LDX #MTF_TILE : JSR emit_mtf
 .place
     JSR emit_place
-    LDA kind : CMP #6 : BEQ text
-    CMP #9 : BEQ hopper
+    LDX kind : LDA kind_fives-3,X
+    BMI text
+    LSR A : BCS hopper
     \ The others: 5-bit fields (a diagonal's length, a block's height and
     \ width), then the type.
-    TAX : LDA kind_fives-3,X : STA n
+    STA kind
 .fives
-    DEC n : BMI type_last
+    DEC kind : BMI type_last
     LDX #5 : JSR emit_bits
     BPL fives                   ; (always: emit leaves N clear)
 .hopper
     LDX #5 : JSR emit_bits      ; rows(5) width(6)
     LDX #6 : JMP emit_bits
 
-\ run: tile attr row col vert len-1 type; capped adds ends before type.
+\ text: characters (5 bits) until 31, which emits the &80 that ends it.
+\ They index tools/packrooms.py's TEXT_CHARS: space, &, then A-Z.
+.text
+    LDX #5 : JSR getbits                ; (in Y too)
+    CMP #2 : BCC punct
+    CMP #31 : BEQ text_end
+    ADC #'A' - 2                        ; (carry clear: below 31)
+.char
+    JSR emit
+    BPL text                            ; (always: emit leaves N clear)
+.punct
+    LDA text_punct,Y : BCC char         ; (always)
+.text_end
+    LDA #&80 : BMI emit_mtf.emit_it     ; (always)
+
+\ run: tile attr row col vert len type; capped adds ends before type.
 .runs
     LDX #MTF_TILE : JSR emit_mtf
     LDX #MTF_ATTR : JSR emit_mtf
     JSR emit_place
     JSR getbit                          ; (in Y too)
-    LDX len_tier,Y                      ; across or down: its own lengths' code
-    LSR A : ROR A : STA unpack_vert     ; to bit 7
-    JSR get_tiered
-    ADC #1 : ORA unpack_vert : JSR emit ; (carry clear: get_tiered's ADC)
+    LDX len_tier,Y                      ; across or down: its own code,
+    JSR emit_tiered                     ; its values the whole length byte
     LDA kind : BEQ type_last
     LDX #TIER_ENDS : JSR emit_tiered
 .type_last
-    LDX #MTF_TYPE : JMP emit_mtf
-
-\ text: characters (5 bits) until 31, which emits the &80 that ends it
-.text
-    LDX #5 : JSR getbits                ; (in Y too)
-    LDA text_chars,Y : JSR emit         ; (emit keeps A)
-    CMP #&80 : BNE text
-    RTS
+    LDX #MTF_TYPE
+    \ Fall into emit_mtf.
 }
 
-\ TEXT_CHARS in tools/packrooms.py, then (at 31) the end.
-.text_chars
-    EQUS " &ABCDEFGHIJKLMNOPQRSTUVWXYZ"
-    SKIP 31 - (P% - text_chars)
-    EQUB &80
+\ A move-to-front coded value from the list at mtf + X (MTF_ATTR, _TILE or
+\ _TYPE): 0 = the front entry, 10 = the second, 110 = the third, 111 = a
+\ value from the field's vocabulary, its index in the bits that follow.
+\ Whatever it is moves to the front, and is emitted.
+.emit_mtf
+{
+    ZA_AUTO1 base
+    ZA_AUTO1 n                  ; the entry: base + the 1s so far
+    STX base : STX n
+.count
+    JSR getbit : BEQ hit
+    INC n : LDA n : SBC base    ; (carry clear: getbits) the 1s - 1
+    CMP #2 : BNE count
+    \ A miss: a value from the field's vocabulary, and the first two
+    \ entries shift down over the third.
+    LDY n : LDX vocab_width-3,Y : JSR getbits
+    LDY n : ADC vocab_off-3,Y : TAY     ; (carry clear: getbits)
+    LDA vocab,Y
+    LDX n : DEX                 ; base + 2
+    BNE test                    ; (always)
+.hit
+    \ Entry n comes to the front; the ones before it shift down.
+    LDX n : LDA mtf,X
+    ZA_INDEXEDBY 0..8
+.test
+    CPX base : BEQ front
+    DEX
+    LDY mtf,X                   ; (Y: A holds the value)
+    ZA_INDEXEDBY 0..7
+    STY mtf+1,X
+    ZA_INDEXEDBY 0..7
+    BCS test                    ; (always: the CPX found X above base)
+.front
+    STA mtf,X                   ; X = base here
+    ZA_INDEXEDBY 0..6
+.emit_it                        ; (unpack_record's text ends here too)
+    JMP emit
+}

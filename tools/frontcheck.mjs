@@ -133,7 +133,8 @@ try {
     r = await b.runUntil("game_loop", 60);
     check(r.stopped_reason === "breakpoint" && (await state()) === saved, "ESCAPE: the game carries on as it was");
 
-    // Again, RETURN: saved, the game carried on.
+    // Again: not over a file that isn't a saved game (MENU); then RETURN on
+    // CEGAME: saved, the game carried on.
     await b.run(1);
     await b.keyDown("V");
     r = await b.runUntil("handoff", 5);
@@ -141,7 +142,9 @@ try {
     await b.run(0.2);
     await b.keyUp("V");
     await saveScreen("RETURN SAVES");
-    await hold("RETURN", 0.1);
+    await type(..."DELETE ".repeat(6).trim().split(" "), "M", "E", "N", "U", "RETURN");
+    check(await waitText("NOT A SAVED GAME", 10), "MENU refused (not a saved game)");
+    await type(..."DELETE ".repeat(4).trim().split(" "), "C", "E", "G", "A", "M", "E", "RETURN");
     r = await b.runUntil("game_loop", 60);
     check(r.stopped_reason === "breakpoint" && (await state()) === saved, "RETURN: saved, and the game carries on as it was");
 
@@ -150,23 +153,21 @@ try {
     check(await menuReady(), "the abort key returns to the menu");
     check(!(await screen()).includes("INSTRUCTIONS!"), "... without the instructions");
 
-    // S in the menu, under another name; then not over a file that isn't
-    // a saved game.
+    // No table to save by hand (decision 38): the menu doesn't offer it,
+    // and S does nothing.
+    check(!(await screen()).includes("SAVE TABLE"), "the menu has no SAVE TABLE");
     await hold("S", 0.1);
-    await saveScreen("RETURN SAVES");
-    await type(..."DELETE ".repeat(6).trim().split(" "), "M", "E", "N", "U", "RETURN");
-    check(await waitText("NOT A SAVED GAME", 10), "S: MENU refused (not a saved game)");
-    await type(..."DELETE ".repeat(4).trim().split(" "), "M", "I", "N", "E", "RETURN");
-    check(await menuReady(), "... MINE saved, back to the menu");
+    await b.run(0.5);
+    check(!(await screen()).includes("FILENAME"), "... and S asks for no filename");
 
     // L: the disc listed, the last name offered; a missing file, a file
     // that isn't a save; then CEGAME loaded and carried on.
     await hold("L", 0.1);
     check(await saveScreen("RETURN LOADS"), "L: the load screen");
     page = await screen();
-    check(page.includes("CEGAME") && page.includes("MINE"), "... lists both saves");
-    check((await rows())[21].includes("FILENAME:\x07MINE"), "... and offers MINE");
-    await type(..."DELETE ".repeat(4).trim().split(" "), "N", "O", "N", "E", "RETURN");
+    check(page.includes("CEGAME"), "... lists the save");
+    check((await rows())[21].includes("FILENAME:\x07CEGAME"), "... and offers CEGAME");
+    await type(..."DELETE ".repeat(6).trim().split(" "), "N", "O", "N", "E", "RETURN");
     check(await waitText("NOT FOUND", 10), "... NONE not found");
     await type(..."DELETE ".repeat(4).trim().split(" "), "C", "E", "K2", "RETURN");
     check(await waitText("NOT A SAVED GAME", 10), "... CE2 refused (not a saved game)");
@@ -189,6 +190,12 @@ try {
     const named = await waitText(`MAT.........${final}`, 10);
     check(named, "the name and score top the table");
     if (!named) console.log((await screen()).match(/.{1,40}/g).join("\n"));
+    // ... and the table on the disc by itself (decision 38).
+    check(await menuReady(), "... then the menu");
+    await hold("L", 0.1);
+    await saveScreen("RETURN LOADS");
+    check((await screen()).includes("CE2HI"), "... CE2HI saved to the disc");
+    await hold("ESCAPE", 0.1);
 
     // CTRL-BREAK, then SHIFT-BREAK: a first boot again (the instructions),
     // not the same name asked for again; the new high score kept.

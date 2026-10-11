@@ -66,8 +66,9 @@ def render(m, addr, fmt, attr):
 
 
 # Lines the BBC front end leaves out (decision 13): it has no ZX Printer,
-# and no joystick yet.
-DROP = {"CAPS/SHIFT-P TO PRINTOUT", "JOYSTICK COMPATIBLE"}
+# and no joystick yet; and the high-score table is kept on the disc by
+# itself, with nothing to choose (decision 38).
+DROP = {"CAPS/SHIFT-P TO PRINTOUT", "JOYSTICK COMPATIBLE", "S TO SAVE TABLE"}
 
 
 def lines(cells):

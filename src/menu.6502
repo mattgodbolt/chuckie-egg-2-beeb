@@ -80,6 +80,7 @@ ENDIF
     JMP save_game               ; then carry on playing
 .not_save
     CMP #MB_BOOT : BNE main_menu    ; aborted, or BREAK pressed in a game
+    JSR load_table
     JSR instructions
 }
 .main_menu
@@ -101,10 +102,6 @@ ENDIF
     CMP #'L' : BNE not_l
     JMP load_game
 .not_l
-    CMP #'S' : BNE not_s
-    LDX #LO(main_menu) : LDY #HI(main_menu)
-    JMP save_game
-.not_s
     CMP #'I' : BNE not_i
     JSR instructions : JMP main_menu
 .not_i
@@ -615,8 +612,52 @@ CAT_BUF = MB_XFER               ; (free until run_game)
     JSR m_cls
     JSR draw_hiscores
     LDX #LO(enter_name) : LDY #HI(enter_name) : JSR print_lines
-    JMP name_entry
+    JSR name_entry
+    \ Fall into save_table.
 }
+\ The high-score table on the disc, as CE2HI, whenever it changes (decision
+\ 38: on tape the original saved it on request; here it simply lasts). A
+\ disc error (write protected, full) shows, then a key, then the menu.
+.save_table
+{
+    LDA #LO(error_menu) : STA error_to
+    LDA #HI(error_menu) : STA error_to+1
+    LDX #17
+.block
+    LDA table_save,X : STA osfile_block,X
+    DEX : BPL block
+    LDA #0 : LDX #LO(osfile_block) : LDY #HI(osfile_block) : JMP osfile
+}
+
+\ CE2HI's table into the mailbox's, if the disc has it at its length: at
+\ start-up and after a BREAK (between, the mailbox keeps it, and the file
+\ is the same).
+.load_table
+{
+    LDX #17
+.block
+    LDA table_load,X : STA osfile_block,X
+    DEX : BPL block
+    LDA #5 : LDX #LO(osfile_block) : LDY #HI(osfile_block) : JSR osfile
+    CMP #1 : BNE none                   ; not a file
+    LDA osfile_block+10 : CMP #HS_LEN : BNE none
+    LDA osfile_block+11 : ORA osfile_block+12 : ORA osfile_block+13 : BNE none
+    LDX #17
+.again
+    LDA table_load,X : STA osfile_block,X
+    DEX : BPL again
+    LDA #&FF : LDX #LO(osfile_block) : LDY #HI(osfile_block) : JMP osfile
+.none
+    RTS
+}
+.table_name EQUS "CE2HI", 13
+.table_save
+    EQUW table_name
+    EQUD &FFFF0000 OR M_TABLE, &FFFF0000 OR M_TABLE
+    EQUD &FFFF0000 OR M_TABLE, &FFFF0000 OR (M_TABLE + HS_LEN)
+.table_load
+    EQUW table_name
+    EQUD &FFFF0000 OR M_TABLE, 0, 0, 0
 \ The name, typed at its entry: DELETE goes back a column and puts the dot
 \ back, RETURN ends it, up to ten characters.
 .name_entry
@@ -840,13 +881,10 @@ SAVE_LEN = STATE_END - SAVE_HDR
 .keys
     LDA SAVE_KEYS,X : STA M_KEYS,X
     DEX : BPL keys
-    LDX #HS_LEN - 1
-.table
-    LDA SAVE_TABLE,X : STA M_TABLE,X
-    DEX : CPX #&FF : BNE table
+    \ (Not the table it holds: the high scores are CE2HI's, decision 38.)
     JSR cipher_rng
     LDA #0 : STA M_GAME
-    LDA STATE_LIVES : BEQ menu_again    ; only the table and the keys
+    LDA STATE_LIVES : BEQ menu_again    ; only the keys
     INC M_GAME
     JMP carry_on
 .wrong

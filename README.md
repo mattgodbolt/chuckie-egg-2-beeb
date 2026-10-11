@@ -37,10 +37,11 @@ unless...; some pipes are more slippery than others.
 | **BREAK** | back to the menu |
 
 From the menu: **P** plays, **R** redefines the keys, **L** loads a saved
-game, **S** saves (the high-score table, and the game if one was in
-progress), **I** shows the instructions again, and with sideways RAM **D**
-switches to the edition that reads its rooms from the disc (below). Saving and loading list the
-disc and ask for a filename, offering the last one used.
+game, **I** shows the instructions again, and with sideways RAM **D**
+switches to the edition that reads its rooms from the disc (below). Saving
+(from the game) and loading list the disc and ask for a filename, offering
+the last one used. The high-score table keeps itself: it's saved to the disc
+as `CE2HI` whenever a new score goes in, and read back when the disc boots.
 
 The original's hidden developers' cheats are here too: **f0** on the menu
 turns them on (SHIFT with left or right changes room, and lives never run

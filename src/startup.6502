@@ -68,7 +68,6 @@ IF DEFINED(STREAM)
     LDA mb_fdc : STA fdc_type
     LDA #0 : STA fdc_state
     STA it_n : STA ld_on : STA pf_cur
-    STA stage_p : STA copy_p : STA stage_alt
     LDA #LO(arena) : STA item_top
     LDA #HI(arena) : STA item_top+1
     LDA #0
@@ -106,7 +105,7 @@ IF DEFINED(STREAM)
 \ count 0 on a B: it unloads after a not-ready too, which hangs.)
 I_STEP   = &0C
 I_SETTLE = &0A
-I_LOAD   = &F8
+I_LOAD   = &E8
 .i_init
     EQUB 0, &69, 2                              ; Seek 0 (steps until TRK0)
     EQUB &C1, &17, &7A, 3                       ; Write Special Register: mode, no DMA
@@ -138,7 +137,7 @@ I_LOAD   = &F8
     JMP i_read
     JMP i_poll
 .i_read
-    STA fdc_track : STX fdc_sect : STY fdc_page
+    STA fdc_track : STX fdc_sect
 .i_start
 {
     JSR arm
@@ -193,7 +192,7 @@ I_LOAD   = &F8
     JMP w_poll
 .w_read
 {
-    STA fdc_track : STX fdc_sect : STY fdc_page
+    STA fdc_track : STX fdc_sect
     CMP fdc_cur : BEQ w_start
     LDA fdc_cur : BPL known
     LDA #&00 + W_RATE : BPL go                  ; Restore, then the seek
@@ -250,15 +249,19 @@ I_LOAD   = &F8
 .nmi_data
     LDA I_DATA
 .nmi_dst
-    STA &3000
+    STA &3000                   ; (a BIT once the bytes wanted are in)
     INC nmi_dst + 1
-    BEQ nmi_last
+    BNE nmi_count
+    INC nmi_dst + 2
+.nmi_count
+    DEC nmi_left
+    BNE nmi_restore
+    LDA #BIT_ABS : STA nmi_dst
 .nmi_restore
     LDA #0
     RTI
-.nmi_last
-    LDA #RTI_OP : STA NMI_AREA
-    BNE nmi_restore
+.nmi_left
+    EQUB 0
 .nmi_end
     ENDSECTION
 ENDIF

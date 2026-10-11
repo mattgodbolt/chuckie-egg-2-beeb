@@ -5,8 +5,11 @@
 
 The two editions are two assemblies of src/main.6502 (docs/streaming.md):
 the release disc's (MENU, CE2, CE2DATA, !BOOT) and the streaming
-edition's (CE2S). This puts CE2S on the release disc, after its last file,
-and writes the result. A name on both discs is an error.
+edition's (CE2S, CE2ROOM). This puts the second disc's files on the first,
+after its last file, and writes the result. CE2ROOM starts a track (ten
+sectors): the game reads it by track and sector, and none of its rooms'
+records crosses a track (tools/mkrecords.py). A name on both discs is an
+error.
 
 The catalogue (Acorn DFS): sector 0 has the title's first 8 bytes, then
 eight bytes a file, its name (7) and directory (bit 7: locked); sector 1
@@ -19,6 +22,7 @@ highest start sector down.
 import sys
 
 SECTOR = 256
+TRACK = 10                  # sectors
 
 
 def catalogue(img):
@@ -47,6 +51,8 @@ def main():
         if name in names:
             raise SystemExit(f"{bytes(name).decode().strip()}: on both discs")
         size = (length + SECTOR - 1) // SECTOR
+        if name.startswith(b"CE2ROOM"):
+            end += -end % TRACK
         if end + size > sectors:
             raise SystemExit("the disc is full")
         data = extra[start * SECTOR:start * SECTOR + length]

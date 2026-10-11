@@ -228,16 +228,13 @@ IF DEFINED(STREAM)
 \ (disc.6502: the reader, and what fetch reads)
 .fdc_type      SKIP 1          ; FDC_8271 or FDC_1770
 .fdc_state     SKIP 1          ; 0 idle, 1 seeking (1770), 2 reading
-.fdc_track     SKIP 1          ; the read's track, sector and page
+.fdc_track     SKIP 1          ; the read's track and sector
 .fdc_sect      SKIP 1
-.fdc_page      SKIP 1
 .fdc_cur       SKIP 1          ; 1770: the head's track (&FF: not known)
-.fe_pos        SKIP 2          ; where in CE2DATA
+.fe_pos        SKIP 2          ; where in CE2ROOM: sector, track
 .fe_len        SKIP 2          ; how many bytes
 .fe_dst        SKIP 2          ; to where
 .item_top      SKIP 2          ; (disc.6502: the cache's next free byte)
-.stage_p       SKIP 2          ; the page a sector is read into (its low byte 0)
-.copy_p        SKIP 2          ; ... and one has been read into
 ENDIF
 ENDSECTION
 

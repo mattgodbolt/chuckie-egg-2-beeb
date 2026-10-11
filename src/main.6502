@@ -87,6 +87,11 @@ SECTION MailboxRAM, org = MB_STREAM, guard = screen, virtual = TRUE
     EQUS DATA_MAGIC, build_stamp
     INCLUDE "state.6502"
 ENDSECTION
+\ Its rooms, each one record, read from the disc as they're wanted
+\ (disc.6502: MENU finds where CE2ROOM starts). Never loaded whole.
+SECTION Rooms, org = &0000, load = &FFFF0000, filename = "CE2ROOM"
+    INCBIN "data/roomrecs.bin"
+ENDSECTION
 ENDIF
 \ Where the records start in CE2DATA (the same in both editions).
 REC_BASE = mailbox_end - data_magic
@@ -198,9 +203,9 @@ IF DEFINED(STREAM)
     \ The streaming edition's cache (disc.6502), up to the mailbox: not in
     \ the file (stream_init sets it up).
     SECTION Cache, org = code_end, guard = CODE_TOP, virtual = TRUE
-    NI = 10                     ; items at most: two rooms' (a body, 4 groups)
+    NI = 6                      ; rooms at most
     \ (it_id to it_use in this order: disc.6502's swap.)
-.it_id      SKIP NI             ; 0-119 a room's body (room - 1), &80 + n group n
+.it_id      SKIP NI             ; the room - 1
 .it_lo      SKIP NI             ; where
 .it_hi      SKIP NI
 .it_nlo     SKIP NI             ; how long
@@ -209,14 +214,11 @@ IF DEFINED(STREAM)
 .it_n       SKIP 1
 .ld_on      SKIP 1              ; an item is being read
 .ia_id      SKIP 1
-.ia_ahead   SKIP 1              ; item_add is reading ahead (its own stage page)
-.stage_alt  SKIP 1              ; the other stage page, or 0 for only one
 .fb_room    SKIP 1
 .fb_id      SKIP 1
-.fb_n       SKIP 1
 .epoch      SKIP 1              ; on one at each room entered
-.gy         SKIP 1
 .pf_cur     SKIP 1              ; the room the cache was set up for
+.nr_rooms   SKIP 4              ; (next_room: the room's neighbours)
 .arena
     SKIP CODE_TOP - P%
 .arena_end

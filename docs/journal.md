@@ -1343,3 +1343,42 @@ tiles turned to noise.
   older, and every room change does it: the port draws Harry on the pass
   that changes room, where the original draws nothing (issue #2).
 
+### One read a room: CE2ROOM
+
+- Matt, on the published disc (the cache by last use): going between
+  rooms 1, 2 and 11, or 6 and 16, read every time; 17 and 18 hit. That
+  cache was 1,031 bytes, and those pairs need 1,904, 1,384 and 1,152.
+- CE2S's rooms now come from a file of their own, CE2ROOM
+  (`roomrecs.bin`): each room's body and its graphics groups together,
+  each group from a multiple of 4 bytes, so a body's group list holds
+  where each starts, in fours (records.bin keeps the groups' numbers:
+  the bank had 184 bytes free, and 2-byte offsets cost 229). The cache
+  holds whole rooms, one item each, and most of its code went: no groups
+  to find, keep or read one by one.
+- Reading ahead went through a spare page above the item, 256-511 bytes
+  the cache couldn't use. Each record now starts a sector, and the NMI
+  routine stores straight into place, a 16-bit address and a count of the
+  bytes wanted, reading and dropping the rest of the last sector (the
+  controller would call a byte left unread lost): 45 cycles a byte, 31
+  bytes at `&0D00`. No copy, no stage pages, no double buffering: the
+  sectors come one after another with nothing to do between. The cache
+  went from 1,031 to 1,407 bytes; only rooms 1 and 2 (1,904) and 56 and
+  66 (1,500) can't be held with each other now.
+- A record that crossed a track lost nearly a revolution (on the Master,
+  424ms for a second sector): every track's sector 0 is at the same
+  place, so it's gone by the time the head has stepped. No record crosses
+  one now (249 sectors, 25 tracks), `ssdmerge.py` starts CE2ROOM on a
+  track, MENU passes the track, and `sector_start`'s division went.
+- Reading ahead takes every neighbour that fits, nearest first.
+- The drive: Matt found it running all game "super annoying". The 8271's
+  head unloads after 2.8s idle again, and the 1770's keep-alive is gone.
+  On the Master a room change can wait for a read ahead that started with
+  the motor stopped (1.4-1.9s); stopping a read ahead for the wrong room
+  after its sector, tried, didn't help and cost 41 bytes.
+- In jsbeeb, the random walk from room 45: on the B 21 room changes,
+  median 280ms (258ms with sideways RAM), one read while waiting.
+- The build stamp names the commit the disc was built from: the disc's
+  own commit comes after. A release flow is being looked at.
+- jsbeeb, beebjit and b2 all make a WD1770's status valid at once after
+  a command: filed as jsbeeb#1230.
+

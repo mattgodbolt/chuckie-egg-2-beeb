@@ -106,7 +106,9 @@ handoff, the front end or anything paged.
 - `tools/mkrooms.py`, `tools/packrooms.py` and `tools/mkgfx.py` regenerate
   `src/data/` from the original, and `tools/mkrecords.py` then splits the
   rooms and sprites into per-room records (`records.bin`: each room's
-  body, then the graphics groups they share). The build never runs them;
+  body, then the graphics groups they share; and `roomrecs.bin`, CE2S's
+  CE2ROOM: each room's body and groups together, from a sector, none
+  crossing a track). The build never runs them;
   their output is committed.
 - Loading takes 4.6s: tools run to a symbol after booting
   (`startBeeb({bootUntil})`, `play.mjs --until`), never a guessed wait.

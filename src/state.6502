@@ -27,7 +27,7 @@
 \ starting egg - 1. MENU's f0 and f1-f8 set it.
 .mb_cheat    EQUB 0
 \ For the streaming edition (disc.6502), from MENU: the disc controller
-\ (FDC_8271 or FDC_1770) and the sector CE2DATA starts at.
+\ (FDC_8271 or FDC_1770) and the track CE2ROOM starts (a word: high 0).
 .mb_fdc      EQUB 0
 .mb_disc     EQUW 0
 \ MENU's D (with sideways RAM): 1 to play the streaming edition anyway.

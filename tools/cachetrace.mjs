@@ -16,7 +16,7 @@ const rand = () => ((seed = (seed * 1103515245 + 12345) & 0x7fffffff) / 0x800000
 
 const b = await startBeeb({ disc: "build/test.ssd", symbols: "build/test.json", bootUntil: "game_loop" });
 const at = { draw: b.addr("draw_room"), add: b.addr("item_add"), now: b.addr("read_now"), sector: b.addr("sector_start"), find: b.addr("find_body") };
-const name = (id) => (id & 0x80 ? `g${id & 0x7f}` : `r${id + 1}`);
+const name = (id) => `r${id + 1}`;
 const moves = [[KEYS.right], [KEYS.left], [KEYS.right, KEYS.jump], [KEYS.left, KEYS.jump], [KEYS.up], [KEYS.down]];
 let held = [], line = [], t = 0, waiting = false;
 const flush = () => { if (line.length) console.log(line.join(" ")); line = []; };
@@ -48,8 +48,8 @@ try {
             const pc = regs.pc;
             const ms = ((secs - left) * 0).toFixed(0);
             if (pc === at.find) { flush(); line.push(`[${(t - left).toFixed(1)}s] enter r${regs.a}:`); }
-            else if (pc === at.now) line.push("WAIT");
-            else if (pc === at.add) line.push(`${(await b.peek("ia_ahead")) ? "ahead" : "now"}:${name(regs.a)}`);
+            else if (pc === at.now) { line.push("WAIT"); waiting = true; }
+            else if (pc === at.add) { line.push(`${waiting ? "now" : "ahead"}:${name(regs.a)}`); waiting = false; }
             else if (pc === at.sector) line.push("s");
             else if (pc !== at.draw) break;
             await b.cycles(1);

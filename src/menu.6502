@@ -326,7 +326,7 @@ ENDIF
 
 \ For the streaming edition, what the game's disc reader needs to know
 \ (disc.6502): the controller, a B's 8271 or a Master's 1770 (OSBYTE 0),
-\ and the sector CE2DATA starts at, from the catalogue (read with OSWORD
+\ and the sector CE2ROOM starts at, from the catalogue (read with OSWORD
 \ &7F), so a *COMPACT doesn't lose it.
 CAT_BUF = MB_XFER               ; (free until run_game)
 .stream_disc
@@ -347,17 +347,32 @@ CAT_BUF = MB_XFER               ; (free until run_game)
 .name
     LDA CAT_BUF,X : CMP data_name,Y : BNE next
     INX : INY : CPY #8 : BNE name
-    \ Its start sector: the low byte, and two bits of the mixed byte.
+    \ Its start sector (the low byte, and two bits of the mixed byte),
+    \ which starts a track (tools/ssdmerge.py): the track, ten to one.
     LDX mz_i
-    LDA CAT_BUF + &107,X : STA M_DISC
-    LDA CAT_BUF + &106,X : AND #3 : STA M_DISC+1
+    LDA CAT_BUF + &106,X : AND #3 : TAY
+    LDA CAT_BUF + &107,X
+    LDX #0
+.tens
+    CPY #0 : BNE sub
+    CMP #10 : BCC tracked
+.sub
+    SEC : SBC #10 : BCS no_borrow
+    DEY
+.no_borrow
+    INX : BNE tens              ; (always)
+.tracked
+    CMP #0 : BNE misplaced
+    STX M_DISC
     RTS
+.misplaced
+    BRK : EQUB 0 : EQUS "CE2ROOM not at a track's start" : EQUB 0
 .next
     LDA mz_i : CLC : ADC #8 : STA mz_i
     DEC mz_n : BNE file
-    BRK : EQUB 0 : EQUS "CE2DATA not found" : EQUB 0
+    BRK : EQUB 0 : EQUS "CE2ROOM not found" : EQUB 0
 }
-.data_name EQUS "CE2DATA$"
+.data_name EQUS "CE2ROOM$"
 .cat_read
     EQUB 0                      ; drive 0
     EQUD &FFFF0000 OR CAT_BUF

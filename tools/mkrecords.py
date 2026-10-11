@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Split the rooms and the sprites into records: a body for each room and
-the graphics groups the bodies share (docs/streaming.md).
+the graphics groups the bodies share (docs/streaming.md), and for the
+streaming edition each room's record, its body and its groups together.
 
     .venv/bin/python tools/mkrecords.py
 
@@ -10,7 +11,16 @@ tools/zxrooms.py: make rooms) and what the other generators wrote
 packlens.txt from packrooms.py, roombands.txt from mkrooms.py, sprites.bin,
 gfx.6502, monsters.bin and montypes.bin from mkgfx.py) and writes,
 committed (the build never runs this):
-    src/data/records.bin    the bodies, rooms 1-120, then the groups
+    src/data/records.bin    the bodies, rooms 1-120, then the groups (the
+                            sideways edition's bank)
+    src/data/roomrecs.bin   the streaming edition's: for each room its
+                            body, then its groups, each from a multiple
+                            of 4 bytes, the room's record from a sector
+                            (256 bytes), so a room is one run of sectors
+                            read straight into place (disc.6502). No
+                            record crosses a track (ten sectors, the file
+                            starting one: tools/ssdmerge.py): one that
+                            wouldn't fit starts the next
     src/data/records.6502   what stays in main RAM to find them, and
                             Harry's frame pointers
     src/data/harry.bin      Harry's frames, which every room shows
@@ -23,7 +33,8 @@ where each starts):
             right, up, down (from the original's cell types, build/rooms:
             below), for the streaming edition's reading ahead (disc.6502);
             bits 4-7 the room's first-visit bonus (visits.bin, status.6502)
-    groups: how many, then their numbers
+    groups: how many, then for each its number (records.bin), or where
+            it starts in the room's record, in fours (roomrecs.bin)
     monsters: how many, then four bytes each, in the order the original
             scans its monster table (entries 1-255, then 0): the entry's
             number, row, column, type. The entry's number decides whether
@@ -164,7 +175,6 @@ def main():
             gs.add("bar" if LIFTS[r] == 0x96 else "platform")
         room_groups[r] = sorted(number[g] for g in gs)
         assert len(entries[r]) <= 4
-        head = bytes([len(room_groups[r])] + room_groups[r])
         mons = bytes([len(entries[r])] + [b for e in entries[r] for b in (e, mon[0x100 + e], mon[0x200 + e], mon[0x300 + e])])
         bnds = bytes([b for pair in bands[r] for b in pair] + [0])
         fixed = [x for x in range(NPORT, 256) if t_room[x] & 0x7F == r]
@@ -172,9 +182,7 @@ def main():
         fixd = bytes([b for x in fixed for b in (t_row[x], t_col[x], t_type[x])])
         stream = packed[start:start + lens[r - 1]]
         start += lens[r - 1]
-        body = bytes([exits(r) | visits[r] << 4]) + head + mons + bnds + fixd + stream
-        assert len(body) < 256
-        bodies.append(body)
+        bodies.append((bytes([exits(r) | visits[r] << 4]), mons + bnds + fixd + stream))
 
     # The groups' frames, each frame once (some are pointed at twice), in
     # sprites.bin's order, a mirror's twin brought along if the group lacks
@@ -200,31 +208,60 @@ def main():
         blob = bytes([len(idx)]) + b"".join(bytes([i, where[frame_offs[i]] & 0xFF, where[frame_offs[i]] >> 8]) for i in idx) + pixels
         group_blobs.append(blob)
 
-    records = b"".join(bodies)
+    def body(r, refs):
+        first, rest = bodies[r - 1]
+        b = first + bytes([len(refs)] + refs) + rest
+        assert len(b) < 256
+        return b
+    body_len = [len(body(r, room_groups[r])) for r in range(1, 121)]
+    records = b"".join(body(r, room_groups[r]) for r in range(1, 121))
     group_at = []
     for blob in group_blobs:
         group_at.append(len(records))
         records += blob
+    pad4 = lambda b: b + bytes(-len(b) % 4)
+    roomrecs, room_at, room_len = b"", [], []
+    for r in range(1, 121):
+        fours, at = [], (body_len[r - 1] + 3) // 4
+        for g in room_groups[r]:
+            fours.append(at)
+            at += (len(group_blobs[g]) + 3) // 4
+        assert at <= 256
+        rec = pad4(body(r, fours)) + b"".join(pad4(group_blobs[g]) for g in room_groups[r])
+        sectors = (len(rec) + 255) // 256
+        if len(roomrecs) // 256 % 10 + sectors > 10:
+            roomrecs += bytes(-len(roomrecs) % 2560)
+        room_at.append(len(roomrecs))
+        room_len.append(len(rec))
+        roomrecs += rec + bytes(-len(rec) % 256)
 
     # Check: every room's frames, installed from its groups, are the frames
     # sprites.bin has at the original's pointers.
     sys.path.insert(0, "tools")
     from mkgfx import unpack  # noqa: E402
-    for r in range(1, 121):
-        ptr = {}
-        for g in room_groups[r]:
-            base = group_at[g]
-            for k in range(records[base]):
-                i, lo, hi = records[base + 1 + 3 * k:base + 4 + 3 * k]
-                ptr[i] = base + (lo | hi << 8)
-        need = set().union(*(groups[names[g]] for g in room_groups[r])) if room_groups[r] else set()
-        assert set(ptr) == need, r
-        for i, p in ptr.items():
-            assert unpack(records, p) == unpack(sprites, frame_offs[i]), (r, i)
+    # (Both files, each room's group list read as room_load reads it.)
+    body_at = [sum(body_len[:r - 1]) for r in range(1, 122)]
+    for blob, start in ((records, body_at), (roomrecs, room_at + [len(roomrecs)])):
+        for r in range(1, 121):
+            b = start[r - 1]
+            assert blob[b + 1] == len(room_groups[r])
+            ptr = {}
+            for k in range(blob[b + 1]):
+                ref = blob[b + 2 + k]
+                base = group_at[ref] if blob is records else b + 4 * ref
+                for f in range(blob[base]):
+                    i, lo, hi = blob[base + 1 + 3 * f:base + 4 + 3 * f]
+                    ptr[i] = base + (lo | hi << 8)
+            need = set().union(*(groups[names[g]] for g in room_groups[r])) if room_groups[r] else set()
+            assert set(ptr) == need, r
+            for i, p in ptr.items():
+                assert unpack(blob, p) == unpack(sprites, frame_offs[i]), (r, i)
 
-    room_max = max(len(bodies[r - 1]) + sum(len(group_blobs[g]) for g in room_groups[r]) for r in range(1, 121))
+    room_max = max(room_len)
     with open(f"{DATA}/records.bin", "wb") as f:
         f.write(records)
+    with open(f"{DATA}/roomrecs.bin", "wb") as f:
+        f.write(roomrecs)
     with open(f"{DATA}/harry.bin", "wb") as f:
         f.write(sprites[:harry_end])
     assert all(1 <= t_room[x] & 0x7F <= 120 for x in range(NPORT, 256))
@@ -240,31 +277,37 @@ def main():
         ".harry_frames",
     ] + [f"    EQUW harry_gfx + &{o:04X}" for o in harry_offs] + [
         "",
+        "IF NOT(DEFINED(STREAM))",
         "\\ Each room's body's length: room r's follows rooms 1 to r - 1's from",
         "\\ records (rooms.6502 adds them up).",
         ".body_len",
-    ] + ["    EQUB " + ", ".join(f"{len(b):3d}" for b in bodies[i:i + 12]) for i in range(0, 120, 12)] + [
+    ] + ["    EQUB " + ", ".join(f"{n:3d}" for n in body_len[i:i + 12]) for i in range(0, 120, 12)] + [
+        "ELSE",
+        "\\ Each room's record's length in roomrecs.bin, in fours, less one: room",
+        "\\ r's starts at the sector after rooms 1 to r - 1's, or the next track's",
+        "\\ first if it wouldn't fit in what's left of this one (disc.6502).",
+        ".room_len4",
+    ] + ["    EQUB " + ", ".join(f"{n // 4 - 1:3d}" for n in room_len[i:i + 12]) for i in range(0, 120, 12)] + [
+        "ENDIF",
         "",
-        f"GROUPS = {len(names)}",
+        "IF NOT(DEFINED(STREAM))",
         "\\ Each graphics group's offset from records (its monster graphic's",
-        "\\ base frame, or the machine), then the records' end.",
+        "\\ base frame, or the machine).",
         ".group_lo",
     ] + [f"    EQUB LO(&{a:04X})   \\ {i:2d}: {label(g)}" for i, (g, a) in enumerate(zip(names, group_at))] + [
-        f"    EQUB LO(&{len(records):04X})   \\ (the end, for the last's length)",
         ".group_hi",
-    ] + [f"    EQUB HI(&{a:04X})" for a in group_at + [len(records)]] + [
-        f"RECORDS_LEN = {len(records)}",
-        "\\ The most a room needs, its body and its groups (the streaming",
-        "\\ edition's room buffer).",
+    ] + [f"    EQUB HI(&{a:04X})" for a in group_at] + [
+        "ENDIF",
+        "\\ The most a room needs, its record (the streaming edition's cache).",
         f"ROOM_MAX = {room_max}",
         f"NPORT = &{NPORT:02X}       \\ things 0 to NPORT - 1 are portable",
         f"FIXED_MAX = {FIXED_MAX}",
     ]
     with open(f"{DATA}/records.6502", "w") as f:
         f.write("\n".join(lines) + "\n")
-    print(f"records.bin: {len(records)} bytes: bodies {sum(map(len, bodies))} (largest {max(map(len, bodies))}), "
-          f"{len(names)} groups {len(records) - sum(map(len, bodies))} (largest {max(map(len, group_blobs))}); "
-          f"harry.bin {harry_end}")
+    print(f"records.bin: {len(records)} bytes: bodies {sum(body_len)} (largest {max(body_len)}), "
+          f"{len(names)} groups {len(records) - sum(body_len)} (largest {max(map(len, group_blobs))}); "
+          f"roomrecs.bin {len(roomrecs)} (largest {room_max}); harry.bin {harry_end}")
 
 
 if __name__ == "__main__":

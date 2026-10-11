@@ -17,6 +17,7 @@
     EQUW harry_gfx + &00F0
     EQUW harry_gfx + &0114
 
+IF NOT(DEFINED(STREAM))
 \ Each room's body's length: room r's follows rooms 1 to r - 1's from
 \ records (rooms.6502 adds them up).
 .body_len
@@ -30,10 +31,26 @@
     EQUB  70,  84,  78,  86,  80,  52, 104,  74,  74,  75, 103,  49
     EQUB  71,  64,  77,  85, 103,  95, 100,  58,  78, 114,  51,  76
     EQUB  37,  51,  76,  70,  88,  57, 104,  59,  54,  28,  26,  59
+ELSE
+\ Each room's record's length in roomrecs.bin, in fours, less one: room
+\ r's starts at the sector after rooms 1 to r - 1's, or the next track's
+\ first if it wouldn't fit in what's left of this one (disc.6502).
+.room_len4
+    EQUB 241, 233,  93, 102, 103, 140, 172, 102, 121,  42, 103,  61
+    EQUB 101,  97,  53, 149, 104, 150, 134, 112,  46, 111, 108,  62
+    EQUB  74,  49, 145, 109,  45, 132,  96,  64,  65, 118,  72,  46
+    EQUB  62,  50, 157,  60,  86,  82,  98, 163,  94,  72, 156,  31
+    EQUB 103, 109,  10,  64,  80,  65,  45, 160, 123,  56, 158,  44
+    EQUB 133,  70,  54,  44, 117, 213,  58, 124, 171, 101, 138, 121
+    EQUB 140, 109, 114, 112, 104, 128, 110,  85,  33, 109, 169, 101
+    EQUB 109, 108,  94,  80, 217,  41, 101, 172, 120,  29,  25,  12
+    EQUB  87, 125,  72,  86,  67,  79,  52,  25,  30,  28,  12,  39
+    EQUB   9,  12, 250,  82, 107,  25,  25,  25,  24,  31,  66, 255
+ENDIF
 
-GROUPS = 30
+IF NOT(DEFINED(STREAM))
 \ Each graphics group's offset from records (its monster graphic's
-\ base frame, or the machine), then the records' end.
+\ base frame, or the machine).
 .group_lo
     EQUB LO(&2469)   \  0: &00
     EQUB LO(&256D)   \  1: &04
@@ -65,7 +82,6 @@ GROUPS = 30
     EQUB LO(&3A7C)   \ 27: platform
     EQUB LO(&3AA5)   \ 28: train
     EQUB LO(&3BC8)   \ 29: truck
-    EQUB LO(&3E37)   \ (the end, for the last's length)
 .group_hi
     EQUB HI(&2469)
     EQUB HI(&256D)
@@ -97,10 +113,8 @@ GROUPS = 30
     EQUB HI(&3A7C)
     EQUB HI(&3AA5)
     EQUB HI(&3BC8)
-    EQUB HI(&3E37)
-RECORDS_LEN = 15927
-\ The most a room needs, its body and its groups (the streaming
-\ edition's room buffer).
-ROOM_MAX = 1022
+ENDIF
+\ The most a room needs, its record (the streaming edition's cache).
+ROOM_MAX = 1024
 NPORT = &29       \ things 0 to NPORT - 1 are portable
 FIXED_MAX = 9

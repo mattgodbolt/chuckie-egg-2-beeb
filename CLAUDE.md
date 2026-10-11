@@ -86,6 +86,21 @@ is in the top nibble and its low bit in the bottom one: colour 1 = `&0F`,
 The game sets MODE 1 in the hardware (`init_system`): `MENU` leaves the OS
 in MODE 7, and an OS mode change would clear the state block (`SAVE_HDR` up).
 
+## Comments and docs: no numbers the assembler works out
+
+Comments and docs say what something is and why. They never copy a
+figure the build computes or one run measured: an address, a size, how
+far the zero-page pool reaches, the deepest stack, free bytes, the cache's
+size. The source and the build own those (`SECTION` guards, `ASSERT`s,
+`PRINT`s, `build/symbols.json`); a copy is wrong after the next change.
+Name the symbol, or point at the decision that records the measurement
+with its date. A number the port chooses (where the stack starts, a
+header's length) is a named constant, set once in the source, and
+everything else names it. Immutable facts are fine as numbers: the
+hardware's and the OS's addresses, the original's addresses, a format's
+field widths. Every
+agent brief carries this rule.
+
 ## Finding bytes or cycles
 
 `docs/optimising.md`: how to look (exhaustively, a checklist, the oracles

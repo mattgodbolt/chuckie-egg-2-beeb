@@ -1463,3 +1463,21 @@ it ran into the keys. The header now has 56, and the build checks.
 `docs/memory-map.md` and CLAUDE.md stopped quoting the port's own
 addresses, which had gone stale: they name the sections and symbols, and
 the map keeps only what the OS and hardware fix.
+- The disc, start-up and memory agent's patch went in second, merged by
+  hand where it met the first (the state regions, now in page 1, without
+  the thing types). It moved variables into slack nobody had counted
+  (the tail of the fixed zero page and of LowState, the top of page 0,
+  page 1 under the stack), put `band_ula` first in the code so its pad
+  goes for good, tightened the 8271 reader and the cache, and copies the
+  state back on a resume with its own loop in the discarded loader. Page 1
+  now leaves the stack less (decision 40), and the cross-file reader had
+  found what the measurements missed: `add_score` recursed a level for
+  each carried digit. It is a loop now. Its first version began
+  `TXA : PHA`, which threw away the value being added: every game began
+  with 700 points, and `make passes` failed at pass 0. A 6502-core test
+  of 20,000 sums, mostly long carries, checks it against a model.
+- Matt, on comments that quoted the zero-page pool's reach and the
+  deepest stack measured: comments say what and why and never copy what
+  the assembler works out; a number the port chooses is a named constant
+  (`STACK_BASE`, `SAVE_HDR_LEN`). The rule is in CLAUDE.md and
+  `docs/optimising.md`, for every agent.

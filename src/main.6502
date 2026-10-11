@@ -111,6 +111,13 @@ SECTION Loader, org = &1900, load = &FFFF1900, exec = &FFFF0000 + loader, filena
 
     \ The game starts in the loader (startup.6502), which is discarded.
 .code_start
+\ Logical colour 2's four &FE21 values for each of the room's palette
+\ bands 1 and 2 (bands.6502). The interrupt reads band_ula - 1 + 2i,X for
+\ X = 1 or 2: within one page, so no read takes the extra cycle that would
+\ move the splits. First, where no saving in the code before it can make it
+\ cross a page (and need a pad).
+.band_ula   SKIP 8
+    ASSERT HI(band_ula) = HI(band_ula + 7)
     INCLUDE "system.6502"
     INCLUDE "irq.6502"
     INCLUDE "screen.6502"
@@ -145,19 +152,14 @@ ENDIF
 \ The room's sprite frames' headers (the original's &91B7 has all 152:
 \ monsters, truck, train, lifts): room_load notes each of its graphics
 \ groups' first frame number, end and place in fr_lo and fr_hi, for
-\ sprite.6502's sprite_frame.
-.rg_count   SKIP 1
-.rg_first   SKIP GROUPS_MAX
+\ sprite.6502's sprite_frame. (rg_count is in zero page and rg_first in
+\ LowState's spare bytes: memory.6502, and below.)
 .rg_end     SKIP GROUPS_MAX
 .rg_base    SKIP GROUPS_MAX
 .fr_lo      SKIP FRAMES_MAX
 .fr_hi      SKIP FRAMES_MAX
     \ Harry's frames, and the tile font.
-\ Where the parts of the room's body start, from rb (rooms.6502's
-\ room_load), and its fixed things' numbers, in order.
-.rb_mon     SKIP 1
-.rb_bands   SKIP 1
-.rb_things  SKIP 1
+\ The room's fixed things' numbers, in order (rooms.6502's room_load).
 .room_fixed SKIP FIXED_MAX
 .harry_gfx
     INCBIN "data/harry.bin"
@@ -188,20 +190,9 @@ ENDMACRO
 .death_notes_end
 \ This room's palette bands (bands.6502), set when the room is drawn. Out
 \ of LowState so that &0D9F-&0DEF, a Master's extended vectors, survive a
-\ BREAK (decision 22).
-\ (band_ula, 56 bytes on, must not cross a page: below.)
-IF HI(P% + 56) <> HI(P% + 63)
-    SKIP &100 - LO(P% + 56)
-ENDIF
+\ BREAK (decision 22). (band_ula is at code_start, band_t1 in zero page.)
 .band_cmaps SKIP 24             ; band k's colour map at 8k (band 0 = the room's)
 .band_off   SKIP 32             ; for each screen row (and a little beyond), 8 * its band
-.band_ula   SKIP 8              ; logical 2's four &FE21 values, each for bands 1 and 2
-\ T1's latch values (irq.6502): from the status bar's split to band 1, and
-\ from band 1 to band 2; &FFFF (past the next VSync) where there's no band.
-.band_t1    SKIP 4
-\ The interrupt reads band_ula - 1 + 2i,X for X = 1 or 2: within one page,
-\ so no read takes the extra cycle that would move the splits.
-    ASSERT HI(band_ula) = HI(band_ula + 7)
 .objgfx
     INCBIN "data/objgfx.bin"
 
@@ -218,8 +209,6 @@ IF DEFINED(STREAM)
 .it_lo      SKIP NI             ; where
 .it_hi      SKIP NI
 .it_use     SKIP NI             ; the visit (epoch) that last used it
-.nr_rooms   SKIP 4              ; (prefetch: the room's neighbours' ids)
-.nr_n       SKIP 1              ; how many
 .arena
     SKIP CODE_TOP - P%
 .arena_end
@@ -227,6 +216,15 @@ IF DEFINED(STREAM)
     ASSERT arena_end - arena >= ROOM_MAX
     ENDSECTION
 ENDIF
+
+    \ What the game needn't save, in LowState's spare bytes (memory.6502),
+    \ out of main RAM.
+    SECTION LowSpare, org = low_state_end, guard = &0D9F, virtual = TRUE
+.rg_first   SKIP GROUPS_MAX     ; (rooms.6502's room_load; rg_end and the rest: above)
+IF DEFINED(STREAM)
+.nr_rooms   SKIP 4              ; (disc.6502's prefetch: the room's neighbours' ids)
+ENDIF
+    ENDSECTION
 
     \ Constant tables for the OS's pages 1-3.
 IF DEFINED(STREAM)

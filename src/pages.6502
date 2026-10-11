@@ -9,17 +9,18 @@
 \ vectors held tables too until decision 33: a Master's soft BREAK keeps
 \ the vectors, and with tables in them its filing system didn't boot.)
 \
-\ Page 1 keeps &01C0-&01FF for the stack: the deepest the game reaches is
-\ &01EA (22 bytes, the interrupt's included), measured in jsbeeb over every
-\ room, deaths and random play. &0200-&0235 are the OS's vectors; the only
-\ one used is IRQ1V (&0204, the game's own handler): the MOS's IRQ entry
-\ reads nothing else (OS 1.20 at &DC1C, MOS 3.20 at &E59E), the game makes
-\ no OS calls, and a reset puts the vectors back (on a Master,
-\ master_reset puts page 2 back first).
+\ Page 1 from STACK_BASE up is the stack (memory.6502; decisions 19 and 40
+\ say why that's enough). add_score is a loop, so the score can't deepen
+\ it.
+\ &0200-&0235 are the OS's vectors; the only one used is
+\ IRQ1V (&0204, the game's own handler): the MOS's IRQ entry reads nothing
+\ else (OS 1.20 at &DC1C, MOS 3.20 at &E59E), the game makes no OS calls,
+\ and a reset puts the vectors back (on a Master, master_reset puts page 2
+\ back first).
 \ ***************************************************************************
 
 .page1_load
-    SECTION Page1, org = &0100, guard = &01C0
+    SECTION Page1, org = &0100, guard = STACK_BASE
 .page1
 .thing_init
     INCBIN "data/thinginit.bin"
@@ -37,6 +38,21 @@
     EQUB &34, &C1                   ; channel 2: N = 833, about 150Hz
     EQUB &DF, &BF, &9F              ; channels 0-2 silent
 .sound_init_end
+\ (handoff.6502's handoff) The parts of memory that make up a game in
+\ progress, copied to STATE on the way out and back on a resume
+\ (startup.6502's resume, in the discarded loader, has its own loop for
+\ that way): the fixed zero page, LowState, the thing table (the rooms,
+\ then the portable things' rows and columns) and the visit flags. (The
+\ thing types never change: objects.6502.) (Not swapped, though one
+\ routine would serve both ways: the soft BREAK after a game over failed
+\ to find the DFS with load-time bytes put back in them.)
+.state_regions
+    EQUW ZP_FIXED : EQUB &90 - ZP_FIXED
+    EQUW low_state : EQUB low_state_end - low_state
+    EQUW t_room : EQUB 0
+    EQUW t_row : EQUB 2 * NPORT + 16    ; and visited, just after them
+.state_regions_end
+    ASSERT visited = t_row + 2 * NPORT
 .page1_end
     ENDSECTION
 

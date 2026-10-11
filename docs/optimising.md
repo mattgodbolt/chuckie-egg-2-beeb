@@ -51,6 +51,20 @@ one instruction. What made the difference:
   from `room_len4`), and drop flags that duplicate other state (`ld_on`
   was `fdc_state` not 0).
 
+- **Look for slack in every fixed region**, not just the code: the fixed
+  zero page's tail, LowState's tail, the bytes the MOS's IRQ entry leaves
+  at the top of page 0, page 1 under a stack measured again, and the
+  variables a round leaves unused. A variable moved into zero page saves
+  its bytes of main RAM and a byte at every access but `abs,Y` (`LDA`/`STA`
+  have no `zp,Y`; `LDX`/`STX` do, and `STX zp,Y` replaces
+  `PHA : TXA : STA abs,Y : PLA`). Swap by use: a test-only variable gave
+  its saved zero-page byte to one used often.
+- **A table's place can make pads go away for good**: `band_ula`, which
+  mustn't cross a page, now starts the `Code` section.
+- **Recursion hides from a measured stack**: a routine that recurses on
+  the data (`add_score`, a level a carried digit) only goes deep when the
+  data does. Bound it from the code, or make it a loop.
+
 ## Flags and registers already known
 
 - **The carry is often known.** After `CMP` and an untaken `BNE`, C is
@@ -64,7 +78,8 @@ one instruction. What made the difference:
 - **Return status in a flag the last instruction already sets** (N from
   `LDY` of a small value, Z from `INC` of a nonzero one) rather than
   `CLC`/`SEC` and an RTS each. `STA`/`STX` set no flags: check which
-  instruction set the flag before trusting it.
+  instruction set the flag before trusting it. And check that a caller
+  reads it at all: neither of `item_add`'s read its carry.
 - **Prove a borrow or carry can't happen** before keeping a 16-bit
   fix-up: a nonzero column means a nonzero low byte.
 - **Look for dead saves and reloads**: X saved around calls that keep
@@ -73,6 +88,10 @@ one instruction. What made the difference:
 
 ## Layout and control flow
 
+- **Change nothing until it fits**: a search that undoes its own work on
+  failure (`item_add` dropping items, then putting them back from the
+  stack) costs pushes and pops on every path; work in scratch and commit
+  at the end.
 - **Fall through instead of jumping**: order routines so one falls into
   the next (`truck_strips` into `draw_strips`, `noise` into `rng`). Turn
   `JSR x : RTS` into `JMP x`. Inline routines with one caller.
@@ -123,6 +142,13 @@ one instruction. What made the difference:
 - **Hoist invariants** out of searches, start at -1 with `INY` at the
   top, precompute per call rather than per row.
 
+## Comments
+
+- **No figures the build computes** in comments or docs (addresses,
+  sizes, the pool's reach, the stack's depth, free bytes): name the
+  symbol, `ASSERT` the property, or point at the dated decision. A
+  saving moves every such figure, so a copied one is wrong at once.
+
 ## Testing changes like these
 
 - `make check` and `make check STREAM=1`, on the B and the Master: a
@@ -143,5 +169,13 @@ one instruction. What made the difference:
   the same size: jsbeeb's random walks diverge on timing alone.
 - A `;` comment in the middle of a colon-separated line swallows the
   rest of the line, silently.
+- A copy loop ending `DEX : BPL` copies one byte once its count passes
+  128: the reader's slot grew past it and CE2S crashed at its first read.
+- Room-change times on the B (`roomwait.mjs`) move with any change to
+  the reader's timing, the cache's logic unchanged: a background read
+  misses a revolution when its next sector's command comes late. Prove
+  the logic on the 6502 core first (`cachediff`, equal arenas, and a
+  small arena to reach the give-up path), then compare the times; the
+  Master's (1770) agree to the millisecond.
 - Give scratch worktrees unique names, and never `pkill -f` a pattern
   another run might share.

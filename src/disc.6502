@@ -13,7 +13,6 @@
 
 FDC_8271 = 0
 FDC_1770 = 1
-RTI_OP   = &40
 STA_ABS  = &8D
 BIT_ABS  = &2C
 
@@ -27,33 +26,19 @@ W_LATCH  = &25              ; drive 0, not reset, side 0, single density
 W_RATE   = 0                ; 6ms steps (r1 r0)
 
 \ The reader for the machine's controller, which stream_init (startup.6502)
-\ copies here from its two: fdc_read starts reading fe_pos's sector (arm
+\ copies here from its two: fdc_read starts reading fe_pos's sector (ARM
 \ says where to) and returns at once; fdc_poll, only while fdc_state isn't
 \ 0, says when it's done (carry set while it's reading; then carry clear,
-\ and Z set, or A the controller's error bits). A JMP to fdc_read, then
-\ fdc_poll.
-FDC_SLOT = 127
+\ and Z set, or A the controller's error bits). fdc_read is the slot's
+\ first byte, and fdc_poll where the 8271's reader puts it (the 1770's
+\ pads up to it), so neither needs a JMP.
+FDC_SLOT = 137
 .fdc_slot   SKIP FDC_SLOT
 fdc_read = fdc_slot
-fdc_poll = fdc_slot + 3
+fdc_poll = i_poll           ; (startup.6502's Fdc8271)
 sector_start = fdc_read     ; (tools/cachetrace.mjs, roomwait.mjs: a sector)
 
-\ Arm the NMI routine for the read command: the sector's bytes to fe_dst,
-\ as many as are wanted of it (fe_len, all 256 if more), the rest read and
-\ dropped (startup.6502's Nmi: each byte is read, or the controller would
-\ call it lost).
-.arm
-{
-    LDA fe_dst : STA nmi_dst + 1
-    LDA fe_dst+1 : STA nmi_dst + 2
-    LDA fe_len : LDX fe_len+1 : BEQ part
-    LDA #0                      ; (256)
-.part
-    STA nmi_left
-    LDA #STA_ABS : STA nmi_dst : STA NMI_AREA
-    LDA #2 : STA fdc_state
-    RTS
-}
+\ (ARM, which each reader's read starts with: startup.6502.)
 
 \ --- The loader: one item at a time, a sector at a time -------------------
 
@@ -63,25 +48,23 @@ sector_start = fdc_read     ; (tools/cachetrace.mjs, roomwait.mjs: a sector)
 \ left of it. A room's record starts a sector, so its sectors are read
 \ straight into place, one after another, with nothing to do between.
 
-\ Move the loader on as far as it can without waiting: carry set while
-\ it's still reading an item.
+\ Move the loader on as far as it can without waiting: Z clear (BNE)
+\ while it's still reading an item, which is while fdc_state isn't 0.
 .disc_step
 {
-    LDA fdc_state : BEQ idle
+    LDA fdc_state : BEQ done    ; (idle)
     JSR fdc_poll : BCS busy
     BNE next                    ; an error: read the sector again
     \ The sector is in: the next, unless that was the last.
-    DEC fe_len+1 : BMI idle     ; (the item's all here)
+    DEC fe_len+1 : BMI busy     ; (the item's all here: fdc_state 0)
     INC fe_dst+1
     INC fe_pos                  ; (a record never crosses a track)
-    LDA fe_len : ORA fe_len+1 : BEQ idle
+    LDA fe_len : ORA fe_len+1 : BEQ done
 .next
     JSR fdc_read
 .busy
-    SEC
-    RTS
-.idle
-    CLC
+    LDA fdc_state               ; (the poll's or the read's: 0 once done)
+.done
     RTS
 }
 
@@ -92,22 +75,20 @@ sector_start = fdc_read     ; (tools/cachetrace.mjs, roomwait.mjs: a sector)
 \ together, so a room is one read), in address order from its start, each
 \ an item, its id the room - 1. item_top is where the next goes.
 
-\ X = the item with id A, carry set; carry clear if there isn't one.
+\ X = the item with id A, N clear (BPL); N set (BMI) if there isn't one.
 .item_find
 {
     LDX it_n
 .loop
-    DEX : BMI none
-    CMP it_id,X : BNE loop
-    RTS                         ; (carry set: equal)
-.none
-    CLC
+    DEX : BMI done              ; (N set: X = &FF)
+    CMP it_id,X : BNE loop      ; (N clear: equal)
+.done
     RTS
 }
 
 \ Wait for the loader to finish its item.
 .disc_wait
-    JSR disc_step : BCS disc_wait
+    JSR disc_step : BNE disc_wait
 .disc_rts
     RTS
 
@@ -119,7 +100,7 @@ ELSE
 \ --- Reading ahead ----------------------------------------------------------
 
 .disc_tick
-    JSR disc_step : BCS disc_rts
+    JSR disc_step : BNE disc_rts
     \ Fall into prefetch.
 
 \ With nothing being read: the room Harry is likeliest to go to next, then
@@ -138,7 +119,7 @@ ELSE
     ZA_AUTO1 exits
     ZA_AUTO1 row
     ZA_AUTO1 col
-    LDA pf_cur : BEQ disc_rts   ; (before the first room)
+    LDA pf_cur : BMI disc_rts   ; (&FF: before the first room)
     LDA h_cell : AND #31 : STA col
     LDA h_cell+1 : STA row
     LDA h_cell
@@ -149,16 +130,16 @@ ELSE
     LSR exits : BCC no_left
     LDA col : LDX h_face : CPX #4 : JSR facing
     LDX pf_cur : DEX
-    CPX #70 : BNE left
-    LDX #80
+    CPX #71 - 1 - 1 : BNE left  ; (room 71's left is room 80)
+    LDX #80 - 1
 .left
     JSR consider
 .no_left
     LSR exits : BCC no_right
     LDA #30 : SEC : SBC col : LDX h_face : JSR facing
     LDX pf_cur : INX
-    CPX #81 : BNE right
-    LDX #71
+    CPX #80 + 1 - 1 : BNE right ; (room 80's right is room 71)
+    LDX #71 - 1
 .right
     JSR consider
 .no_right
@@ -182,7 +163,7 @@ ELSE
     LDY nr_n
 .try
     CMP #120 : BCS next         ; (none)
-    JSR item_find : BCC item_add ; (which keeps A)
+    JSR item_find : BMI item_add ; (which keeps A)
     LDA epoch : STA it_use,X
 .next
     DEY : BMI done
@@ -197,10 +178,10 @@ ELSE
     LDA #0
 .faced
     RTS
-\ Room X, A away: the best if it's a room and nearer. (Each room in
+\ Room id X, A away: the best if it's a room and nearer. (Each room in
 \ nr_rooms too.)
 .consider
-    DEX : CPX #120 : BCS not    ; (rooms 1-120: ids 0-119)
+    CPX #120 : BCS not          ; (rooms 1-120: ids 0-119)
     PHA : TXA
     LDY nr_n : INC nr_n
     STA nr_rooms,Y
@@ -212,10 +193,10 @@ ELSE
 }
 ENDIF
 
-\ Start reading item A at item_top: carry clear if it fits, or fits once
-\ the items at the top go (the oldest, after arrange), but never one this
-\ visit to the room uses (it_use = epoch); carry set, and nothing gone, if
-\ not.
+\ Start reading item A at item_top if it fits, or fits once the items at
+\ the top go (the oldest, after arrange), but never one this visit to the
+\ room uses (it_use = epoch); if not, nothing gone. (Neither caller asks
+\ which.)
 .item_add
 {
     ZA_AUTO1 id
@@ -225,63 +206,55 @@ ENDIF
     \ (room_len4 + LEN4_BIAS - 1) / 64 + 1 sectors from the one after the last room's, or from
     \ the next track's first if it wouldn't fit in this one
     \ (tools/mkrecords.py).
-    LDX #0 : STX fe_pos
+    LDY #0 : STY fe_pos
     LDA mb_disc : STA fe_pos+1
 .each
-    LDA room_len4,X : CLC : ADC #LEN4_BIAS - 1  ; (a ninth bit in the carry)
+    LDA room_len4,Y : CLC : ADC #LEN4_BIAS - 1  ; (a ninth bit in the carry)
     ROL A : ROL A : ROL A : AND #7
-    TAY                         ; its sectors, less 1
+    TAX                         ; its sectors, less 1
     SEC : ADC fe_pos            ; where the next would start
     CMP #11 : BCC fits
     INC fe_pos+1                ; from the next track's first
     LDA #0 : STA fe_pos
-    TYA : ADC #0                ; (carry set)
+    TXA : ADC #0                ; (carry set)
 .fits
-    CPX id : BEQ found
+    CPY id : BEQ found
     STA fe_pos
-    INX : BNE each              ; (always)
+    INY : BNE each              ; (always)
 .found
-    TXA : TAY : JSR item_len
-    \ Dropping only moves the top down, so if it doesn't fit even then, all
-    \ that was dropped goes back: it_n and item_top, kept here.
-    LDA it_n : PHA
-    LDA item_top+1 : PHA
-    LDA item_top : PHA
-.try
-    LDX it_n : CPX #NI : BCS full
-    \ The top moves up by the item (dropping puts it back), unless that's
-    \ past the arena's end.
+    JSR item_len                ; (Y = id)
+    \ Nothing changes until it fits: X is where in the table it would go,
+    \ fe_dst where it would start, each moving down past the item below
+    \ (dropping it) while it doesn't. If it never fits, nothing is dropped.
+    LDX it_n
     LDA item_top : STA fe_dst
-    CLC : ADC fe_len : STA item_top
-    TAY
     LDA item_top+1 : STA fe_dst+1
-    ADC fe_len+1 : STA item_top+1
-    CPY #LO(arena_end + 1) : SBC #HI(arena_end + 1) : BCS full
+.try
+    CPX #NI : BCS full
+    \ It fits if it ends by the arena's end (Y and A: where it ends).
+    CLC : LDA fe_dst : ADC fe_len : TAY
+    LDA fe_dst+1 : ADC fe_len+1
+    CMP #HI(arena_end + 1) : BCC in_arena
+    BNE full
+    CPY #LO(arena_end + 1) : BCS full
+.in_arena
+    STY item_top : STA item_top+1
     LDA id : STA it_id,X
     LDA epoch : STA it_use,X
     LDA fe_dst : STA it_lo,X
     LDA fe_dst+1 : STA it_hi,X
-    INC it_n
-    JSR fdc_read
-    PLA : PLA : PLA
-    CLC
-    RTS
+    INX : STX it_n              ; (and those above it gone)
+    JMP fdc_read
 .full
-    LDX it_n : DEX : BMI cant
-    LDA it_use,X : CMP epoch : BEQ cant
-    STX it_n
-    LDA it_lo,X : STA item_top
-    LDA it_hi,X : STA item_top+1
+    DEX : BMI item_len.done     ; (an RTS)
+    LDA it_use,X : CMP epoch : BEQ item_len.done
+    LDA it_lo,X : STA fe_dst
+    LDA it_hi,X : STA fe_dst+1
     BNE try                     ; (always)
-.cant
-    PLA : STA item_top
-    PLA : STA item_top+1
-    PLA : STA it_n
-    RTS                         ; (carry set: by each way here)
 }
 
 \ fe_len = item Y's length: room Y + 1's record, room_len4 + LEN4_BIAS
-\ fours.
+\ fours. Keeps Y; returns carry clear (fe_len+1's top bit, rolled out).
 .item_len
 {
     LDA #0 : STA fe_len+1
@@ -290,7 +263,69 @@ ENDIF
     ASL A : ROL fe_len+1
     ASL A : ROL fe_len+1
     STA fe_len
+.done
     RTS
+}
+
+\ Put the items in the order they were last used, the latest first (this
+\ visit's, then the last's ...), so the oldest are at the top, where
+\ item_add drops them, and the room being entered is at the bottom, where
+\ nothing reading ahead moves it. The bytes go through the screen, the
+\ display blanked (the room's drawing clears it), and come back packed.
+\ (ARR_BUF's low byte is arena's, so one store sets both.)
+ARR_BUF = screen + LO(arena)
+.arrange
+{
+    ZA_AUTO1 j
+    ZA_AUTO1 best
+    ZA_AUTO1 latest
+    LDA #8 : STA crtc_reg : LDA #CRTC_BLANK : STA crtc_data
+    LDA #LO(arena) : STA item_top
+    LDA #HI(arena) : STA item_top+1
+    \ For each place, the item after it used latest (it_use - epoch - 1 the
+    \ largest, 255 this visit's) swapped in, and its bytes into the buffer,
+    \ at item_top's place in it.
+    LDX #0
+.sort
+    CPX it_n : BCS sorted
+    STX j : STX best
+    LDA it_use,X : SBC epoch : STA latest       ; (carry clear: the CPX)
+.scan
+    INX : CPX it_n : BCS scanned
+    LDA it_use,X : SBC epoch                    ; (carry clear: the CPX)
+    CMP latest : BEQ scan : BCC scan
+    STA latest : STX best
+    BCS scan                    ; (always)
+.scanned
+    \ Items j and best swap places in the table (it_id to it_use, NI apart).
+    LDX j : LDY best
+    CLC                         ; (and after: no add carries)
+.field
+    LDA it_id,X : PHA
+    LDA it_id,Y : STA it_id,X
+    PLA : STA it_id,Y
+    TXA : ADC #NI : TAX
+    TYA : ADC #NI : TAY
+    CPX #4 * NI : BCC field
+    LDX j
+    LDA it_lo,X : STA fe_pos
+    LDA it_hi,X : STA fe_pos+1
+    ASSERT LO(ARR_BUF - arena) = 0
+    LDA item_top : STA it_lo,X : STA fe_dst
+    LDA item_top+1 : STA it_hi,X
+    ADC #HI(ARR_BUF - arena) - 1 : STA fe_dst+1 ; (carry set: the CPX)
+    LDY it_id,X : JSR item_len
+    LDA fe_len : ADC item_top : STA item_top    ; (carry clear: item_len)
+    LDA fe_len+1 : ADC item_top+1 : STA item_top+1
+    JSR mem_copy
+    INX : BNE sort              ; (always: X < NI)
+.sorted
+    LDA #LO(arena) : STA fe_pos : STA fe_dst
+    LDA #HI(ARR_BUF) : STA fe_pos+1
+    LDA #HI(arena) : STA fe_dst+1
+    LDA item_top : SBC #LO(arena) : STA fe_len  ; (carry set: the CPX)
+    LDA item_top+1 : SBC #HI(arena) : STA fe_len+1
+    \ Fall into mem_copy.
 }
 
 \ Copy fe_len bytes from fe_pos to fe_dst (with nothing being read: the
@@ -313,75 +348,13 @@ ENDIF
     RTS
 }
 
-\ Put the items in the order they were last used, the latest first (this
-\ visit's, then the last's ...), so the oldest are at the top, where
-\ item_add drops them, and the room being entered is at the bottom, where
-\ nothing reading ahead moves it. The bytes go through the screen, the
-\ display blanked (the room's drawing clears it), and come back packed.
-ARR_BUF = screen
-.arrange
-{
-    ZA_AUTO1 j
-    ZA_AUTO1 best
-    ZA_AUTO1 latest
-    LDA #8 : STA crtc_reg : LDA #CRTC_BLANK : STA crtc_data
-    LDA #LO(arena) : STA item_top
-    LDA #HI(arena) : STA item_top+1
-    \ For each place, the item after it used latest (it_use - epoch - 1 the
-    \ largest, 255 this visit's) swapped in, and its bytes into the buffer,
-    \ at item_top's place in it.
-    LDX #0
-.sort
-    CPX it_n : BCS sorted
-    STX j : STX best
-    LDA it_use,X : CLC : SBC epoch : STA latest
-.scan
-    INX : CPX it_n : BCS scanned
-    LDA it_use,X : CLC : SBC epoch
-    CMP latest : BEQ scan : BCC scan
-    STA latest : STX best
-    BCS scan                    ; (always)
-.scanned
-    \ Items j and best swap places in the table (it_id to it_use, NI apart).
-    LDX j : LDY best
-    CLC                         ; (and after: no add carries)
-.field
-    LDA it_id,X : PHA
-    LDA it_id,Y : STA it_id,X
-    PLA : STA it_id,Y
-    TXA : ADC #NI : TAX
-    TYA : ADC #NI : TAY
-    CPX #4 * NI : BCC field
-    LDX j
-    LDA it_lo,X : STA fe_pos
-    LDA it_hi,X : STA fe_pos+1
-    LDA item_top : STA it_lo,X
-    CLC : ADC #LO(ARR_BUF - arena) : STA fe_dst
-    LDA item_top+1 : STA it_hi,X
-    ADC #HI(ARR_BUF - arena) : STA fe_dst+1
-    LDY it_id,X : JSR item_len
-    CLC : LDA fe_len : ADC item_top : STA item_top
-    LDA fe_len+1 : ADC item_top+1 : STA item_top+1
-    JSR mem_copy
-    INX : JMP sort
-.sorted
-    LDA #LO(ARR_BUF) : STA fe_pos
-    LDA #HI(ARR_BUF) : STA fe_pos+1
-    LDA #LO(arena) : STA fe_dst
-    LDA #HI(arena) : STA fe_dst+1
-    SEC : LDA item_top : SBC #LO(arena) : STA fe_len
-    LDA item_top+1 : SBC #HI(arena) : STA fe_len+1
-    JMP mem_copy
-}
-
 \ --- Entering a room --------------------------------------------------------
 
 \ rb = room A's record (its body first), read now if it isn't here, the
 \ game waiting, in place of the rooms used longest ago.
 .find_body
 {
-    ZA_AUTO1 id
-    STA pf_cur                  ; (nothing reads it before this returns)
+    TAX : DEX : STX pf_cur      ; its id (nothing reads it before this returns)
     JSR disc_wait               ; an item under way: finish it
     INC epoch
     \ An item untouched for 256 visits would look like this one's, never to
@@ -391,25 +364,25 @@ ARR_BUF = screen
     DEX : BMI aged
     LDA it_use,X : CMP epoch : BNE age
     INC it_use,X
-    JMP age
+    BCS age                     ; (always: the CMP was equal)
 .aged
-    LDX pf_cur : DEX : STX id
-    TXA : JSR item_find : BCS here
-\ Read it now, the game waiting (the display blanked by arrange). The
-\ rest go up first, the oldest at the top, where item_add drops from.
-.miss
-    JSR arrange
-    LDA id : JSR item_add
-    JSR disc_wait
-    LDA id : JSR item_find
-.here
+    LDA pf_cur : JSR item_find : BMI miss
     \ This visit's, at the bottom, where reading ahead won't move it.
     LDA epoch : STA it_use,X
+.arranged
     JSR arrange
-    LDA id : JSR item_find
+    LDA pf_cur : JSR item_find
     LDA it_lo,X : STA rb
     LDA it_hi,X : STA rb+1
     RTS
+\ Read it now, the game waiting (the display blanked by arrange). The
+\ rest go up first, the oldest at the top, where item_add drops from.
+\ (It fits, as nothing is this visit's yet, and item_add makes it so.)
+.miss
+    JSR arrange
+    LDA pf_cur : JSR item_add
+    JSR disc_wait
+    JMP arranged
 }
 read_now = find_body.miss       ; (tools/cachetrace.mjs, roomwait.mjs: a miss)
 
@@ -419,8 +392,8 @@ read_now = find_body.miss       ; (tools/cachetrace.mjs, roomwait.mjs: a miss)
     LDA #0 : STA gp+1
     TXA
     ASL A : ROL gp+1
-    ASL A : ROL gp+1
-    CLC : ADC rb : STA gp
+    ASL A : ROL gp+1            ; (carry clear: gp+1 was under 2)
+    ADC rb : STA gp
     LDA gp+1 : ADC rb+1 : STA gp+1
     RTS
 }

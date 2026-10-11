@@ -81,21 +81,26 @@
     RTS
 
 \ AddScore (&A0BD): add A to score digit X, one carry rippled up (lost
-\ past digit 0), each changed digit redrawn.
+\ past digit 0), each changed digit redrawn. X kept. The original
+\ recurses, a level a carry; here a loop, so the stack's depth doesn't
+\ depend on the score (page 1 leaves the stack little: pages.6502). The
+\ digits are redrawn right to left rather than left to right.
 .add_score
 {
+    TAY : TXA : PHA : TYA           ; (Y free: draw_digit uses it anyway)
+.digit
     CLC : ADC score,X
-    CMP #10 : BCC store
-    SBC #10
-    DEX : BMI lost                  ; (none to the left of digit 0)
-    PHA                             ; (recursive: the digit on the stack)
-    LDA #1 : JSR add_score          ; (only the digits to the left; X kept)
-    PLA
-.lost
-    INX
-.store
-    STA score,X
-    \ Fall into draw_digit.
+    CMP #10 : BCC last
+    SBC #10                         ; (C set)
+    STA score,X : JSR draw_digit    ; (which keeps X)
+    LDA #1
+    DEX : BPL digit                 ; (none to the left of digit 0: lost)
+    BMI done                        ; (always)
+.last
+    STA score,X : JSR draw_digit
+.done
+    PLA : TAX
+    RTS
 }
 
 \ Redraw score digit X (add_score does, as the digits change). X kept (so

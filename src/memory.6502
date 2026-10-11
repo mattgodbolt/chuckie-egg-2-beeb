@@ -5,9 +5,9 @@
 \ no bytes.
 \ ***************************************************************************
 
-\ Zero page &00-&27 is baron's allocator pool (ZA_POOL in main.6502): the
-\ game uses &00-&1F of it, MENU none (measured from the symbols; if a
-\ change needs more than the 40, raise ZP_FIXED and move a variable back to LowState).
+\ Zero page below ZP_FIXED is baron's allocator pool (ZA_POOL in
+\ main.6502; the build fails if it runs out: then raise ZP_FIXED and move
+\ a variable back to LowState).
 \ The game's permanent state is here, outside it: death resets the stack
 \ and jumps back into the main loop, as the original does, which the
 \ allocator would read as recursion. The most used of LowState's variables
@@ -15,7 +15,14 @@
 \ block with an index), as zero page saves a byte on every access.
 ZP_FIXED = &28
 NM = 5                      ; monsters in a room, at most
-SECTION ZeroPage, org = ZP_FIXED, guard = DATA_BANK_ZP, virtual = TRUE
+\ (Up to DATA_BANK_ZP, which MENU sets for CE2's start-up; only CE2 reads
+\ it, so the streaming edition has it too.)
+IF DEFINED(STREAM)
+    ZP_FIXED_END = &90
+ELSE
+    ZP_FIXED_END = DATA_BANK_ZP
+ENDIF
+SECTION ZeroPage, org = ZP_FIXED, guard = ZP_FIXED_END, virtual = TRUE
 \ Harry (docs/research/harry.md). The original keeps addresses; the logic
 \ needs only the cell (row * 32 + col), yf and xf.
 .h_cell     SKIP 2          ; top-left cell
@@ -41,7 +48,6 @@ SECTION ZeroPage, org = ZP_FIXED, guard = DATA_BANK_ZP, virtual = TRUE
 .d_frame    SKIP 2
 \ The RNG (&91B1), big-endian: "9090" when the game is loaded.
 .rng_state  SKIP 4
-.dbg_room   SKIP 1          ; tests: non-zero, the pass ends in teleport (game.6502)
 \ The monsters' most used (the rest are in LowState).
 .m_count    SKIP 1          ; monsters in this room (&A48F)
 .m_cell_lo  SKIP NM         ; top-left cell
@@ -94,6 +100,14 @@ SECTION ZeroPage, org = ZP_FIXED, guard = DATA_BANK_ZP, virtual = TRUE
 \ wait for VSync.
 .vsyncs     SKIP 1
 .rb         SKIP 2          ; the room's body in the records (rooms.6502's room_load)
+\ LowState's that are used most, after lives (where MENU finds that).
+.carrying_name SKIP 1       ; the carried thing's name in the status bar
+.cheat      SKIP 1          ; the developers' cheat byte (&A3FC, decision 27)
+\ Which of the original's monster table entries are on (monsters.6502):
+\ 1 to mon_limit, and the sitting dog (entry 0) in place of the running
+\ one (entry 1) once dog_sat.
+.mon_limit  SKIP 1          ; (egg_init: min(130 + 25 * egg, 255))
+.dog_sat    SKIP 1
 ENDSECTION
 
 \ The game's other state, in the DFS's NMI page (free once the disc is done).
@@ -128,14 +142,8 @@ SECTION LowState, org = NMI_AREA + &20, guard = &0D9F, virtual = TRUE
 .m_oframe_lo SKIP NM
 .m_oframe_hi SKIP NM
 .score      SKIP 10         ; the score's digits, most significant first (&A445)
-.lives      SKIP 1          ; (&A3FA)
-.carrying_name SKIP 1       ; the carried thing's name in the status bar
-.cheat      SKIP 1          ; the developers' cheat byte (&A3FC, decision 27)
-\ Which of the original's monster table entries are on (monsters.6502):
-\ 1 to mon_limit, and the sitting dog (entry 0) in place of the running
-\ one (entry 1) once dog_sat.
-.mon_limit  SKIP 1          ; (egg_init: min(130 + 25 * egg, 255))
-.dog_sat    SKIP 1
+.lives      SKIP 1          ; (&A3FA; MENU reads it in the state block)
+\ (carrying_name, cheat, mon_limit and dog_sat are in zero page, above.)
 .low_state_end
 ENDSECTION
 \ The three 32 x 24 maps the room drawer fills, one byte a cell, indexed by
@@ -167,7 +175,6 @@ SECTION Scratch, org = &90, guard = &FC, virtual = TRUE
 .rec_len       SKIP 1
 .rec_pos       SKIP 1
 .rec_buf       SKIP 18          ; the longest record is 17 bytes, a text
-.unpack_vert   SKIP 1
 \ (monsters.6502)
 .m_entry       SKIP 1
 .cf_x          SKIP 1
@@ -202,6 +209,15 @@ SECTION Scratch, org = &90, guard = &FC, virtual = TRUE
 \ (bands.6502: set when a room is drawn)
 .band_count    SKIP 1          ; how many splits, 0-2
 .band_rows     SKIP 2          ; bands 1 and 2: the first row of each
+\ T1's latch values (irq.6502): from the status bar's split to band 1, and
+\ from band 1 to band 2; &FFFF (past the next VSync) where there's no band.
+\ (The interrupt reads them from install_irq on: init_system zeroes them.)
+.band_t1       SKIP 4
+\ (rooms.6502's room_load: where the parts of the room's body start, from
+\ rb, and how many graphics groups it has)
+.rb_mon        SKIP 1
+.rb_things     SKIP 1
+.rg_count      SKIP 1
 \ &D0 is the Master's VDU status, which its soft BREAK reads (decision 22).
     ASSERT P% <= &D0
     SKIP &D0 - P%
@@ -229,18 +245,29 @@ i_since = fdc_cur               ; (8271: when the wait for the drive began)
 .item_top      SKIP 2          ; (disc.6502: the cache's next free byte)
 .it_n          SKIP 1          ; (disc.6502: items in the cache)
 .epoch         SKIP 1          ; on one at each room entered
-.pf_cur        SKIP 1          ; the room the cache was set up for
+.pf_cur        SKIP 1          ; the room the cache was set up for, less 1 (&FF: none yet)
+.nr_n          SKIP 1          ; (prefetch: how many in nr_rooms)
 ENDIF
 ENDSECTION
+\ &FD-&FF too: neither MOS's IRQ entry touches them, and a soft BREAK
+\ doesn't read them (decision 22).
+SECTION ScratchHigh, org = &FD, guard = &100, virtual = TRUE
+.dbg_room      SKIP 1          ; tests: non-zero, the pass ends in teleport (game.6502)
+.rb_bands      SKIP 1          ; (rooms.6502's room_load: with rb_mon, where the bands start)
+ENDSECTION
+
+\ The stack: page 1 from here up (pages.6502's tables stop below it).
+STACK_BASE = &01D0
 
 \ The game's state on its way to and from the front end (state.6502,
-\ menu.6502): a saved game is the 64 bytes from SAVE_HDR (MENU's header
+\ menu.6502): a saved game is from SAVE_HDR (MENU's header
 \ and the keys; not the high scores, which are CE2HI's: decision 38), then
 \ the regions at STATE. Above anything CE2 loads over (main.6502 checks)
 \ and below MODE 7's screen, so it survives the reset, MENU and the game's
 \ reload.
 STATE      = &6000
-SAVE_HDR   = STATE - 64     ; "CE2SAVE" and the build stamp (menu.6502 checks)
+SAVE_HDR_LEN = 64           ; the header and the keys
+SAVE_HDR   = STATE - SAVE_HDR_LEN   ; "CE2SAVE" and the build stamp (menu.6502 checks it fits)
 SAVE_KEYS  = STATE - 8
 
 \ The streaming edition's mailbox (docs/streaming.md), with no sideways

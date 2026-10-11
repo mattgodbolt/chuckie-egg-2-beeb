@@ -43,6 +43,12 @@
     \ original's are: while the train is noisy each takes a random number.)
     JSR read_keys
     JSR harry_update
+    \ Harry on the draw list (&77C2): bit 6 of drawn. A room drawn this
+    \ pass (show_room) empties it, as the original's set-up (&8B2A) does,
+    \ so on the pass that changes room he isn't drawn at all: the frame
+    \ move picked for the old room's xf is never seen (harry.md section
+    \ 10). The next pass draws him where he is.
+    LDA drawn : ORA #&40 : STA drawn
     JSR noise
     LDA room_delta : BEQ same_room
     JSR change_room
@@ -105,7 +111,8 @@ ENDIF
     JSR drop
     JMP falling
 
-\ Draw the room (&7913). Nothing of Harry is on screen.
+\ Draw the room (&7913). Nothing of Harry is on screen, and he is off the
+\ draw list (&8B2A) until the next pass's harry_update puts him back.
 .show_room
     LDA #0 : STA drawn
     LDA room : JMP draw_room
@@ -257,10 +264,12 @@ CHECKPOINT_VARS = h_frame + 2 - h_cell    ; h_cell .. h_frame
 \ (delivered_text is in page 1: pages.6502; yellow_char in status.6502.)
 
 \ Erase Harry where he was drawn, draw him where he is, in yellow
-\ (decision 6: Spectrum colour 6).
+\ (decision 6: Spectrum colour 6): if he is on the draw list (the
+\ original's interrupt, &7ED9, draws only what's on it).
 .draw_harry
 {
-    BIT drawn : BPL fresh
+    BIT drawn : BVC done
+    BPL fresh
     LDX #d_cell : JSR sp_erase_at
 .fresh
     LDX #2
@@ -271,6 +280,8 @@ CHECKPOINT_VARS = h_frame + 2 - h_cell    ; h_cell .. h_frame
     LDA h_frame+1 : STA d_frame+1
     LDA #&80 : STA drawn
     LDA #6 : LDX #d_cell : JMP sp_draw_ink    ; yellow
+.done
+    RTS
 }
 
 \ The keys (&78C1), the Spectrum's for now (decision 7), into ctrl: bit 7

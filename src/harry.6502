@@ -365,7 +365,10 @@ key_dy = key_dx + 1
     JSR add_cell
 .frame
     \ The frame: picked before the edges change xf (an original glitch,
-    \ harry.md section 10: kept). Face is 0, 4 or 8 and xf 0-3.
+    \ harry.md section 10: kept, as the record holds it). It is never
+    \ drawn: a pass that changes room draws the room, which takes Harry
+    \ off the draw list (game_loop), and the next pass picks the frame
+    \ again. Face is 0, 4 or 8 and xf 0-3.
     LDA h_face : ORA h_xf : ASL A : TAX
     LDA harry_frames,X : STA h_frame
     LDA harry_frames+1,X : STA h_frame+1

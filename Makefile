@@ -2,11 +2,12 @@
 #
 #   make          assemble build/ce2.ssd, and build/test.ssd for the tools
 #   make run      boot it in jsbeeb and grab a screenshot
-#   make check    every check: make rooms, passes, front and sound
+#   make check    every check: make rooms, passes, entry, front and sound
 #                 (MODEL=Master to run them on a Master 128; default B-DFS1.2;
 #                 STREAM=1 for the streaming edition, docs/streaming.md)
 #   make rooms    check every room the BBC draws against the original's
 #   make passes   replay tests/scenarios.txt on both, compare Harry pass by pass
+#   make entry    where both first draw Harry on entering a room
 #   make front    drive the front end: menu, keys, save, load, high scores
 #   make sound    the bytes the sound chip gets: the tick, the life-lost tune
 #   make fuzz     random walks in random rooms on both (SEED=n COUNT=n)
@@ -45,7 +46,7 @@ DISC     = chuckie-egg-2.ssd
 # commit, with + if the tree (the disc itself aside) had changes.
 BUILD   := $(shell date -u '+%Y-%m-%d %H:%M UTC') $(shell git rev-parse --short HEAD 2>/dev/null || echo NOGIT)$(shell git diff --quiet HEAD -- . ':(exclude)$(DISC)' 2>/dev/null || echo +)
 
-.PHONY: all run check rooms passes front sound fuzz disc fetch zx disasm venv clean
+.PHONY: all run check rooms passes entry front sound fuzz disc fetch zx disasm venv clean
 
 all: $(TARGET) $(TEST)
 
@@ -84,7 +85,7 @@ $(OUT):
 run: $(TARGET)
 	node tools/play.mjs '6,!run' shots/ --disc $(TARGET)
 
-check: rooms passes front sound
+check: rooms passes entry front sound
 
 front: $(TARGET)
 	node tools/frontcheck.mjs
@@ -105,6 +106,11 @@ $(TEST): $(SOURCES) $(OUT)/stamp | $(OUT)
 
 passes: $(TEST) build/ce2.z80
 	tools/passcheck.sh
+
+# Where Harry is first drawn on entering a room, on both (issue #2): make
+# passes compares his state, not the drawing.
+entry: $(TEST) build/ce2.z80
+	node tools/entrycheck.mjs
 
 # The room viewer: the same program with -D VIEWER=1, which steps through
 # the rooms instead of playing.

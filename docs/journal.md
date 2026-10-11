@@ -1496,3 +1496,22 @@ the map keeps only what the OS and hardware fix.
   `girder_home` (now sharing a tail with `girder_at`) and `sprite_frame`
   keeping X (its search reshaped under it). CE2S's cache is over 4,000
   bytes, from 1,031 at the start of the day.
+
+### Harry on the pass that changes room (issue #2)
+
+Matt saw Harry pop right by a couple of steps just after walking left into
+a room. On the pass that changes room the port drew him with the frame
+`move` picks before the edges change xf: the glitch in harry.md section
+10, which the research had verified in the record and assumed was drawn.
+It never is. The original's main loop puts Harry on its draw list
+(`&77C2`) and the room set-up (`&8B2A`, through `&7913`) empties the list,
+so the interrupt draws nothing on that pass. The port now does the same:
+bit 6 of `drawn` is the list, set after `harry_update` and cleared by
+`show_room`, and `draw_harry` does nothing without it. Death, the next
+egg, a resume and the tests' teleport all go back to the loop's top, so
+Harry is still drawn on their first pass; the room skip, like the
+original's, shows him from the pass after.
+- `make passes` couldn't see it: Harry's state was right pass for pass.
+  `make entry` (`tools/entrycheck.mjs`, with `tools/entrylog.py` for the
+  Spectrum) walks him out of rooms 1 and 2 on both machines and compares
+  the lit extent near the edge he enters by, at every wait for a frame.

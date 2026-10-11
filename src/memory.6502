@@ -42,7 +42,8 @@ SECTION ZeroPage, org = ZP_FIXED, guard = ZP_FIXED_END, virtual = TRUE
 .room       SKIP 1          ; 1-120 (&A3FE)
 .room_delta SKIP 1          ; set by leaving a room (&A48B)
 .carried    SKIP 1          ; the object Harry carries, &FF none (&A560)
-.drawn      SKIP 1          ; bit 7: Harry is on screen at d_cell, d_yf, d_frame
+.drawn      SKIP 1          ; bit 7: Harry is on screen at d_cell, d_yf, d_frame;
+                            ; bit 6: on the draw list (game_loop)
 .d_cell     SKIP 2
 .d_yf       SKIP 1
 .d_frame    SKIP 2

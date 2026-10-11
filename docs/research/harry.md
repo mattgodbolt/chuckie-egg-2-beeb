@@ -556,12 +556,19 @@ xf, the bottom edge in state 6 adds 3·dx to col and dx to xf [verified,
 next `ApplyDelta` normalises it (the position is continuous). Left-edge
 slope crossings get no fix-up.
 
-Original glitch: the frame is picked (`&888D`) *before* the edge code
-changes xf, so on the iteration of every room change Harry is drawn with
-the frame for the old xf at the new cell: after a right exit with the xf-0
-frame at x 0 instead of 4, after a left exit 6 px left of where he is, after
-the slope fix-ups 2 px off. One drawing (three frames) later it is right
-again [verified, `t_edgeframe.py`: frame `&DFA4` with xf 2].
+Original glitch, never seen: the frame is picked (`&888D`) *before* the
+edge code changes xf, so on the iteration of every room change Harry's
+record holds the frame for the old xf at the new cell: after a right exit
+the xf-0 frame, which would put him at x 0 instead of 4, after a left exit
+6 px left of where he is, after the slope fix-ups 2 px off [verified,
+`t_edgeframe.py`: frame `&DFA4` with xf 2]. It is never drawn. The main
+loop puts Harry on the draw list (`&77C2`) before the edges are acted on,
+and the room set-up's `&8B2A` (through `&7913`, also the developers' room
+skip's way in) empties the list, so that iteration's interrupt draws
+nothing. The next iteration's move picks the right frame, and he first
+appears where he is [measured, `tools/entrycheck.mjs`: left from room 2
+at row 21 first drawn at x 244-251, then 242-249; right from room 1 at
+x 6-13]. The port drew the frame for one pass until issue #2.
 
 After the new room is set up (`&7801`): state 8 becomes a jump; unless the
 move was upwards, the cell under the feet (`T(&40 + xf/2)`) sets state 1/2

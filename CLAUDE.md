@@ -123,6 +123,10 @@ handoff, the front end or anything paged.
   every outcome of the game's machinery (a bug that stopped the egg ever
   being made went unseen because no scenario reached it). `--start`,
   `--power`, `--factory` and `--carry` set a scene up on both machines.
+- `make entry` (`tools/entrycheck.mjs`) compares where the two first draw
+  Harry on walking into a room: `make passes` compares state, so it
+  missed the port drawing a frame on the pass that changes room, which
+  the original never shows (issue #2).
 - `tools/mkrooms.py`, `tools/packrooms.py` and `tools/mkgfx.py` regenerate
   `src/data/` from the original, and `tools/mkrecords.py` then splits the
   rooms and sprites into per-room records (`records.bin`: each room's

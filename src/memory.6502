@@ -222,6 +222,20 @@ SECTION Scratch, org = &90, guard = &FC, virtual = TRUE
 \ (bands.6502: set when a room is drawn)
 .band_count    SKIP 1          ; how many splits, 0-2
 .band_rows     SKIP 2          ; bands 1 and 2: the first row of each
+\ (rooms.6502: room_load's graphics group)
+.gp            SKIP 2
+IF DEFINED(STREAM)
+\ (disc.6502: the reader, and what fetch reads)
+.fdc_type      SKIP 1          ; FDC_8271 or FDC_1770
+.fdc_state     SKIP 1          ; 0 idle, 1 seeking (1770), 2 reading
+.fdc_track     SKIP 1          ; the read's track, sector and page
+.fdc_sect      SKIP 1
+.fdc_page      SKIP 1
+.fdc_cur       SKIP 1          ; 1770: the head's track (&FF: not known)
+.fe_pos        SKIP 2          ; where in CE2DATA
+.fe_len        SKIP 2          ; how many bytes
+.fe_dst        SKIP 2          ; to where
+ENDIF
 ENDSECTION
 
 \ The game's state on its way to and from the front end (state.6502,
@@ -233,6 +247,15 @@ SAVE_HDR   = &5F00          ; "CE2SAVE" and the build stamp, 40 bytes
 SAVE_KEYS  = &5F28
 SAVE_TABLE = &5F30          ; 150 bytes (state.6502: HS_LEN)
 STATE      = &6000
+
+\ The streaming edition's mailbox (docs/streaming.md), with no sideways
+\ bank to keep it in: CE2DATA's first bytes (its magic and state.6502's
+\ mailbox) at the top of main RAM, where MENU reads and writes them. CE2S
+\ loads over them, so MENU leaves a copy at MB_XFER for its loader to put
+\ back. (Room for the longest build stamp.)
+MB_STREAM = &5000 - &120
+MB_XFER   = &7600
+ASSERT MB_XFER >= STATE + &800
 
 \ What a soft BREAK keeps of the OS's page 2 (the reset code clears and
 \ resets the rest), including the start-up options at &028F.

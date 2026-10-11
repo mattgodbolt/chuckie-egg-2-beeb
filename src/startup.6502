@@ -11,7 +11,11 @@
 {
     ZA_ENTRY
     LDX #&FF : TXS
+IF DEFINED(STREAM)
+    JSR stream_init
+ELSE
     JSR find_data_bank
+ENDIF
     JSR keep_os                 ; before the tables overwrite page 2
     JSR init_system
     JSR copy_os_pages
@@ -31,6 +35,114 @@ ENDIF
     SEI
     LDA DATA_BANK_ZP : STA romshad : STA romsel
     RTS                         ; interrupts stay off until install_irq
+
+IF DEFINED(STREAM)
+\ The streaming edition (disc.6502): the mailbox from where MENU left a
+\ copy (memory.6502), then the disc reader, on the controller MENU named.
+\ It owns NMI_AREA from now on.
+.stream_init
+{
+    SEI                         ; interrupts stay off until install_irq
+    LDX #0
+.box
+    LDA MB_XFER,X : STA MB_STREAM,X
+    INX : BNE box
+.rest
+    LDA MB_XFER + &100,X : STA MB_STREAM + &100,X
+    INX : CPX #REC_BASE - &100 : BNE rest
+    LDX #nmi_end - NMI_AREA - 1
+.nmi
+    LDA nmi_load,X : STA NMI_AREA,X
+    DEX : BPL nmi
+    LDA #RTI_OP : STA NMI_AREA  ; not armed until a read (the set-up's own
+                                ; NMIs would store through it)
+    LDA mb_fdc : STA fdc_type
+    LDA #0 : STA fdc_state
+    LDA fdc_type : BNE w
+    LDA #LO(I_DATA) : STA nmi_data + 1
+    LDA #HI(I_DATA) : STA nmi_data + 2
+    LDA #1 : STA I_RESET
+    LDX #20
+.rw DEX : BNE rw
+    STX I_RESET
+    LDX #i_init_end - i_init - 1
+.cmds
+    JSR i_command_x
+    BPL cmds
+    \ The seek's result (not ready, most likely, but the head is at track
+    \ 0 and the 8271 knows it), read to drop its interrupt.
+.seek
+    BIT I_STATUS : BMI seek
+    LDA I_RESULT
+    RTS
+.w
+    LDA #LO(W_DATA) : STA nmi_data + 1
+    LDA #HI(W_DATA) : STA nmi_data + 2
+    LDA #W_LATCH AND NOT(4) : STA W_CONTROL     ; reset
+    LDX #20
+.ww DEX : BNE ww
+    LDA #W_LATCH : STA W_CONTROL
+    LDA #&FF : STA fdc_cur
+    RTS
+}
+
+\ The 8271's set-up, read backwards by i_command_x: count, command,
+\ parameters. Its step is the DFS's (24ms on jsbeeb); the head unloads
+\ after 14 revolutions (2.8s) idle and takes 64ms to load. (Never unload
+\ count 0 on a B: it unloads after a not-ready too, which hangs.)
+I_STEP   = &0C
+I_SETTLE = &0A
+I_LOAD   = &E8
+.i_init
+    EQUB 0, &69, 2                              ; Seek 0 (steps until TRK0)
+    EQUB &C1, &17, &7A, 3                       ; Write Special Register: mode, no DMA
+    EQUB 0, &FF, &FF, &10, &75, 5               ; Specify bad tracks (none), track 0
+    EQUB I_LOAD, I_SETTLE, I_STEP, &0D, &75, 5  ; Specify timings
+.i_init_end
+
+\ Issue the 8271 command whose bytes end at i_init + X (count, command,
+\ parameters, read downwards); returns X before the next, N set at the end.
+.i_command_x
+{
+.idle
+    BIT I_STATUS : BMI idle                     ; busy
+    LDY i_init,X : DEX
+    LDA i_init,X : STA I_COMMAND : DEX : DEY
+    BEQ done
+.param
+    LDA I_STATUS : AND #&20 : BNE param         ; parameter register full
+    LDA i_init,X : STA I_PARAM
+    DEX : DEY : BNE param
+.done
+    TXA
+    RTS
+}
+
+\ The NMI routine, copied to NMI_AREA: the same on both controllers but for
+\ the data register stream_init puts in. Its first byte is RTI until a read
+\ arms it (disc.6502's arm). 4 + 4 + 4 + 6 + 2 + 2 + 6 = 28 cycles a byte,
+\ and 7 to take the NMI: 35 of the 128 between bytes. A is kept in the
+\ LDA # (Tom Seddon's), so no zero page. The 256th byte makes it an RTI
+\ again, so the controller's end-of-command NMI does nothing, and fdc_poll
+\ reads the result, which drops the interrupt.
+.nmi_load
+    SECTION Nmi, org = NMI_AREA, guard = NMI_AREA + &20
+    STA nmi_restore + 1
+.nmi_data
+    LDA I_DATA
+.nmi_dst
+    STA &3000
+    INC nmi_dst + 1
+    BEQ nmi_last
+.nmi_restore
+    LDA #0
+    RTI
+.nmi_last
+    LDA #RTI_OP : STA NMI_AREA
+    BNE nmi_restore
+.nmi_end
+    ENDSECTION
+ENDIF
 
 \ Note what a soft BREAK keeps of page 2, for MENU to put back and the
 \ handoff to restore (handoff.6502).

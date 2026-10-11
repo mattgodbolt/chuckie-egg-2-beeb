@@ -1,5 +1,6 @@
 # Build the discs and run every check (make check) on a Model B and a
-# Master 128, with baron pinned to a release.
+# Master 128, for each edition (docs/streaming.md), with baron pinned to a
+# release.
 name: check
 
 on:
@@ -13,12 +14,13 @@ env:
 
 jobs:
   check:
-    name: make check (${{ matrix.model }})
+    name: make check (${{ matrix.model }}${{ matrix.stream && ', streaming' || '' }})
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
         model: [B-DFS1.2, Master]
+        stream: ["", "1"]
     steps:
       - uses: actions/checkout@v4
 
@@ -65,4 +67,4 @@ jobs:
           make fetch
 
       - name: make check
-        run: make check MODEL=${{ matrix.model }} BARON="$PWD/baron-bin/baron"
+        run: make check MODEL=${{ matrix.model }} STREAM=${{ matrix.stream }} BARON="$PWD/baron-bin/baron"

@@ -26,6 +26,10 @@
 \ %101 then bit 4 infinite lives, bit 3 the room skip, bits 0-2 the
 \ starting egg - 1. MENU's f0 and f1-f8 set it.
 .mb_cheat    EQUB 0
+\ For the streaming edition (disc.6502), from MENU: the disc controller
+\ (FDC_8271 or FDC_1770) and the sector CE2DATA starts at.
+.mb_fdc      EQUB 0
+.mb_disc     EQUW 0
 .mb_score    SKIP 10            ; the score, when a game ended
 .mb_rng      EQUS "9090"        ; the RNG between games (the tape's seed)
 \ The keys, internal key numbers in the order of the game's control bits:

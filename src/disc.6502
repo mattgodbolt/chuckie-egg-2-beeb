@@ -1,0 +1,197 @@
+\ ***************************************************************************
+\ The streaming edition's disc (docs/streaming.md): with no sideways RAM,
+\ the records (main.6502) are read from CE2DATA on the disc, by the game's
+\ own reader for the Model B's 8271 and the Master's WD1770. It reads a
+\ sector at a time through the NMI routine at NMI_AREA, which the machine
+\ enters for every byte, while the rest of the game runs on (the prototype
+\ and its measurements: tools/stockb/nmi).
+\
+\ MENU, with the OS alive, says which controller (OSBYTE 0: a B or a
+\ Master) and where CE2DATA starts on the disc (its catalogue entry), in
+\ the mailbox: mb_fdc and mb_disc. The game makes no OS call for any of it.
+\ ***************************************************************************
+
+FDC_8271 = 0
+FDC_1770 = 1
+RTI_OP   = &40
+STA_ABS  = &8D
+
+\ 8271 (Model B)
+I_STATUS = &FE80 : I_COMMAND = &FE80 : I_RESULT = &FE81 : I_PARAM = &FE81
+I_RESET  = &FE82 : I_DATA = &FE84
+\ WD1770 (Master)
+W_CONTROL = &FE24 : W_STATUS = &FE28 : W_COMMAND = &FE28
+W_TRACK  = &FE29 : W_SECTOR = &FE2A : W_DATA = &FE2B
+W_LATCH  = &25              ; drive 0, not reset, side 0, single density
+W_RATE   = 0                ; 6ms steps (r1 r0)
+
+\ Start reading sector X of track A into page Y, and return at once:
+\ fdc_poll says when it's done.
+.fdc_read
+{
+    STA fdc_track : STX fdc_sect : STY fdc_page
+    LDA fdc_type : BNE w
+    JMP i_start
+.w
+    LDA fdc_track : CMP fdc_cur : BEQ w_start
+    \ A Seek first (the 1770 can't seek within a read); fdc_poll goes on.
+    LDA fdc_cur : BPL known
+    LDA #&00 + W_RATE : BPL go                  ; Restore, then the seek
+.known
+    LDA fdc_track : STA W_DATA
+    LDA #&10 + W_RATE
+.go
+    STA W_COMMAND
+    LDA #1 : STA fdc_state
+    RTS
+}
+
+\ Aim the NMI routine at the page and arm it, for the read command.
+.arm
+{
+    LDA fdc_page : STA nmi_dst + 2
+    LDA #0 : STA nmi_dst + 1
+    LDA #STA_ABS : STA NMI_AREA
+    LDA #2 : STA fdc_state
+    RTS
+}
+
+.i_start
+{
+    JSR arm
+.idle
+    BIT I_STATUS : BMI idle
+    LDA #&53 : STA I_COMMAND                    ; Read Data, drive 0
+    LDA fdc_track : JSR i_param
+    LDA fdc_sect : JSR i_param
+    LDA #&21                                    ; one 256-byte sector
+    \ Fall into i_param.
+}
+\ An 8271 command's parameter, once the register is free.
+.i_param
+{
+    PHA
+.full
+    LDA I_STATUS : AND #&20 : BNE full
+    PLA : STA I_PARAM
+    RTS
+}
+
+.w_start
+    JSR arm
+    LDA fdc_sect : STA W_SECTOR
+    LDA #&80 : STA W_COMMAND                    ; Read Sector
+    RTS
+
+\ C set while a read is under way; then C clear and A = 0 (read) or the
+\ controller's error bits. Where a 1770's seek becomes its read, and an
+\ 8271's not-ready is tried again.
+.fdc_poll
+{
+    LDA fdc_state : BNE busy
+    CLC
+    RTS
+.busy
+    LDA fdc_type : BNE w
+    \ 8271: the result drops its interrupt.
+    BIT I_STATUS : BMI still
+    LDA I_RESULT : AND #&1E
+    CMP #&10 : BNE finished
+    \ Not ready (a B makes the drive ready on the second index pulse after
+    \ it is selected), latched until a Read Drive Status: that, and again.
+    LDA #&6C : STA I_COMMAND
+.rds
+    BIT I_STATUS : BMI rds
+    LDA I_RESULT
+    JSR i_start
+.still
+    SEC
+    RTS
+.w
+    LDA W_STATUS : LSR A : BCS still            ; busy (reading drops INTRQ)
+    LDA fdc_state : CMP #1 : BNE w_read
+    \ The seek (or restore) is done: now the read.
+    LDA fdc_cur : BPL sought
+    LDA #0 : STA fdc_cur                        ; restored: now the seek
+    LDA fdc_track : STA W_DATA
+    LDA #&10 + W_RATE : STA W_COMMAND
+    SEC
+    RTS
+.sought
+    LDA fdc_track : STA fdc_cur
+    JSR w_start
+    SEC
+    RTS
+.w_read
+    LDA W_STATUS : AND #&1C                     ; record not found, CRC, lost data
+.finished
+    LDX #0 : STX fdc_state
+    CLC
+    RTS
+}
+
+\ Read fe_len bytes of CE2DATA from fe_pos to fe_dst, waiting, a sector at
+\ a time through `stage`; fe_pos and fe_dst move on past them.
+.disc_read
+{
+    ZA_AUTO2 ptr                ; fe_dst less the bytes skipped in the sector
+    ZA_AUTO1 last               ; Y after the last byte wanted (0: 256)
+.sector
+    \ The disc's sector: CE2DATA's first, plus fe_pos's page. Then track
+    \ and sector, ten to a track (sector counted in X and A, track in Y).
+    CLC : LDA fe_pos+1 : ADC mb_disc : TAX
+    LDA mb_disc+1 : ADC #0
+    LDY #0
+.tens
+    CPX #10 : BCS sub
+    CMP #0 : BEQ divided
+.sub
+    PHA : TXA : SEC : SBC #10 : TAX : PLA : SBC #0
+    INY : BNE tens              ; (always)
+.divided
+    STY fdc_track : STX fdc_sect
+.again
+    LDA fdc_track : LDX fdc_sect : LDY #HI(stage)
+    JSR fdc_read
+.wait
+    JSR fdc_poll : BCS wait
+    CMP #0 : BNE again          ; an error: read it again
+    \ The bytes from fe_pos's in this sector, as many as are wanted.
+    SEC : LDA fe_dst : SBC fe_pos : STA ptr
+    LDA fe_dst+1 : SBC #0 : STA ptr+1
+    LDA fe_len+1 : BNE to_end
+    CLC : LDA fe_pos : ADC fe_len : BCS to_end
+    STA last
+    BCC have                    ; (always)
+.to_end
+    LDA #0 : STA last
+.have
+    LDY fe_pos
+.copy
+    LDA stage,Y : STA (ptr),Y
+    INY : CPY last : BNE copy
+    \ Then on by what was copied: Y - fe_pos (from 256 if last was 0).
+    TYA : SEC : SBC fe_pos : TAX                ; 0 for a whole sector
+    CLC : TXA : ADC fe_dst : STA fe_dst
+    BCC dst_ok
+    INC fe_dst+1
+.dst_ok
+    TXA : BNE part
+    INC fe_dst+1                ; a whole sector: 256 on
+    INC fe_pos+1
+    DEC fe_len+1
+    LDA fe_len : ORA fe_len+1 : BEQ done
+    JMP sector
+.part
+    CLC : TXA : ADC fe_pos : STA fe_pos
+    BCC pos_ok
+    INC fe_pos+1
+.pos_ok
+    STX ptr                     ; (ptr is done with) len - copied
+    SEC : LDA fe_len : SBC ptr : STA fe_len
+    LDA fe_len+1 : SBC #0 : STA fe_len+1
+    ORA fe_len : BEQ done
+    JMP sector
+.done
+    RTS
+}

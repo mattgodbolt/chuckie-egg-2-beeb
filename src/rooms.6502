@@ -17,23 +17,15 @@ ZA_AUTO1 ctype              ; the type ORed into the type map (E)
 
 \ Find room A's (1-120) body in the records (main.6502), rb, and point
 \ sprite_frames at its graphics groups' frames, the rest at nothing
-\ (tools/mkrecords.py describes both).
+\ (tools/mkrecords.py describes both). The sideways edition has them all in
+\ the bank; the streaming edition reads them into room_buf (disc.6502).
 .room_load
 {
-    ZA_AUTO2 gp                 ; the group
     ZA_AUTO1 groups             ; groups left
     ZA_AUTO1 gi                 ; the body's group list, at rb + gi
     ZA_AUTO1 frames             ; the group's frames left
     ZA_AUTO1 lo
-    TAX
-    LDA #LO(records) : STA rb
-    LDA #HI(records) : STA rb+1
-.skip
-    DEX : BEQ found
-    LDA body_len-1,X : CLC : ADC rb : STA rb
-    BCC skip
-    INC rb+1 : BNE skip         ; (always)
-.found
+    JSR find_body
     \ No frame until a group gives it one: a frame drawn without one
     \ shows (sprite.6502's sprite_frame, in the tests' build).
     LDX #151 : LDA #0
@@ -46,8 +38,7 @@ ZA_AUTO1 ctype              ; the type ORed into the type map (E)
     DEC groups : BMI done
     INC gi : LDY gi
     LDA (rb),Y : TAX
-    CLC : LDA group_lo,X : ADC #LO(records) : STA gp
-    LDA group_hi,X : ADC #HI(records) : STA gp+1
+    JSR find_group
     LDY #0 : LDA (gp),Y : STA frames
 .frame
     \ Its number (from &80, the table's second page), and where it is.
@@ -66,6 +57,60 @@ ZA_AUTO1 ctype              ; the type ORed into the type map (E)
 .done
     RTS
 }
+
+IF DEFINED(STREAM)
+\ rb = room A's body, read into room_buf.
+.find_body
+{
+    PHA : TAX
+    LDA #LO(REC_BASE) : STA fe_pos
+    LDA #HI(REC_BASE) : STA fe_pos+1
+.skip
+    DEX : BEQ found
+    LDA body_len-1,X : CLC : ADC fe_pos : STA fe_pos
+    BCC skip
+    INC fe_pos+1 : BNE skip     ; (always)
+.found
+    PLA : TAX
+    LDA body_len-1,X : STA fe_len
+    LDA #0 : STA fe_len+1
+    LDA #LO(room_buf) : STA fe_dst : STA rb
+    LDA #HI(room_buf) : STA fe_dst+1 : STA rb+1
+    JMP disc_read
+}
+\ gp = group X, read in after what room_buf holds already (disc_read
+\ has left fe_dst there).
+.find_group
+{
+    LDA fe_dst : STA gp
+    LDA fe_dst+1 : STA gp+1
+    SEC : LDA group_lo+1,X : SBC group_lo,X : STA fe_len
+    LDA group_hi+1,X : SBC group_hi,X : STA fe_len+1
+    CLC : LDA group_lo,X : ADC #LO(REC_BASE) : STA fe_pos
+    LDA group_hi,X : ADC #HI(REC_BASE) : STA fe_pos+1
+    JMP disc_read
+}
+ELSE
+\ rb = room A's body, in the bank: it follows rooms 1 to A - 1's.
+.find_body
+{
+    TAX
+    LDA #LO(records) : STA rb
+    LDA #HI(records) : STA rb+1
+.skip
+    DEX : BEQ found
+    LDA body_len-1,X : CLC : ADC rb : STA rb
+    BCC skip
+    INC rb+1 : BNE skip         ; (always)
+.found
+    RTS
+}
+\ gp = group X, in the bank.
+.find_group
+    CLC : LDA group_lo,X : ADC #LO(records) : STA gp
+    LDA group_hi,X : ADC #HI(records) : STA gp+1
+    RTS
+ENDIF
 
 \ Draw room A (1-120).
 .draw_room

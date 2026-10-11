@@ -50,7 +50,14 @@ export const KEYS = {
     jump: "RETURN", take: "TAB", abort: "R", save: "S",
 };
 
+// With CE2_STREAM set (make ... STREAM=1), the streaming edition's discs
+// and symbols (docs/streaming.md): build/X becomes build/stream/X.
+export const edition = (path) =>
+    process.env.CE2_STREAM && path && /^build\/[^/]+$/.test(path) ? path.replace(/^build\//, "build/stream/") : path;
+
 export async function startBeeb({ disc, model = process.env.CE2_MODEL || "B-DFS1.2", bootSecs = 0, bootUntil, symbols = "build/symbols.json" } = {}) {
+    disc = edition(disc);
+    symbols = edition(symbols);
     const transport = new StdioClientTransport(MCP);
     const client = new Client({ name: "ce2-harness", version: "1.0.0" });
     await client.connect(transport);

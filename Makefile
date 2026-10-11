@@ -3,7 +3,8 @@
 #   make          assemble build/ce2.ssd, and build/test.ssd for the tools
 #   make run      boot it in jsbeeb and grab a screenshot
 #   make check    every check: make rooms, passes, front and sound
-#                 (MODEL=Master to run them on a Master 128; default B-DFS1.2)
+#                 (MODEL=Master to run them on a Master 128; default B-DFS1.2;
+#                 STREAM=1 for the streaming edition, docs/streaming.md)
 #   make rooms    check every room the BBC draws against the original's
 #   make passes   replay tests/scenarios.txt on both, compare Harry pass by pass
 #   make front    drive the front end: menu, keys, save, load, high scores
@@ -24,9 +25,20 @@ ASM      = BARON=$(BARON) tools/asm.sh
 MODEL   ?= B-DFS1.2
 export CE2_MODEL = $(MODEL)
 PYTHON  ?= .venv/bin/python
-TARGET   = build/ce2.ssd
-TEST     = build/test.ssd
-SYMBOLS  = build/symbols.json
+# STREAM=1: the streaming edition's discs instead (docs/streaming.md), in
+# build/stream, their MENU always running CE2S; the tools read them there
+# (tools/beeb.mjs, CE2_STREAM).
+ifdef STREAM
+OUT      = build/stream
+PLAY     = -D PLAY_STREAM=1
+export CE2_STREAM = 1
+else
+OUT      = build
+PLAY     =
+endif
+TARGET   = $(OUT)/ce2.ssd
+TEST     = $(OUT)/test.ssd
+SYMBOLS  = $(OUT)/symbols.json
 SOURCES  = $(wildcard src/*.6502 src/data/*)
 DISC     = chuckie-egg-2.ssd
 # Stamped into !BOOT, so a disc says what it is: UTC build time and the
@@ -37,14 +49,28 @@ BUILD   := $(shell date -u '+%Y-%m-%d %H:%M UTC') $(shell git rev-parse --short 
 
 all: $(TARGET) $(TEST)
 
-# The symbol dump is how the test tools find the game's variables.
-$(TARGET): $(SOURCES) | build
-	@python3 tools/lint_labels.py > /dev/null || python3 tools/lint_labels.py
-	$(ASM) -D 'BUILD="$(BUILD)"' -o $(TARGET) --title CHUCKIE2 --opt 3 --warn 2 --symbols $(SYMBOLS) -v -log0 build/listing.txt src/main.6502
-	@grep -E '^(code|sideways) ' build/listing.txt || true
+# Every disc holds both editions (docs/streaming.md): two assemblies of
+# src/main.6502 with the same stamp, the release files' (MENU, CE2,
+# CE2DATA) and the streaming edition's CE2S, joined by tools/ssdmerge.py.
+# $(call editions,disc,flags,stamp,more for the first): the symbols go
+# beside the disc (.json), the first assembly's, or with STREAM=1 both,
+# CE2S's game last, as the tools want the edition they run.
+define editions
+	$(ASM) $(2) $(PLAY) -D 'BUILD="$(3)"' -o $(1:.ssd=.r.ssd) --title CHUCKIE2 --opt 3 --warn 2 --symbols $(1:.ssd=.r.json) $(4) src/main.6502
+	$(ASM) $(2) -D STREAM=1 -D 'BUILD="$(3)"' -o $(1:.ssd=.s.ssd) --title CHUCKIE2 --opt 3 --warn 2 --symbols $(1:.ssd=.s.json) src/main.6502
+	python3 tools/ssdmerge.py $(1) $(1:.ssd=.r.ssd) $(1:.ssd=.s.ssd)
+	$(if $(STREAM),python3 tools/symmerge.py $(1:.ssd=.json) $(1:.ssd=.r.json) $(1:.ssd=.s.json),cp $(1:.ssd=.r.json) $(1:.ssd=.json))
+endef
 
-build:
-	mkdir -p build
+# The symbol dump is how the test tools find the game's variables.
+$(TARGET): $(SOURCES) | $(OUT)
+	@python3 tools/lint_labels.py > /dev/null || python3 tools/lint_labels.py
+	$(call editions,$(TARGET),,$(BUILD),-v -log0 $(OUT)/listing.txt)
+	cp $(TARGET:.ssd=.json) $(SYMBOLS)
+	@grep -E '^(code|sideways) ' $(OUT)/listing.txt || true
+
+$(OUT):
+	mkdir -p $(OUT)
 
 run: $(TARGET)
 	node tools/play.mjs '6,!run' shots/ --disc $(TARGET)
@@ -65,17 +91,17 @@ fuzz: $(TEST) build/ce2.z80 build/rooms/room_120.bin
 
 # The tests' disc: MENU built with -D DIRECT=1 goes straight into a game,
 # so the tools reach the main loop without the front end.
-$(TEST): $(SOURCES) | build
-	$(ASM) -D DIRECT=1 -D 'BUILD="$(BUILD) test"' -o $(TEST) --title CHUCKIE2 --opt 3 --warn 2 --symbols build/test.json src/main.6502
+$(TEST): $(SOURCES) | $(OUT)
+	$(call editions,$(TEST),-D DIRECT=1,$(BUILD) test)
 
 passes: $(TEST) build/ce2.z80
 	tools/passcheck.sh
 
 # The room viewer: the same program with -D VIEWER=1, which steps through
 # the rooms instead of playing.
-VIEWER = build/viewer.ssd
-$(VIEWER): $(SOURCES) | build
-	$(ASM) -D VIEWER=1 -D 'BUILD="$(BUILD) viewer"' -o $(VIEWER) --title CHUCKIE2 --opt 3 --warn 2 --symbols build/viewer.json src/main.6502
+VIEWER = $(OUT)/viewer.ssd
+$(VIEWER): $(SOURCES) | $(OUT)
+	$(call editions,$(VIEWER),-D VIEWER=1,$(BUILD) viewer)
 
 rooms: $(VIEWER) build/rooms/room_120.bin
 	node tools/roomcheck.mjs

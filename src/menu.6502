@@ -27,6 +27,10 @@ M_KEYS      = mbox + (mb_keys - mailbox)
 M_TABLE     = mbox + (mb_table - mailbox)
 M_NAME      = mbox + (mb_name - mailbox)
 M_CHEAT     = mbox + (mb_cheat - mailbox)
+M_FDC       = mbox + (mb_fdc - mailbox)
+M_DISC      = mbox + (mb_disc - mailbox)
+\ Where the streaming edition keeps the mailbox (memory.6502).
+MB_STREAM_BOX = MB_STREAM + (mailbox - data_magic)
 
 \ Where a game's lives are in the state block: its regions start with the
 \ fixed zero page, then LowState (state.6502).
@@ -54,6 +58,7 @@ mz_r    = &78               ; redefine's prompt (print_lines uses mz_i)
     JSR mode7
     JSR find_bank
     JSR get_mailbox
+    JSR stream_disc
     \ Put back the BREAK option the game flipped (decision 22): the value
     \ it saved, not a flip back, in case a CTRL-BREAK has since read the
     \ keyboard links afresh.
@@ -132,11 +137,21 @@ CHEATS = %10111000
 .run_game
 {
     JSR put_mailbox
-    LDA data_bank : STA DATA_BANK_ZP        ; for the game (startup.6502)
     LDX #LO(loading) : LDY #HI(loading) : JSR print_lines
+    LDA stream : BNE streaming
+    LDA data_bank : STA DATA_BANK_ZP        ; for the game (startup.6502)
     LDX #LO(run_ce2) : LDY #HI(run_ce2) : JMP oscli
+.streaming
+    \ CE2S loads over the mailbox: a copy for its loader to put back.
+    LDX #0
+.copy
+    LDA MB_STREAM,X : STA MB_XFER,X
+    LDA MB_STREAM + &100,X : STA MB_XFER + &100,X
+    INX : BNE copy
+    LDX #LO(run_ce2s) : LDY #HI(run_ce2s) : JMP oscli
 }
 .run_ce2 EQUS "RUN CE2", 13
+.run_ce2s EQUS "RUN CE2S", 13
 .close_exec EQUS "EXEC", 13
 .loading
     EQUB 24, 12, 3, 0 : EQUS "LOADING..." : EQUB 0
@@ -182,6 +197,9 @@ CHEATS = %10111000
 \ start-up, and a byte at &8000 can be flipped.
 .find_bank
 {
+IF DEFINED(PLAY_STREAM)
+    JMP stream_edition          ; the streaming edition's test discs
+ENDIF
     SEI
     LDX #15
 .try
@@ -209,9 +227,10 @@ CHEATS = %10111000
     DEX : BPL free
     LDA romshad : STA romsel
     CLI
-    LDX #LO(no_ram) : LDY #HI(no_ram) : JSR print_lines
-.stop
-    JMP stop
+    \ No sideways RAM: the streaming edition (docs/streaming.md), with
+    \ CE2DATA (at &3000) to start its mailbox from.
+    LDA #1 : STA data_loaded
+    JMP stream_edition
 .found
     EOR #&FF : STA &8000        ; put the byte back
     STX data_bank
@@ -228,16 +247,39 @@ CHEATS = %10111000
     CLI
     RTS
 .load_data EQUS "LOAD CE2DATA 3000", 13
-.no_ram
-    EQUB 10, 0, 7, 0 : EQUS "CHUCKIE EGG 2 needs 16K of" : EQUB 0
-    EQUB 11, 0, 7, 0 : EQUS "sideways RAM, and none was found." : EQUB 0
-    EQUB &FF
 .data_id EQUS DATA_MAGIC, build_stamp
 .data_id_end
 
-\ The mailbox from the bank into mbox, and back.
+\ The streaming edition: its mailbox in main RAM (memory.6502), kept there
+\ by the game through its reset or a BREAK; or, if it doesn't hold this
+\ build's, CE2DATA's own.
+.stream_edition
+{
+    LDA #1 : STA stream
+    LDX #data_id_end - data_id - 1
+.compare
+    LDA MB_STREAM,X : CMP data_id,X : BNE fresh
+    DEX : BPL compare
+    RTS
+.fresh
+    LDA data_loaded : BNE loaded
+    LDX #LO(load_data) : LDY #HI(load_data) : JSR oscli
+.loaded
+    LDX #0
+.copy
+    LDA &3000,X : STA MB_STREAM,X
+    INX : BNE copy
+.rest
+    LDA &3100,X : STA MB_STREAM + &100,X
+    INX : CPX #REC_BASE - &100 : BNE rest
+    RTS
+}
+
+\ The mailbox from the bank (or the streaming edition's main RAM) into
+\ mbox, and back.
 .get_mailbox
 {
+    LDA stream : BNE streaming
     SEI
     LDA data_bank : STA romsel
     LDX #MAILBOX_LEN - 1
@@ -245,9 +287,16 @@ CHEATS = %10111000
     LDA mailbox,X : STA mbox,X
     DEX : CPX #&FF : BNE copy
     JMP page_back
+.streaming
+    LDX #MAILBOX_LEN - 1
+.copy_s
+    LDA MB_STREAM_BOX,X : STA mbox,X
+    DEX : CPX #&FF : BNE copy_s
+    RTS
 }
 .put_mailbox
 {
+    LDA stream : BNE streaming
     SEI
     LDA data_bank : STA romsel
     LDX #MAILBOX_LEN - 1
@@ -255,7 +304,53 @@ CHEATS = %10111000
     LDA mbox,X : STA mailbox,X
     DEX : CPX #&FF : BNE copy
     JMP page_back
+.streaming
+    LDX #MAILBOX_LEN - 1
+.copy_s
+    LDA mbox,X : STA MB_STREAM_BOX,X
+    DEX : CPX #&FF : BNE copy_s
+    RTS
 }
+
+\ For the streaming edition, what the game's disc reader needs to know
+\ (disc.6502): the controller, a B's 8271 or a Master's 1770 (OSBYTE 0),
+\ and the sector CE2DATA starts at, from the catalogue (read with OSWORD
+\ &7F), so a *COMPACT doesn't lose it.
+CAT_BUF = MB_XFER               ; (free until run_game)
+.stream_disc
+{
+    LDA stream : BNE streaming
+    RTS
+.streaming
+    LDA #0 : LDX #1 : JSR osbyte
+    LDA #0 : CPX #3 : BCC fdc
+    LDA #1                      ; (FDC_1770)
+.fdc
+    STA M_FDC
+    LDA #&7F : LDX #LO(cat_read) : LDY #HI(cat_read) : JSR osword
+    LDA CAT_BUF + &105 : LSR A : LSR A : LSR A : STA mz_n   ; files
+    LDA #8 : STA mz_i
+.file
+    LDX mz_i : LDY #0
+.name
+    LDA CAT_BUF,X : CMP data_name,Y : BNE next
+    INX : INY : CPY #8 : BNE name
+    \ Its start sector: the low byte, and two bits of the mixed byte.
+    LDX mz_i
+    LDA CAT_BUF + &107,X : STA M_DISC
+    LDA CAT_BUF + &106,X : AND #3 : STA M_DISC+1
+    RTS
+.next
+    LDA mz_i : CLC : ADC #8 : STA mz_i
+    DEC mz_n : BNE file
+    BRK : EQUB 0 : EQUS "CE2DATA not found" : EQUB 0
+}
+.data_name EQUS "CE2DATA$"
+.cat_read
+    EQUB 0                      ; drive 0
+    EQUD &FFFF0000 OR CAT_BUF
+    EQUB 3, &53, 0, 0, &22      ; read track 0, sectors 0 and 1
+    EQUB 0                      ; (the result)
 
 \ --- Text -------------------------------------------------------------------
 
@@ -872,6 +967,8 @@ SAVE_LEN = STATE_END - SAVE_HDR
 .after_save EQUW main_menu      ; where save_game goes on
 .name_buf   SKIP NAME_MAX
 .data_bank  EQUB 0
+.stream     EQUB 0              ; the streaming edition (no sideways RAM)
+.data_loaded EQUB 0             ; CE2DATA is at &3000
 .osfile_block SKIP 18
 .mbox       SKIP MAILBOX_LEN
 .hs_score   SKIP HS_ENTRY - 10  ; a score two digits to a byte (hiscore_check)

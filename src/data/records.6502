@@ -33,7 +33,7 @@
 
 GROUPS = 30
 \ Each graphics group's offset from records (its monster graphic's
-\ base frame, or the machine).
+\ base frame, or the machine), then the records' end.
 .group_lo
     EQUB LO(&22D4)   \  0: &00
     EQUB LO(&23D8)   \  1: &04
@@ -65,6 +65,7 @@ GROUPS = 30
     EQUB LO(&38E7)   \ 27: platform
     EQUB LO(&3910)   \ 28: train
     EQUB LO(&3A33)   \ 29: truck
+    EQUB LO(&3CA2)   \ (the end, for the last's length)
 .group_hi
     EQUB HI(&22D4)
     EQUB HI(&23D8)
@@ -96,4 +97,8 @@ GROUPS = 30
     EQUB HI(&38E7)
     EQUB HI(&3910)
     EQUB HI(&3A33)
+    EQUB HI(&3CA2)
 RECORDS_LEN = 15522
+\ The most a room needs, its body and its groups (the streaming
+\ edition's room buffer).
+ROOM_MAX = 1021

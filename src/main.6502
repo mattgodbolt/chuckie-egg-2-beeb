@@ -42,6 +42,13 @@ ELSE
     build_stamp = "DEV"
 ENDIF
 
+\ Two editions from this file (docs/streaming.md): the sideways RAM
+\ edition, as below; and with -D STREAM=1 the streaming edition's game,
+\ CE2S, which reads the records from CE2DATA on the disc as it goes, for a
+\ Model B with no sideways RAM. The disc has both: MENU runs the one that
+\ suits the machine. (Both built with the same stamp, so CE2DATA's layout
+\ is the same to both.)
+IF NOT(DEFINED(STREAM))
 SECTION Boot, filename = "!BOOT", exec = &FFFFFFFF
     EQUS "*| CHUCKIE EGG 2 ", build_stamp, 13
     EQUS "*RUN MENU", 13
@@ -63,18 +70,42 @@ SECTION Data, org = &8000, load = &FFFF3000, filename = "CE2DATA", guard = &C000
     \ room's body (its packed room, monsters and bands), then the graphics
     \ groups the bodies share. rooms.6502's room_load finds them.
 .records
+    ASSERT records = mailbox_end
     INCBIN "data/records.bin"
 .data_end
     PRINT "sideways data &8000-&", ~data_end, " (", &C000 - data_end, " bytes free)"
 ENDSECTION
+ELSE
+\ The streaming edition keeps CE2DATA's mailbox in main RAM (memory.6502).
+SECTION MailboxRAM, org = MB_STREAM, guard = screen, virtual = TRUE
+.data_magic
+    EQUS DATA_MAGIC, build_stamp
+    INCLUDE "state.6502"
+ENDSECTION
+ENDIF
+\ Where the records start in CE2DATA (the same in both editions).
+REC_BASE = mailbox_end - data_magic
 
-SECTION Loader, org = &1900, load = &FFFF1900, exec = &FFFF0000 + loader, filename = "CE2"
+IF DEFINED(STREAM)
+    LOADER_NAME = "CE2S"
+    CODE_TOP = MB_STREAM
+ELSE
+    LOADER_NAME = "CE2"
+    CODE_TOP = screen
+ENDIF
+SECTION Loader, org = &1900, load = &FFFF1900, exec = &FFFF0000 + loader, filename = LOADER_NAME
 .payload
-    SECTION Code, org = &0E00, guard = screen
+    SECTION Code, org = &0E00, guard = CODE_TOP
     ZA_POOL &00..ZP_FIXED-1    ; ZP_FIXED-&8E: the game's permanent state (memory.6502)
 
     \ The game starts in the loader (startup.6502), which is discarded.
 .code_start
+IF DEFINED(STREAM)
+\ A sector as it is read, before fetch (disc.6502) takes what it wants:
+\ page-aligned, as the NMI routine counts a page.
+.stage SKIP 256
+    ASSERT LO(stage) = 0
+ENDIF
     INCLUDE "system.6502"
     INCLUDE "irq.6502"
     INCLUDE "screen.6502"
@@ -90,6 +121,9 @@ SECTION Loader, org = &1900, load = &FFFF1900, exec = &FFFF0000 + loader, filena
     INCLUDE "sound.6502"
     INCLUDE "handoff.6502"
     INCLUDE "game.6502"
+IF DEFINED(STREAM)
+    INCLUDE "disc.6502"
+ENDIF
 IF DEFINED(VIEWER)
     INCLUDE "viewer.6502"
 ENDIF
@@ -106,6 +140,10 @@ ENDIF
 \ at the room's graphics groups, and the rest at nothing.
 .sprite_frames SKIP 2 * 152
     \ Harry's frames, and the tile font.
+IF DEFINED(STREAM)
+\ The room's body and graphics groups, read from the disc (rooms.6502).
+.room_buf SKIP ROOM_MAX
+ENDIF
 .harry_gfx
     INCBIN "data/harry.bin"
 .tiles
@@ -148,10 +186,14 @@ ENDMACRO
     INCBIN "data/objgfx.bin"
 
     .code_end
-    PRINT "code &", ~code_start, "-&", ~code_end, " (", screen - code_end, " bytes free)"
+    PRINT "code &", ~code_start, "-&", ~code_end, " (", CODE_TOP - code_end, " bytes free)"
     ENDSECTION
 
     \ Constant tables for the OS's pages 1-3.
+IF DEFINED(STREAM)
+    \ (Above where stream_init puts the mailbox back over the loaded file.)
+    ASSERT P% >= MB_STREAM + REC_BASE
+ENDIF
     INCLUDE "pages.6502"
 .payload_end
 

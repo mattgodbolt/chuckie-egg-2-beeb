@@ -1214,3 +1214,36 @@ gathers any number of one ingredient (and makes jumps lower).
   it, Harry dying in each over and over: nothing missing (and the trap
   fires when the pointers are cleared by hand). The screens over 95 rooms
   are the same as the build before, moving and idle.
+
+### Step 2: CE2S, the streaming edition
+
+- One source, two assemblies: `-D STREAM=1` makes CE2S, the game without
+  the bank, with `src/disc.6502` (the prototype's reader, a blocking
+  `disc_read` through a page-aligned `stage`) and a 1,021-byte `room_buf`
+  for a room's body and groups. Each disc is now both assemblies joined
+  by `tools/ssdmerge.py`; the stamp is the same in both, so the records
+  sit at the same offset in CE2DATA for both.
+- The mailbox, with no bank: CE2DATA's first 265 bytes at `MB_STREAM`,
+  the top of main RAM. CE2S loads over it, so MENU leaves a copy at
+  `&7600` for the loader to put back; after a reset or a BREAK MENU finds
+  it where the game kept it, or starts it from CE2DATA's own.
+- MENU reads the catalogue (OSWORD &7F) for CE2DATA's first sector and
+  OSBYTE 0 for the controller, both into the mailbox for the game.
+- The first run walked right and hung. The stack held a BRK at `&3000`,
+  in the middle of `machines`, whose byte was 0 from the start: the NMI
+  routine went into place armed, and the 8271's set-up commands' own
+  NMIs stored through it, at the template's `STA &3000`. The prototype
+  disarmed it after the copy; the port had dropped that line. The room
+  checks had passed regardless: the viewer never runs `machines`.
+- `make check STREAM=1` builds the streaming discs into `build/stream`
+  (MENU built with `PLAY_STREAM` always runs CE2S) and `tools/beeb.mjs`
+  points every tool there (`CE2_STREAM`). It passes on the B and the
+  Master (the 1770): 120 rooms read from the disc, the 22 scenarios pass
+  for pass against the original, the front end, BREAK in play, sound.
+  CI runs both editions on both machines.
+- Found on the way: `make` had been leaving a stale `build/symbols.json`
+  since the first change in this step (the rule wrote `ce2.json`).
+- Room changes wait for the disc: 0.3-2.2s in jsbeeb for the rooms
+  `roomtime.mjs` jumps between, against 0.17-0.31s with sideways RAM.
+  Most of it is missed sectors: one read a command, the next sector gone
+  by the time the copy is done.

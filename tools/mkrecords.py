@@ -191,6 +191,7 @@ def main():
         for i, p in ptr.items():
             assert unpack(records, p) == unpack(sprites, frame_offs[i]), (r, i)
 
+    room_max = max(len(bodies[r - 1]) + sum(len(group_blobs[g]) for g in room_groups[r]) for r in range(1, 121))
     with open(f"{DATA}/records.bin", "wb") as f:
         f.write(records)
     with open(f"{DATA}/harry.bin", "wb") as f:
@@ -212,12 +213,16 @@ def main():
         "",
         f"GROUPS = {len(names)}",
         "\\ Each graphics group's offset from records (its monster graphic's",
-        "\\ base frame, or the machine).",
+        "\\ base frame, or the machine), then the records' end.",
         ".group_lo",
     ] + [f"    EQUB LO(&{a:04X})   \\ {i:2d}: {label(g)}" for i, (g, a) in enumerate(zip(names, group_at))] + [
+        f"    EQUB LO(&{len(records):04X})   \\ (the end, for the last's length)",
         ".group_hi",
-    ] + [f"    EQUB HI(&{a:04X})" for a in group_at] + [
+    ] + [f"    EQUB HI(&{a:04X})" for a in group_at + [len(records)]] + [
         f"RECORDS_LEN = {len(records)}",
+        "\\ The most a room needs, its body and its groups (the streaming",
+        "\\ edition's room buffer).",
+        f"ROOM_MAX = {room_max}",
     ]
     with open(f"{DATA}/records.6502", "w") as f:
         f.write("\n".join(lines) + "\n")

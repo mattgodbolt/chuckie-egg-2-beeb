@@ -30,7 +30,16 @@ make run        # boot it in jsbeeb, screenshot to shots/run.png
 make fetch      # download the original into original/ (not committed)
 make zx         # load the tape into build/ce2.z80
 make venv       # .venv with SkoolKit and Pillow (needs uv)
+make check STREAM=1   # the streaming edition (CE2S, no sideways RAM)
 ```
+
+Two editions (`docs/streaming.md`): CE2 with sideways RAM, and CE2S
+(`-D STREAM=1`), which reads the rooms' records from CE2DATA with its own
+8271/1770 reader. Every disc is both assemblies of `src/main.6502`,
+joined by `tools/ssdmerge.py`. `STREAM=1` builds discs into
+`build/stream` whose MENU always runs CE2S, and `tools/beeb.mjs` reads
+`build/X` as `build/stream/X` when `CE2_STREAM` is set (the Makefile sets
+it), so every tool tests that edition.
 
 Baron 0.5.1 is expected at `../baron/build/src/baron` or on the PATH. CI
 (`.github/workflows/check.yml`) builds it at the tag in `BARON_VERSION` and

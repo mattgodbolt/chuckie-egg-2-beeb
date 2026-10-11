@@ -49,6 +49,15 @@ BUILD   := $(shell date -u '+%Y-%m-%d %H:%M UTC') $(shell git rev-parse --short 
 
 all: $(TARGET) $(TEST)
 
+# The stamp isn't a file, so a BUILD= given on the command line (to measure
+# with a fixed stamp, say) is noted here, and the discs rebuild when it
+# changes, either way: without this, `make BUILD=X` then `make` kept the
+# discs stamped X.
+STAMP_KIND := $(if $(filter command line,$(origin BUILD)),$(BUILD),default)
+$(OUT)/stamp: FORCE | $(OUT)
+	@echo '$(STAMP_KIND)' | cmp -s - $@ || echo '$(STAMP_KIND)' > $@
+FORCE:
+
 # Every disc holds both editions (docs/streaming.md): two assemblies of
 # src/main.6502 with the same stamp, the release files' (MENU, CE2,
 # CE2DATA) and the streaming edition's CE2S, joined by tools/ssdmerge.py.
@@ -63,7 +72,7 @@ define editions
 endef
 
 # The symbol dump is how the test tools find the game's variables.
-$(TARGET): $(SOURCES) | $(OUT)
+$(TARGET): $(SOURCES) $(OUT)/stamp | $(OUT)
 	@python3 tools/lint_labels.py > /dev/null || python3 tools/lint_labels.py
 	$(call editions,$(TARGET),,$(BUILD),-v -log0 $(OUT)/listing.txt)
 	cp $(TARGET:.ssd=.json) $(SYMBOLS)
@@ -91,7 +100,7 @@ fuzz: $(TEST) build/ce2.z80 build/rooms/room_120.bin
 
 # The tests' disc: MENU built with -D DIRECT=1 goes straight into a game,
 # so the tools reach the main loop without the front end.
-$(TEST): $(SOURCES) | $(OUT)
+$(TEST): $(SOURCES) $(OUT)/stamp | $(OUT)
 	$(call editions,$(TEST),-D DIRECT=1,$(BUILD) test)
 
 passes: $(TEST) build/ce2.z80
@@ -100,7 +109,7 @@ passes: $(TEST) build/ce2.z80
 # The room viewer: the same program with -D VIEWER=1, which steps through
 # the rooms instead of playing.
 VIEWER = $(OUT)/viewer.ssd
-$(VIEWER): $(SOURCES) | $(OUT)
+$(VIEWER): $(SOURCES) $(OUT)/stamp | $(OUT)
 	$(call editions,$(VIEWER),-D VIEWER=1,$(BUILD) viewer)
 
 rooms: $(VIEWER) build/rooms/room_120.bin

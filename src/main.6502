@@ -59,21 +59,11 @@ SECTION Data, org = &8000, load = &FFFF3000, filename = "CE2DATA", guard = &C000
 .data_magic
     EQUS DATA_MAGIC, build_stamp    ; MENU loads it again if the build differs
     INCLUDE "state.6502"
-    INCLUDE "bands.6502"
-    INCLUDE "data/bands.6502"
-    INCLUDE "data/rooms.6502"       ; the palettes (tools/mkrooms.py)
-    \ The rooms, packed by tools/packrooms.py (decision 5).
-.packed_rooms
-    INCBIN "data/packed.bin"
-    INCLUDE "data/packed.6502"
-    \ The original's sprites: Harry, monsters, truck, train, lifts.
-.sprites
-    INCBIN "data/sprites.bin"
-    \ The tile font: constant, so it needn't take main RAM, where every byte
-    \ is wanted for code (the bank is always paged in: reading it here costs
-    \ nothing).
-.tiles
-    INCBIN "data/tiles.bin"
+    \ The rooms and the sprites as records (tools/mkrecords.py): each
+    \ room's body (its packed room, monsters and bands), then the graphics
+    \ groups the bodies share. rooms.6502's room_load finds them.
+.records
+    INCBIN "data/records.bin"
 .data_end
     PRINT "sideways data &8000-&", ~data_end, " (", &C000 - data_end, " bytes free)"
 ENDSECTION
@@ -104,10 +94,22 @@ IF DEFINED(VIEWER)
     INCLUDE "viewer.6502"
 ENDIF
 
-    \ Data from the original (tools/mkgfx.py, tools/mkobjects.py).
-    INCLUDE "data/gfx.6502"
-.monster_table
-    INCBIN "data/monsters.bin"
+    \ Data from the original (tools/mkrecords.py, tools/mkobjects.py,
+    \ tools/mkrooms.py, tools/packrooms.py): what every room needs.
+    INCLUDE "bands.6502"
+    INCLUDE "data/records.6502"
+    INCLUDE "data/bands.6502"
+    INCLUDE "data/rooms.6502"       ; the palettes
+    INCLUDE "data/packed.6502"      ; the unpacker's tables
+\ The sprite frames' headers (&91B7): monsters, truck, train, lifts. A
+\ monster type's base frame indexes this. room_load points the entries
+\ at the room's graphics groups, and the rest at nothing.
+.sprite_frames SKIP 2 * 152
+    \ Harry's frames, and the tile font.
+.harry_gfx
+    INCBIN "data/harry.bin"
+.tiles
+    INCBIN "data/tiles.bin"
     INCLUDE "data/objects.6502"
 .things
     INCBIN "data/things.bin"
@@ -139,7 +141,6 @@ ENDMACRO
 \ T1's latch values (irq.6502): from the status bar's split to band 1, and
 \ from band 1 to band 2; &FFFF (past the next VSync) where there's no band.
 .band_t1    SKIP 4
-.sb_room    SKIP 1              ; setup_bands' room
 \ The interrupt reads band_ula - 4 + i,X for X = 4 or 8: within one page,
 \ so no read takes the extra cycle that would move the splits.
     ASSERT HI(band_ula - 4) = HI(band_ula + 7)

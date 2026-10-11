@@ -1,7 +1,7 @@
 \ ***************************************************************************
-\ Palette bands (decision 15), in the sideways bank: below up to two splits
-\ between playfield rows, logical colour 2 shows another physical colour
-\ and the Spectrum colours map onto the four afresh. The interrupt
+\ Palette bands (decision 15): below up to two splits between playfield
+\ rows, logical colour 2 shows another physical colour and the Spectrum
+\ colours map onto the four afresh. The interrupt
 \ (irq.6502) changes logical 2's four ULA entries in the horizontal blank
 \ before each split row; the drawing looks colours up by the cell's row.
 \ ***************************************************************************
@@ -9,30 +9,30 @@
 \ This room's bands, set by setup_bands when the room is drawn, are in
 \ LowState and the scratch zero page (memory.6502).
 
-\ The bands of room A (set_room_palette has filled band_cmaps' band 0).
+\ The room's bands, from its body (rooms.6502's room_load; set_room_palette
+\ has filled band_cmaps' band 0).
 .setup_bands
 {
-    STA sb_room
     LDA #0 : STA band_count
     LDX #31
 .clear
     STA band_off,X
     DEX : BPL clear
-    LDA #LO(room_bands) : STA sb_p
-    LDA #HI(room_bands) : STA sb_p+1
+    LDY #1 : LDA (rb),Y
+    CLC : ADC rb : STA sb_p
+    LDA rb+1 : ADC #0 : STA sb_p+1
 .record
     LDY #0 : LDA (sb_p),Y : BEQ done
-    CMP sb_room : BNE next
     \ A split: band k = band_count + 1 from its row down.
     LDX band_count
-    INY : LDA (sb_p),Y : LSR A : LSR A : LSR A : STA band_rows,X : TAY
+    LSR A : LSR A : LSR A : STA band_rows,X : TAY
     INX : TXA : ASL A : ASL A : ASL A           ; 8k
 .rows
     STA band_off,Y
     INY : CPY #32 : BNE rows
     \ Logical 2's entries: &80, &90, &D0, &C0 with the colour (EOR 7).
     LDA band_count : ASL A : ASL A : TAX
-    LDY #1 : LDA (sb_p),Y : AND #7 : EOR #7
+    LDY #0 : LDA (sb_p),Y : AND #7 : EOR #7
     ORA #&80 : STA band_ula,X
     ORA #&10 : STA band_ula+1,X
     ORA #&40 : STA band_ula+2,X
@@ -40,12 +40,11 @@
     \ The map, two bits a colour, from band_maps.
     INC band_count
     LDA band_count : ASL A : ASL A : ASL A : TAX     ; 8k
-    LDY #2 : LDA (sb_p),Y : ASL A : TAY
+    LDY #1 : LDA (sb_p),Y : ASL A : TAY
     LDA band_maps+1,Y : PHA
     LDA band_maps,Y : JSR sb_map_a
     PLA : JSR sb_map_a
-.next
-    CLC : LDA sb_p : ADC #3 : STA sb_p
+    CLC : LDA sb_p : ADC #2 : STA sb_p
     BCC record
     INC sb_p+1 : JMP record
 .done

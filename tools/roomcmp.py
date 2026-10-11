@@ -7,7 +7,8 @@ the original's (build/rooms, from tools/zxrooms.py).
 The three maps must match byte for byte. The screen (rows 2-23; the status
 bar isn't drawn yet) must show every Spectrum pixel in the logical colour
 the room's palette maps its colour to (src/data/rooms.6502), or the map of
-the band the row is in (src/data/bands.6502, decision 15). Text cells
+the band the row is in (src/data/roombands.txt and the maps in
+src/data/bands.6502, decision 15). Text cells
 (tile map bit 7) are expected in the MOS font instead (decision 4).
 """
 import re
@@ -29,13 +30,16 @@ def palettes():
 
 
 def bands():
-    """{room: [(first row, cmap)]} from src/data/bands.6502 (decision 15)."""
+    """{room: [(first row, cmap)]} from src/data/roombands.txt and
+    bands.6502's maps (decision 15)."""
     src = open("src/data/bands.6502").read()
     maps = {int(m.group(3)): cmap_of(int(m.group(1), 16), int(m.group(2), 16))
             for m in re.finditer(r"EQUB &(..), &(..)\s+\\\s+(\d+)", src)}
     out = {}
-    for m in re.finditer(r"EQUB (\d+), (\d+) \* 8 \+ (\d+), (\d+)", src):
-        out.setdefault(int(m.group(1)), []).append((int(m.group(2)), maps[int(m.group(4))]))
+    for line in open("src/data/roombands.txt").read().split("\n"):
+        if line:
+            r, row, colour, cmap = map(int, line.split())
+            out.setdefault(r, []).append((row, maps[cmap]))
     return out
 
 

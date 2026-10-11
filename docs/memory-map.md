@@ -26,7 +26,7 @@ build output (`code &0E00-&xxxx (N bytes free)`), never from this file.
 | `&0D9F-&0DFF` | 97 | the OS's, untouched: a Master's extended vectors, which its soft BREAK reads (decision 22) |
 | `&0E00-&4FFF` | 16,896 | code and data (copied down from `&1900`) |
 | `&5000-&7FFF` | 12,288 | screen: 256 x 192, MODE 1 pixels (decision 1) |
-| `&8000-&BFFF` | 16,384 | sideways RAM: the mailbox, the palettes and bands, packed rooms, sprites, the tile font (decisions 8, 13, 21) |
+| `&8000-&BFFF` | 16,384 | sideways RAM: the mailbox and the records, each room's body (packed room, monsters, bands) and the graphics groups they share (decisions 8, 13, 28) |
 | `&C000-&C2FF` | 768 | OS 1.20's font, read in place for text (decisions 4, 14) |
 
 Between games (decision 13): `MENU` runs from `&1900` (below `&3000`) in MODE 7 (screen

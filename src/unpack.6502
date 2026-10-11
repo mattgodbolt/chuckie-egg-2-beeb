@@ -121,22 +121,16 @@ MTF_TYPE = 6
     JMP emit
 }
 
-\ bp = room A's (1-120) bit stream, which follows rooms 1 to A - 1's.
+\ bp = the room's bit stream, in its body (rooms.6502's room_load).
 .room_stream
 {
-    TAX
-    LDA #LO(packed_rooms) : STA bp
-    LDA #HI(packed_rooms) : STA bp+1
-.skip
-    DEX : BEQ found
-    LDA packed_lengths-1,X : CLC : ADC bp : STA bp
-    BCC skip
-    INC bp+1 : BNE skip         ; (always)
-.found
+    LDY #2 : LDA (rb),Y
+    CLC : ADC rb : STA bp
+    LDA rb+1 : ADC #0 : STA bp+1
     RTS
 }
 
-\ Start unpacking room A (1-120): its first record is the background.
+\ Start unpacking the room: its first record is the background.
 .unpack_room
 {
     JSR room_stream

@@ -93,6 +93,7 @@ SECTION ZeroPage, org = ZP_FIXED, guard = DATA_BANK_ZP, virtual = TRUE
 \ Frames since start-up: counted by the interrupt (irq.6502), read by every
 \ wait for VSync.
 .vsyncs     SKIP 1
+.rb         SKIP 2          ; the room's body in the records (rooms.6502's room_load)
 ENDSECTION
 
 \ The game's other state, in the DFS's NMI page (free once the disc is done).
@@ -126,6 +127,11 @@ SECTION LowState, org = &0D00, guard = &0D9F, virtual = TRUE
 .lives      SKIP 1          ; (&A3FA)
 .carrying_name SKIP 1       ; the carried thing's name in the status bar
 .cheat      SKIP 1          ; the developers' cheat byte (&A3FC, decision 27)
+\ Which of the original's monster table entries are on (monsters.6502):
+\ 1 to mon_limit, and the sitting dog (entry 0) in place of the running
+\ one (entry 1) once dog_sat.
+.mon_limit  SKIP 1          ; (egg_init: min(130 + 25 * egg, 255))
+.dog_sat    SKIP 1
 ENDSECTION
 \ The three 32 x 24 maps the room drawer fills, one byte a cell, indexed by
 \ cell = row * 32 + column, as the original's at &5D00, &6000 and &6300.
@@ -189,7 +195,6 @@ SECTION Scratch, org = &90, guard = &FC, virtual = TRUE
 .drop_row      SKIP 1
 .drop_col      SKIP 1
 .drop_g        SKIP 1
-.ei_n          SKIP 1
 \ (machines.6502)
 .ds_ink        SKIP 1
 .ds_rows       SKIP 1

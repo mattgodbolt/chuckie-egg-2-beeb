@@ -177,7 +177,7 @@ KIND_FIXED = &40            ; kind bit 6 (with bit 7): a machine part
 .power_restart
     EQUW 21 * 32 + 30
     EQUB 0, 0, 0, 0, 4, 0, 1, 0, 0  ; yf xf dx dy face mom state cnt fall
-    EQUW sprites                    ; frame 0 (&DFA4 - 2)
+    EQUW harry_gfx                  ; frame 0 (&DFA4 - 2)
     EQUB 115
 
 \ Fixed things (&95F0): the power lever and the LIFT sign.
@@ -619,16 +619,8 @@ KIND_FIXED = &40            ; kind bit 6 (with bit 7): a machine part
     LDA #&82
 .add
     CLC : ADC #&19 : DEX : BNE add
-    STA ei_n                    ; the last entry on
-    LDX #0
-.monsters
-    LDA mon_room,X : AND #&7F
-    CPX ei_n : BEQ mset : BCC mset
-    ORA #&80
-.mset
-    STA mon_room,X
-    INX : BNE monsters
-    LDA mon_room : ORA #&80 : STA mon_room   ; and entry 0 (the sitting dog) off
+    STA mon_limit               ; the last entry on (setup_monsters)
+    LDA #0 : STA dog_sat        ; and the running dog, not the sitting one
     LDA #4 : STA truck_strip    ; (&9AF5)
     \ This egg's toy (&9B08): motorbike, car, boat, jet, then again.
     LDA egg : SEC : SBC #1 : AND #3 : TAX

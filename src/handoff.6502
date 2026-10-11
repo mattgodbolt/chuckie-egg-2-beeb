@@ -5,7 +5,7 @@
 
 \ The parts of memory that make up a game in progress, copied to STATE
 \ on the way out and back on a resume: the fixed zero page, LowState, the
-\ thing and monster tables, the visit flags and the thing types. (Not
+\ thing table, the visit flags and the thing types. (Not
 \ swapped, though one routine would serve both ways: the soft BREAK after a
 \ game over failed to find the DFS with load-time bytes put back in them.)
 .state_regions
@@ -15,7 +15,6 @@
     EQUW things + &100 : EQUB 0
     EQUW things + &200 : EQUB 0
     EQUW things + &300 : EQUB 0
-    EQUW monster_table : EQUB 0
     EQUW visits : EQUB 121
     EQUW thing_types : EQUB 201
 .state_regions_end

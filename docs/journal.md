@@ -1190,3 +1190,27 @@ gathers any number of one ingredient (and makes jumps lower).
 - The plan is `docs/streaming.md`; `docs/stock-b.md`'s OSWORD &7F plan is
   superseded. Step 1 needs no disc: the records, read by the sideways
   edition.
+
+### Step 1: the records
+
+- `tools/mkrecords.py` splits the rooms and the sprites into records
+  (decision 28): a body per room, 35-196 bytes (its packed room, monster
+  entries, bands, which graphics groups), then 30 groups, the biggest the
+  dinosaur's 963 bytes. A mirror image's stub points at its twin relative
+  to itself, so a group works wherever it lands; only `sprite_frames`
+  needs pointing at it. The script checks every room's installed frames
+  against `sprites.bin` at the original's pointers.
+- mkrooms.py and packrooms.py now write the per-room parts (bands,
+  lengths) as text for it; both still regenerate byte for byte. roomcmp
+  read the bands from `bands.6502`, which no longer has them: the first
+  `make check` failed 21 rooms' colours on a correct screen until it read
+  `roombands.txt`.
+- The monster table goes: an entry's room is in the body, and its on/off
+  bit, which egg_init and the dog's sitting rewrite, is now a rule
+  (`mon_limit`, `dog_sat`). Saves are tied to the build, so their format
+  can change.
+- The tests' build clears `sprite_frames` on entering a room and traps a
+  frame drawn with no pointer. Every room's monsters ran 8 seconds with
+  it, Harry dying in each over and over: nothing missing (and the trap
+  fires when the pointers are cleared by hand). The screens over 95 rooms
+  are the same as the build before, moving and idle.

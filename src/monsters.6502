@@ -18,11 +18,7 @@ MF_BOUNCE  = &04            ; knocks Harry back
 MF_KILL    = &02            ; kills Harry
 MF_STATIC  = &01            ; never moves
 
-mon_room  = monster_table           ; bit 7 set: disabled
-mon_row   = monster_table + &100
-mon_col   = monster_table + &200
-mon_type  = monster_table + &300
-\ (mon_types, 4 bytes a type: ink, base, flags, speed, is in page 3.)
+\ (mon_types, 4 bytes a type: ink, base, flags, speed.)
 
 \ The RNG (&918A): 32 bits, big-endian, shifted left with bit 30 EOR bit
 \ 27 coming in at the bottom; returns the new top byte. Called once for
@@ -37,30 +33,47 @@ mon_type  = monster_table + &300
     RTS
 }
 
-\ Set up the room's monsters (&8B2A): scan every table entry, 1-255 then 0.
+\ Set up the room's monsters (&8B2A). The original scans its monster
+\ table, entries 1-255 then 0, for this room's; the room's body has them in
+\ that order (tools/mkrecords.py): entry, row, column, type. An entry is on
+\ from 1 to mon_limit; the sitting dog, 0, is on in place of the running
+\ one, 1, once dog_sat (as egg_init and respawn set the original's bit 7s).
 .setup_monsters
 {
+    ZA_AUTO1 left
     LDA #0 : STA m_count : STA dl_count
-    LDY #0
+    LDY #0 : LDA (rb),Y : TAY
+    LDA (rb),Y : STA left
 .scan
-    INY
-    LDA mon_room,Y : CMP room : BNE next
-    LDX m_count : CPX #NM : BCS next
-    STY m_entry
+    DEC left : BMI done
+    INY : STY m_entry
+    LDA (rb),Y : BEQ dog_sits
+    CMP #1 : BEQ dog_runs
+    CMP mon_limit : BEQ on : BCC on
+.off
+    LDA m_entry : CLC : ADC #3 : TAY
+    JMP scan
+.dog_sits
+    LDA dog_sat : BEQ off
+    BNE on                      ; (always)
+.dog_runs
+    LDA dog_sat : BNE off
+.on
+    LDX m_count : CPX #NM : BCS off
     JSR setup_monster
-    LDY m_entry
     INC m_count
-.next
-    CPY #0 : BNE scan
+    JMP off
+.done
     RTS
 }
 
-\ Monster X from table entry Y (&8B5D).
+\ Monster X from the entry at rb + m_entry (&8B5D).
 .setup_monster
 {
-    LDA mon_row,Y : STA m_srow,X
-    LDA mon_col,Y : STA m_scol,X
-    LDA mon_type,Y : ASL A : ASL A : TAY
+    LDY m_entry
+    INY : LDA (rb),Y : STA m_srow,X
+    INY : LDA (rb),Y : STA m_scol,X
+    INY : LDA (rb),Y : ASL A : ASL A : TAY
     LDA mon_types,Y : STA m_ink,X
     LDA mon_types+1,Y : STA m_base,X
     LDA mon_types+2,Y : STA m_flags,X
@@ -320,8 +333,7 @@ ZA_AUTO2 mframe
     \ The dog sits, for good: entry 0 (sitting) replaces entry 1.
     LDA #&0C : STA m_base,X
     LDA #MF_STATIC : STA m_flags,X
-    LDA mon_room : AND #&7F : STA mon_room
-    LDA mon_room+1 : ORA #&80 : STA mon_room+1
+    LDA #1 : STA dog_sat
     \ And the bone is gone, wherever it is: its footprint toggled in this
     \ room's map at its row and column (a stray &40 if it's elsewhere, as
     \ in the original) and its image erased here.

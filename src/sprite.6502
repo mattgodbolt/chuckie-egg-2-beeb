@@ -370,8 +370,18 @@ ZA_AUTO1 sp_yl              ; (erase_image's Y, kept through a look-up)
 {
     ASL A : TAY : BCS high
     LDX sprite_frames+1,Y : LDA sprite_frames,Y
-    RTS
+    JMP got
 .high
     LDX sprite_frames+257,Y : LDA sprite_frames+256,Y
+.got
+IF DEFINED(DIRECT)
+    \ The tests' build: a frame no group of the room's gave (rooms.6502's
+    \ room_load) stops the game here, where the tests see it.
+    CPX #0 : BEQ frame_missing
+ENDIF
     RTS
 }
+IF DEFINED(DIRECT)
+.frame_missing
+    JMP frame_missing
+ENDIF

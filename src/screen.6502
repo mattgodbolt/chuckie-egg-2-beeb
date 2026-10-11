@@ -13,10 +13,9 @@ ZA_AUTO2 glyph              ; the tile's 8 bytes
 ZA_AUTO1 paper              ; a byte of four paper pixels
 ZA_AUTO1 diff               ; ink pixels EOR paper pixels
 
-\ Set the palette and colour maps for room A (1-120).
+\ Set the palette and colour maps for the room (rooms.6502's room_load).
 .set_room_palette
 {
-    PHA
     \ sb_p = room_palettes + 4 * the palette's number, which is in bits 3-7
     \ of the room's packed first byte (tools/packrooms.py), where setup_bands'
     \ map reader (bands.6502) can read the colour map too.
@@ -38,7 +37,7 @@ ZA_AUTO1 diff               ; ink pixels EOR paper pixels
     LDX #0
     LDY #2 : JSR setup_bands.sb_map
     LDY #3 : JSR setup_bands.sb_map
-    PLA : JMP setup_bands
+    JMP setup_bands
 }
 
 \ Logical colour X (0-3) shows physical colour A in the room: fill its four

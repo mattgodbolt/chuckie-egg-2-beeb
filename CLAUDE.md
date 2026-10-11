@@ -95,8 +95,10 @@ handoff, the front end or anything paged.
   being made went unseen because no scenario reached it). `--start`,
   `--power`, `--factory` and `--carry` set a scene up on both machines.
 - `tools/mkrooms.py`, `tools/packrooms.py` and `tools/mkgfx.py` regenerate
-  `src/data/` from the original. The build never runs them; their output
-  is committed.
+  `src/data/` from the original, and `tools/mkrecords.py` then splits the
+  rooms and sprites into per-room records (`records.bin`: each room's
+  body, then the graphics groups they share). The build never runs them;
+  their output is committed.
 - Loading takes 4.6s: tools run to a symbol after booting
   (`startBeeb({bootUntil})`, `play.mjs --until`), never a guessed wait.
   The same for any wait in a test: run to the label that means "done"

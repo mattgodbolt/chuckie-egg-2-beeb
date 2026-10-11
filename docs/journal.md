@@ -1441,4 +1441,9 @@ sliding off the bottom of a room on a slope leaves it at 255 (a new
 scenario, `slope-slide-off`, differs from the original at pass 22 without
 the fix); and with a short build stamp CE2S never started, as the
 mailbox's restore wrapped and overwrote the loader (fixed in 2d7631d).
+- The data agent's patch, redone on the merged code (decision 37): the
+  frame table as runs, and the monster types, palettes and band maps in
+  CE2S's records. CE2S's cache: 3,534 bytes, from 1,371 when the fleet
+  began. A trap on the way: the build stamp isn't a make dependency, so
+  `make BUILD=...` after another stamp reuses the old discs (delete them).
 

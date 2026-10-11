@@ -348,19 +348,28 @@ ZA_AUTO1 sp_yl              ; (erase_image's Y, kept through a look-up)
     RTS
 }
 
-\ Sprite frame A's header: low byte in A, high in X. (The table has 152
-\ entries: the original's &8BDE carries into its high byte for frame
-\ numbers from &80; here the two halves are indexed by the number.)
+\ Sprite frame A's header: low byte in A, high in X (0 if none of the
+\ room's groups has it). The original's table (&91B7) has all 152; here
+\ the room's are runs of consecutive numbers, a group's each (rooms.6502's
+\ room_load).
 .sprite_frame
 {
-    TAY
-    LDX sprite_hi,Y : LDA sprite_lo,Y
+    LDY rg_count
+.try
+    DEY : BMI none
+    CMP rg_first,Y : BCC try
+    CMP rg_end,Y : BCS try
+    ADC rg_base,Y : TAY             ; (carry clear)
+    LDX fr_hi,Y : LDA fr_lo,Y
+.got
 IF DEFINED(DIRECT)
     \ The tests' build: a frame no group of the room's gave (rooms.6502's
     \ room_load) stops the game here, where the tests see it.
     CPX #0 : BEQ frame_missing
 ENDIF
     RTS
+.none
+    LDX #0 : BEQ got                ; (always)
 }
 IF DEFINED(DIRECT)
 .frame_missing

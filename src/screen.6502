@@ -38,9 +38,16 @@ NEXT
     \ sb_p = room_palettes + 4 * the palette's number, which is in bits 3-7
     \ of the room's packed first byte (tools/packrooms.py), where setup_bands'
     \ map reader (bands.6502) can read the colour map too.
+IF DEFINED(STREAM)
+    \ (The streaming edition's body has the palette itself, just before the
+    \ packed room.)
+    LDA bp : SEC : SBC #4 : STA sb_p
+    LDA bp+1 : SBC #0 : STA sb_p+1
+ELSE
     LDY #0 : LDA (bp),Y : AND #&F8 : LSR A     ; (carry clear; bp: room_load)
     ADC #LO(room_palettes) : STA sb_p
     LDA #HI(room_palettes) : ADC #0 : STA sb_p+1
+ENDIF
     \ Logical colours 0-3, a nibble each, low nibble first.
     LDX #3
 .logical

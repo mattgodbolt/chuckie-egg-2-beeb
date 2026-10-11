@@ -137,15 +137,21 @@ ENDIF
     \ tools/mkrooms.py, tools/packrooms.py): what every room needs.
     INCLUDE "bands.6502"
     INCLUDE "data/records.6502"
+IF NOT(DEFINED(STREAM))             ; (the streaming edition's are in its bodies)
     INCLUDE "data/bands.6502"
     INCLUDE "data/rooms.6502"       ; the palettes
+ENDIF
     INCLUDE "data/packed.6502"      ; the unpacker's tables
-\ The sprite frames' headers (&91B7): monsters, truck, train, lifts. A
-\ monster type's base frame indexes this. room_load points the entries
-\ at the room's graphics groups, and the rest at nothing. (Low and high
-\ bytes apart, so that a frame number indexes both.)
-.sprite_lo SKIP 152
-.sprite_hi SKIP 152
+\ The room's sprite frames' headers (the original's &91B7 has all 152:
+\ monsters, truck, train, lifts): room_load notes each of its graphics
+\ groups' first frame number, end and place in fr_lo and fr_hi, for
+\ sprite.6502's sprite_frame.
+.rg_count   SKIP 1
+.rg_first   SKIP GROUPS_MAX
+.rg_end     SKIP GROUPS_MAX
+.rg_base    SKIP GROUPS_MAX
+.fr_lo      SKIP FRAMES_MAX
+.fr_hi      SKIP FRAMES_MAX
     \ Harry's frames, and the tile font.
 \ Where the parts of the room's body start, from rb (rooms.6502's
 \ room_load), and its fixed things' numbers, in order.
@@ -163,8 +169,10 @@ ENDIF
 .visited    SKIP 16             ; a bit a room, its visit bonus taken (status.6502)
 .thing_types                    ; (changed by each egg's toy: egg_init)
     INCBIN "data/thingtypes.bin"
+IF NOT(DEFINED(STREAM))             ; (the streaming edition's are in its bodies)
 .mon_types
     INCBIN "data/montypes.bin"
+ENDIF
 \ The life-lost tune (sound.6502). Each note: the SN76489's N (125000 / f,
 \ at its 4MHz clock), and its length in 4ms steps (measured from the
 \ original: frontend.md 7.3).

@@ -18,7 +18,9 @@ MF_BOUNCE  = &04            ; knocks Harry back
 MF_KILL    = &02            ; kills Harry
 MF_STATIC  = &01            ; never moves
 
-\ (mon_types, 4 bytes a type: ink, base, flags, speed.)
+\ (mon_types, 4 bytes a type: ink, base, flags, speed. The streaming
+\ edition's bodies have the type's four bytes in its place:
+\ tools/mkrecords.py.)
 
 \ The noise flag (&91B5): set while the train is drawn with the power on.
 \ The noise routine (&92E7) is called nine times a pass and, while the flag
@@ -67,6 +69,9 @@ MF_STATIC  = &01            ; never moves
     INC m_count
 .off
     LDY m_entry : INY : INY : INY
+IF DEFINED(STREAM)
+    INY : INY : INY                 ; (the type's four bytes, not its number)
+ENDIF
     BNE scan                    ; (always: the entry's type is in the body)
 .dog_sits
     LDA dog_sat : BEQ off
@@ -81,11 +86,18 @@ MF_STATIC  = &01            ; never moves
     LDY m_entry
     INY : LDA (rb),Y : STA m_srow,X
     INY : LDA (rb),Y : STA m_scol,X
+IF DEFINED(STREAM)
+    INY : LDA (rb),Y : STA m_ink,X
+    INY : LDA (rb),Y : STA m_base,X
+    INY : LDA (rb),Y : STA m_flags,X
+    INY : LDA (rb),Y : STA m_speed,X
+ELSE
     INY : LDA (rb),Y : ASL A : ASL A : TAY
     LDA mon_types,Y : STA m_ink,X
     LDA mon_types+1,Y : STA m_base,X
     LDA mon_types+2,Y : STA m_flags,X
     LDA mon_types+3,Y : STA m_speed,X
+ENDIF
     JSR m_to_start
     INX : TXA : DEX : STA m_tick,X          ; staggers the first moves
     LDA #0 : STA m_sub,X

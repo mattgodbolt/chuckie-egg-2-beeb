@@ -52,11 +52,14 @@ A group is the frames of one monster graphic (every frame its types can
 show: tools/stockb/roomsprites.py), or the truck's, the train's, a lift's,
 or the sitting dog's:
     +0      how many frames
-            then three bytes each: the frame's number in sprite_frames, its
-            header's offset from the group's start
+            the first frame's number (the original's &91B7 table's
+            index: a group's frames are numbered consecutively)
+            then two bytes each: the frame's header's offset from the
+            group's start
             then the frames, packed as sprites.bin has them (decision 26),
             a mirror image's stub re-pointed at its twin in the group
-Entering a room points sprite_frames at its groups' frames (rooms.6502).
+Entering a room notes its groups' frames, at most FRAMES_MAX of them
+from at most GROUPS_MAX groups, for sprite_frame (rooms.6502, sprite.6502).
 """
 import re
 import sys
@@ -71,6 +74,8 @@ LIFTS = {26: 0x96, 55: 0x96, 34: 0x97, 104: 0x97}  # pages.6502's lift_table; fr
 DOG_SITS, DINOSAUR_STOPS = 0x0C, 0x37 + 2           # monsters.6502's respawn
 NPORT = 0x29                # things 0-&28 are portable (objects.6502)
 FIXED_MAX = 9               # the most fixed things in a room (rooms.6502's room_fixed)
+LEN4_BIAS = 3               # room_len4 is a record's length in fours, less this
+GROUPS_MAX, FRAMES_MAX = 4, 24  # the most groups, and frames, a room has (main.6502)
 
 
 def read(name):
@@ -130,6 +135,10 @@ def main():
             r, row, colour, cmap = map(int, line.split())
             bands[r].append((row * 8 + colour, cmap))
     mon, types, sprites = read("monsters.bin"), read("montypes.bin"), read("sprites.bin")
+    # The streaming edition's bodies have their palette and bands' colour
+    # maps in place of their numbers (main RAM keeps neither table).
+    hexes = lambda name, label: [int(x, 16) for x in re.findall(r"&([0-9A-F]{2})", open(f"{DATA}/{name}").read().split(label)[1])]
+    palettes, band_maps = hexes("rooms.6502", ".room_palettes"), hexes("bands.6502", ".band_maps")
     things = read("things.bin")
     visits = read("visits.bin")
     assert all(v < 16 for v in visits)
@@ -174,15 +183,23 @@ def main():
         if r in LIFTS:
             gs.add("bar" if LIFTS[r] == 0x96 else "platform")
         room_groups[r] = sorted(number[g] for g in gs)
+        assert len(gs) <= GROUPS_MAX
+        assert sum(len(groups[g]) for g in gs) <= FRAMES_MAX
         assert len(entries[r]) <= 4
         mons = bytes([len(entries[r])] + [b for e in entries[r] for b in (e, mon[0x100 + e], mon[0x200 + e], mon[0x300 + e])])
+        # The streaming edition's: the type's four bytes in place of its
+        # number, so main RAM needn't keep mon_types (monsters.6502).
+        mons_s = bytes([len(entries[r])] + [b for e in entries[r] for b in (e, mon[0x100 + e], mon[0x200 + e])
+                                            + tuple(types[4 * mon[0x300 + e]:4 * mon[0x300 + e] + 4])])
         bnds = bytes([b for pair in bands[r] for b in pair] + [0])
+        bnds_s = bytes([b for first, m in bands[r] for b in (first, *band_maps[2 * m:2 * m + 2])] + [0])
         fixed = [x for x in range(NPORT, 256) if t_room[x] & 0x7F == r]
         assert len(fixed) <= FIXED_MAX
         fixd = bytes([b for x in fixed for b in (t_row[x], t_col[x], t_type[x])])
         stream = packed[start:start + lens[r - 1]]
+        palette = bytes(palettes[4 * (stream[0] >> 3):4 * (stream[0] >> 3) + 4])
         start += lens[r - 1]
-        bodies.append((bytes([exits(r) | visits[r] << 4]), mons + bnds + fixd + stream))
+        bodies.append((bytes([exits(r) | visits[r] << 4]), mons + bnds + fixd + stream, mons_s + bnds_s + fixd + palette + stream))
 
     # The groups' frames, each frame once (some are pointed at twice), in
     # sprites.bin's order, a mirror's twin brought along if the group lacks
@@ -190,12 +207,14 @@ def main():
     group_blobs = []
     for g in names:
         idx = sorted(groups[g])
+        # sprite_frame finds a frame by its group's first and how many.
+        assert idx == list(range(idx[0], idx[0] + len(idx))), g
         offs = sorted({frame_offs[i] for i in idx})
         for o in list(offs):
             if sprites[o + 1] & MIRROR and twin_of(sprites, o) not in offs:
                 offs.append(twin_of(sprites, o))
         offs.sort()
-        table = 1 + 3 * len(idx)
+        table = 2 + 2 * len(idx)
         where, pixels = {}, bytearray()
         for o in offs:
             where[o] = table + len(pixels)
@@ -205,12 +224,12 @@ def main():
                 p = where[o] - table
                 rel = (where[twin_of(sprites, o)] + 2 - where[o]) & 0xFFFF
                 pixels[p + 2:p + 4] = rel.to_bytes(2, "little")
-        blob = bytes([len(idx)]) + b"".join(bytes([i, where[frame_offs[i]] & 0xFF, where[frame_offs[i]] >> 8]) for i in idx) + pixels
+        blob = bytes([len(idx), idx[0]]) + b"".join(where[frame_offs[i]].to_bytes(2, "little") for i in idx) + pixels
         group_blobs.append(blob)
 
-    def body(r, refs):
-        first, rest = bodies[r - 1]
-        b = first + bytes([len(refs)] + refs) + rest
+    def body(r, refs, streaming=False):
+        first, rest, rest_s = bodies[r - 1]
+        b = first + bytes([len(refs)] + refs) + (rest_s if streaming else rest)
         assert len(b) < 256
         return b
     body_len = [len(body(r, room_groups[r])) for r in range(1, 121)]
@@ -222,12 +241,12 @@ def main():
     pad4 = lambda b: b + bytes(-len(b) % 4)
     roomrecs, room_at, room_len = b"", [], []
     for r in range(1, 121):
-        fours, at = [], (body_len[r - 1] + 3) // 4
+        fours, at = [], (len(body(r, room_groups[r], True)) + 3) // 4
         for g in room_groups[r]:
             fours.append(at)
             at += (len(group_blobs[g]) + 3) // 4
-        assert at <= 256
-        rec = pad4(body(r, fours)) + b"".join(pad4(group_blobs[g]) for g in room_groups[r])
+        assert LEN4_BIAS <= at <= 255 + LEN4_BIAS   # (room_len4, below)
+        rec = pad4(body(r, fours, True)) + b"".join(pad4(group_blobs[g]) for g in room_groups[r])
         sectors = (len(rec) + 255) // 256
         if len(roomrecs) // 256 % 10 + sectors > 10:
             roomrecs += bytes(-len(roomrecs) % 2560)
@@ -250,8 +269,8 @@ def main():
                 ref = blob[b + 2 + k]
                 base = group_at[ref] if blob is records else b + 4 * ref
                 for f in range(blob[base]):
-                    i, lo, hi = blob[base + 1 + 3 * f:base + 4 + 3 * f]
-                    ptr[i] = base + (lo | hi << 8)
+                    lo, hi = blob[base + 2 + 2 * f:base + 4 + 2 * f]
+                    ptr[blob[base + 1] + f] = base + (lo | hi << 8)
             need = set().union(*(groups[names[g]] for g in room_groups[r])) if room_groups[r] else set()
             assert set(ptr) == need, r
             for i, p in ptr.items():
@@ -283,11 +302,11 @@ def main():
         ".body_len",
     ] + ["    EQUB " + ", ".join(f"{n:3d}" for n in body_len[i:i + 12]) for i in range(0, 120, 12)] + [
         "ELSE",
-        "\\ Each room's record's length in roomrecs.bin, in fours, less one: room",
+        "\\ Each room's record's length in roomrecs.bin, in fours, less LEN4_BIAS: room",
         "\\ r's starts at the sector after rooms 1 to r - 1's, or the next track's",
         "\\ first if it wouldn't fit in what's left of this one (disc.6502).",
         ".room_len4",
-    ] + ["    EQUB " + ", ".join(f"{n // 4 - 1:3d}" for n in room_len[i:i + 12]) for i in range(0, 120, 12)] + [
+    ] + ["    EQUB " + ", ".join(f"{n // 4 - LEN4_BIAS:3d}" for n in room_len[i:i + 12]) for i in range(0, 120, 12)] + [
         "ENDIF",
         "",
         "IF NOT(DEFINED(STREAM))",
@@ -302,6 +321,9 @@ def main():
         f"ROOM_MAX = {room_max}",
         f"NPORT = &{NPORT:02X}       \\ things 0 to NPORT - 1 are portable",
         f"FIXED_MAX = {FIXED_MAX}",
+        f"GROUPS_MAX = {GROUPS_MAX}",
+        f"LEN4_BIAS = {LEN4_BIAS}",
+        f"FRAMES_MAX = {FRAMES_MAX}",
     ]
     with open(f"{DATA}/records.6502", "w") as f:
         f.write("\n".join(lines) + "\n")

@@ -16,24 +16,34 @@ ZA_AUTO1 attr               ; the current attribute (ATTR_P, &5C8D)
 ZA_AUTO1 ctype              ; the type ORed into the type map (E)
 ZA_AUTO1 run_down           ; bit 7: put_step goes down, not right
 
-\ Find room A's (1-120) body in the records (main.6502), rb, and point
-\ sprite_lo/hi at its graphics groups' frames, the rest at nothing
+\ Find room A's (1-120) body in the records (main.6502), rb, and note its
+\ graphics groups' frames for sprite.6502's sprite_frame
 \ (tools/mkrecords.py describes both). The sideways edition has them all in
 \ the bank; the streaming edition has a cache of them (disc.6502).
 .room_load
 {
     ZA_AUTO1 gi                 ; the body's group list, at rb + gi
     ZA_AUTO1 frames             ; the group's frames left
+    ZA_AUTO1 fi                 ; the next in fr_lo and fr_hi
     ZA_AUTO1 n
     STA n
     JSR find_body
     \ Where its parts start: exits (at 0), groups (at 1), monsters, bands,
     \ fixed things, the packed room.
     LDY #1 : STY gi : LDA (rb),Y : CLC : ADC #2 : STA rb_mon
-    TAY : LDA (rb),Y : ASL A : ASL A : SEC : ADC rb_mon : STA rb_bands
+IF DEFINED(STREAM)
+    TAY : LDA (rb),Y : STA frames   ; (MON_LEN = 7 bytes a monster)
+    ASL A : ASL A : ASL A : SEC : SBC frames
+ELSE
+    TAY : LDA (rb),Y : ASL A : ASL A
+ENDIF
+    SEC : ADC rb_mon : STA rb_bands
     TAY
 .bands
     LDA (rb),Y : BEQ bands_end
+IF DEFINED(STREAM)
+    INY                             ; (BAND_LEN = 3: the map itself)
+ENDIF
     INY : INY : BNE bands           ; (always)
 .bands_end
     INY : STY rb_things
@@ -48,26 +58,34 @@ ZA_AUTO1 run_down           ; bit 7: put_step goes down, not right
     \ bp = the packed room's bit stream (unpack.6502), after them.
     STY n : TYA : ASL A : ADC n     ; 3 a thing (carry clear)
     ADC rb_things                   ; (carry clear: the body's offsets fit a byte)
+IF DEFINED(STREAM)
+    ADC #4                          ; (the palette, before the packed room)
+ENDIF
     ADC rb : STA bp
     LDA rb+1 : ADC #0 : STA bp+1
-    \ No frame until a group gives it one: a frame drawn without one
-    \ shows (sprite.6502's sprite_frame, in the tests' build).
-    LDX #152 : LDA #0
-.clear
-    STA sprite_lo-1,X : STA sprite_hi-1,X
-    DEX : BNE clear
+    \ The frames: a group's are numbered on from its first, so it is its
+    \ first, its end and where its run starts in fr_lo and fr_hi.
+    LDA #0 : STA rg_count : STA fi
 .group
     \ The group list is at rb + 2 up to the monsters, at rb_mon.
     INC gi : LDY gi : CPY rb_mon : BCS done
     LDA (rb),Y : TAX
     JSR find_group
     LDY #0 : LDA (gp),Y : STA frames
+    INY : LDA (gp),Y                ; the first's number
+    LDX rg_count
+    STA rg_first,X
+    CLC : ADC frames : STA rg_end,X
+    LDA fi : SEC : SBC rg_first,X : STA rg_base,X
+    INC rg_count
+    LDX fi
 .frame
-    \ Its number, and where it is.
-    INY : LDA (gp),Y : TAX
-    INY : LDA (gp),Y : CLC : ADC gp : STA sprite_lo,X
-    INY : LDA (gp),Y : ADC gp+1 : STA sprite_hi,X
+    \ Where each is.
+    INY : LDA (gp),Y : CLC : ADC gp : STA fr_lo,X
+    INY : LDA (gp),Y : ADC gp+1 : STA fr_hi,X
+    INX
     DEC frames : BNE frame
+    STX fi
     BEQ group                   ; (always)
 .done
     RTS

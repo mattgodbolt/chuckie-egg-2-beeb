@@ -21,7 +21,12 @@
 .record
     \ Band k = band_count: its record at rb_bands + 2k, its ULA values by
     \ entry, then band (band_ula + 2i + k: irq.6502).
+IF DEFINED(STREAM)
+    \ (The streaming edition's records are three bytes: the map itself.)
+    LDA band_count : TAX : ASL A : ADC band_count : ADC rb_bands : TAY
+ELSE
     LDA band_count : TAX : ASL A : ADC rb_bands : TAY   ; (carry clear: k < 3)
+ENDIF
     LDA (rb),Y : BEQ done
     PHA
     \ Logical 2's entries: &80, &90, &D0, &C0 with the colour (EOR 7).
@@ -31,10 +36,17 @@
     ORA #&40 : STA band_ula+4,X
     AND #&EF : STA band_ula+6,X
     \ The map, two bits a colour, from band_maps, as band k + 1's at 8(k + 1).
+IF DEFINED(STREAM)
+    INY : INY : LDA (rb),Y : PHA
+    DEY : LDA (rb),Y : PHA
+    TXA : ASL A : ASL A : ASL A : ADC #8 : TAX  ; (carry clear: 8k < 24)
+    PLA : JSR sb_map_a
+ELSE
     INY : LDA (rb),Y : ASL A : TAY
     TXA : ASL A : ASL A : ASL A : ADC #8 : TAX  ; (carry clear: 8k < 24)
     LDA band_maps+1,Y : PHA
     LDA band_maps,Y : JSR sb_map_a
+ENDIF
     PLA : JSR sb_map_a
     \ A split: band k + 1 from its row down.
     INC band_count

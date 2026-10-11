@@ -105,7 +105,7 @@ $(TEST): $(SOURCES) $(OUT)/stamp | $(OUT)
 	$(call editions,$(TEST),-D DIRECT=1,$(BUILD) test)
 
 passes: $(TEST) build/ce2.z80
-	tools/passcheck.sh
+	PASSDIR=$(OUT)/passes-$(MODEL) tools/passcheck.sh
 
 # Where Harry is first drawn on entering a room, on both (issue #2): make
 # passes compares his state, not the drawing.

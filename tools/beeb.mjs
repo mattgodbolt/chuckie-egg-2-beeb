@@ -11,7 +11,7 @@ import { dirname, resolve } from "path";
 
 const MCP = process.env.JSBEEB_MCP
     ? { command: "node", args: [process.env.JSBEEB_MCP] }
-    : { command: "npx", args: ["-y", "jsbeeb-mcp"] };
+    : { command: "node_modules/.bin/jsbeeb-mcp", args: [] };   // (package.json's, pinned by its lock)
 
 const text = (r) => r.content.find((c) => c.type === "text")?.text ?? "";
 const image = (r) => r.content.find((c) => c.type === "image");
@@ -63,7 +63,9 @@ export async function startBeeb({ disc, model = process.env.CE2_MODEL || "B-DFS1
     await client.connect(transport);
 
     const call = async (name, args) => {
-        const r = await client.callTool({ name, arguments: args });
+        // (A long timeout: the SDK's 60s default fails long runs when many
+        // emulators share the CPUs, as tools/passcheck.sh's do.)
+        const r = await client.callTool({ name, arguments: args }, undefined, { timeout: 30 * 60 * 1000 });
         if (r.isError) throw new Error(`${name}: ${JSON.stringify(r.content)}`);
         return r;
     };

@@ -28,7 +28,9 @@ const LINES = [166, 178];           // (inclusive)
 const WAITS = 300;                  // enough to cross the room's edge
 const SEEN = 4;                     // extents compared
 
-const zx = JSON.parse(execFileSync(".venv/bin/python", ["tools/entrylog.py", ...CASES], { encoding: "utf8" }));
+// (The original's side, kept between runs: tools/zxcache.py.)
+const zx = JSON.parse(execFileSync(".venv/bin/python",
+    ["tools/zxcache.py", "--", ".venv/bin/python", "tools/entrylog.py", ...CASES], { encoding: "utf8" }));
 
 // The lit x extent of the lines between x0 and x1: MODE 1, a pixel's high
 // bit in a byte's top nibble, its low bit in the bottom one.

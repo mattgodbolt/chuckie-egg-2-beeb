@@ -1515,3 +1515,18 @@ original's, shows him from the pass after.
   `make entry` (`tools/entrycheck.mjs`, with `tools/entrylog.py` for the
   Spectrum) walks him out of rooms 1 and 2 on both machines and compares
   the lit extent near the edge he enters by, at every wait for a frame.
+
+### The checks, quicker
+
+A full `make check` had grown to four or five minutes a configuration,
+and a merge ran four. Caching the original's side of `make passes`
+(it never changes) saved half a minute; the rest was the BBC side, run
+one scenario at a time, each starting the emulator through
+`npx -y jsbeeb-mcp`, which asked the registry for the latest version
+every time. With `jsbeeb-mcp` a pinned dependency started from
+`node_modules`, the scenarios side by side and the SDK's 60-second
+request timeout lifted (many emulators at once tripped it), `make passes`
+takes about 13 seconds, `make check` about 80, and all four
+configurations together about three minutes. Each configuration's logs
+now have their own directory: the editions' runs, side by side, had
+shared `build/bbc_*.json`.

@@ -66,5 +66,23 @@ jobs:
           make venv
           make fetch
 
+      # The original's side of make passes and make entry
+      # (tools/zxcache.py), kept between runs and shared by the matrix's
+      # jobs. The key changes with the loggers, the scenarios, the original
+      # and SkoolKit's version (make venv installs the latest), as the
+      # cache is only saved under a new key; entries are keyed by their
+      # whole command line inside, so the last cache's still-valid ones
+      # are restored and reused.
+      - name: SkoolKit's version
+        id: skoolkit
+        run: echo "version=$(.venv/bin/python -c 'import importlib.metadata as m; print(m.version("skoolkit"))')" >> "$GITHUB_OUTPUT"
+
+      - name: Cache the original's logs
+        uses: actions/cache@v4
+        with:
+          path: build/zxcache
+          key: zxcache-${{ steps.skoolkit.outputs.version }}-${{ hashFiles('tools/zx.py', 'tools/passlog.py', 'tools/entrylog.py', 'tools/zxcache.py', 'original/SHA256SUMS', 'tests/scenarios.txt', 'tools/entrycheck.mjs') }}
+          restore-keys: zxcache-${{ steps.skoolkit.outputs.version }}-
+
       - name: make check
         run: make check MODEL=${{ matrix.model }} STREAM=${{ matrix.stream }} BARON="$PWD/baron-bin/baron"

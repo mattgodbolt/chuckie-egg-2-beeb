@@ -5,6 +5,7 @@
   "type": "module",
   "description": "Test harness for the BBC Micro port of Chuckie Egg 2, driving jsbeeb over MCP",
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.0.0"
+    "@modelcontextprotocol/sdk": "^1.0.0",
+    "jsbeeb-mcp": "^4.0.1"
   }
 }

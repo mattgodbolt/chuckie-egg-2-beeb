@@ -117,6 +117,12 @@ handoff, the front end or anything paged.
   code (the oracle, `build/rooms`); `node tools/roomcheck.mjs` dumps the
   BBC's; `python3 tools/roomcmp.py` compares maps and pixels. Run all three
   after touching the room drawer, the palettes or the tile drawing.
+- `make check` takes a few minutes per configuration: the tools start
+  `jsbeeb-mcp` from `node_modules` (package.json pins it), `make passes`
+  runs its scenarios side by side, and the original's side of `passes`
+  and `entry` is kept in `build/zxcache` (`tools/zxcache.py`; CI keeps it
+  too). The two editions can run side by side; one edition's B and Master
+  runs share output files, so run those one after the other.
 - `make passes` replays `tests/scenarios.txt` (keys held over main-loop
   passes) on the original and the port and compares Harry's state every
   pass. Add a scenario for any movement or game logic that lands, and for

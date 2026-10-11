@@ -98,8 +98,12 @@ ENDSECTION
 
 \ The game's other state, in the DFS's NMI page (free once the disc is done).
 \ (Up to &0D9F only: a Master's extended vectors, which its soft BREAK
-\ trusts, follow; decision 22.)
-SECTION LowState, org = &0D00, guard = &0D9F, virtual = TRUE
+\ trusts, follow; decision 22.) The first 32 bytes are kept for the
+\ streaming edition's NMI routine (docs/streaming.md), which the machine
+\ enters at &0D00, so that both editions keep the same memory map.
+NMI_AREA = &0D00
+SECTION LowState, org = NMI_AREA + &20, guard = &0D9F, virtual = TRUE
+.low_state
 \ The checkpoint (&A46B): Harry as he entered the room, for a death.
 .checkpoint SKIP 16
 \ The monsters (&A490, docs/research/monsters.md 2.2): parallel arrays,
@@ -132,6 +136,7 @@ SECTION LowState, org = &0D00, guard = &0D9F, virtual = TRUE
 \ one (entry 1) once dog_sat.
 .mon_limit  SKIP 1          ; (egg_init: min(130 + 25 * egg, 255))
 .dog_sat    SKIP 1
+.low_state_end
 ENDSECTION
 \ The three 32 x 24 maps the room drawer fills, one byte a cell, indexed by
 \ cell = row * 32 + column, as the original's at &5D00, &6000 and &6300.

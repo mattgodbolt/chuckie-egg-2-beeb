@@ -22,7 +22,8 @@ build output (`code &0E00-&xxxx (N bytes free)`), never from this file.
 | `&0400-&06FF` | 768 | attribute map |
 | `&0700-&09FF` | 768 | tile map |
 | `&0A00-&0CFF` | 768 | cell-type map |
-| `&0D00-&0D9E` | 159 | `LowState`: monsters, checkpoint, score, lives |
+| `&0D00-&0D1F` | 32 | kept for the streaming edition's NMI routine (docs/streaming.md) |
+| `&0D20-&0D9E` | 127 | `LowState`: monsters, checkpoint, score, lives (to `&0D98`) |
 | `&0D9F-&0DFF` | 97 | the OS's, untouched: a Master's extended vectors, which its soft BREAK reads (decision 22) |
 | `&0E00-&4FFF` | 16,896 | code and data (copied down from `&1900`) |
 | `&5000-&7FFF` | 12,288 | screen: 256 x 192, MODE 1 pixels (decision 1) |

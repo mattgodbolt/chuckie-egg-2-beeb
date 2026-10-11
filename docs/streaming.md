@@ -1,7 +1,7 @@
 # A stock Model B edition: rooms streamed from disc in the background
 
-> **The plan, 2026-10-10.** Steps 1 and 2 are built (decisions 28, 29):
-> CE2S plays, waiting for each room. It replaces
+> **The plan, 2026-10-10.** Steps 1-3 are built (decisions 28-31): CE2S
+> plays, with a cache and reading ahead. It replaces
 > `docs/stock-b.md`'s recommendation (OSWORD &7F on entering a room, a
 > second's pause each time) with the variant that study ranked last for
 > work and first for feel: our own NMI-driven disc driver, reading while

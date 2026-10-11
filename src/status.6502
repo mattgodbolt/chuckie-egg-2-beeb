@@ -57,14 +57,21 @@
     RTS
 }
 
-\ A room's first visit this egg (&A139): its value x egg hundreds.
+\ A room's first visit this egg (&A139): its value x egg hundreds. The
+\ value is in the top of the room's body's first byte (tools/mkrecords.py);
+\ `visited` has a bit a room, set by a visit.
 .visit_bonus
 {
-    LDX room
-    LDA visits,X : BMI done
-    PHA
-    ORA #&80 : STA visits,X
-    PLA : LDX #7 : JMP times_egg
+    LDA room : LSR A : LSR A : LSR A : TAY
+    LDA room : AND #7 : TAX
+    LDA #0 : SEC
+.bit
+    ROL A : DEX : BPL bit
+    TAX : AND visited,Y : BNE done
+    TXA : ORA visited,Y : STA visited,Y
+    LDY #0 : LDA (rb),Y
+    LSR A : LSR A : LSR A : LSR A
+    LDX #7 : JMP times_egg
 .done
     RTS
 }

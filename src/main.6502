@@ -42,6 +42,11 @@ ELSE
     build_stamp = "DEV"
 ENDIF
 
+\ The streaming edition's mailbox (memory.6502): CE2DATA's magic and
+\ state.6502's mailbox, at the very top of main RAM.
+MAILBOX_SIZE = 229
+MB_STREAM = screen - LEN(DATA_MAGIC) - LEN(build_stamp) - MAILBOX_SIZE
+
 \ Two editions from this file (docs/streaming.md): the sideways RAM
 \ edition, as below; and with -D STREAM=1 the streaming edition's game,
 \ CE2S, which reads the records from CE2DATA on the disc as it goes, for a
@@ -85,6 +90,7 @@ ENDSECTION
 ENDIF
 \ Where the records start in CE2DATA (the same in both editions).
 REC_BASE = mailbox_end - data_magic
+ASSERT mailbox_end - mailbox = MAILBOX_SIZE
 
 IF DEFINED(STREAM)
     LOADER_NAME = "CE2S"
@@ -100,12 +106,6 @@ SECTION Loader, org = &1900, load = &FFFF1900, exec = &FFFF0000 + loader, filena
 
     \ The game starts in the loader (startup.6502), which is discarded.
 .code_start
-IF DEFINED(STREAM)
-\ A sector as it is read, before fetch (disc.6502) takes what it wants:
-\ page-aligned, as the NMI routine counts a page.
-.stage SKIP 256
-    ASSERT LO(stage) = 0
-ENDIF
     INCLUDE "system.6502"
     INCLUDE "irq.6502"
     INCLUDE "screen.6502"
@@ -140,10 +140,6 @@ ENDIF
 \ at the room's graphics groups, and the rest at nothing.
 .sprite_frames SKIP 2 * 152
     \ Harry's frames, and the tile font.
-IF DEFINED(STREAM)
-\ The room's body and graphics groups, read from the disc (rooms.6502).
-.room_buf SKIP ROOM_MAX
-ENDIF
 \ Where the parts of the room's body start, from rb (rooms.6502's
 \ room_load), and its fixed things' numbers, in order.
 .rb_mon     SKIP 1
@@ -158,8 +154,7 @@ ENDIF
     INCLUDE "data/objects.6502"
 .things                         ; (objects.6502; tools/mkrecords.py)
     INCBIN "data/thingsres.bin"
-.visits
-    INCBIN "data/visits.bin"
+.visited    SKIP 16             ; a bit a room, its visit bonus taken (status.6502)
 .thing_types                    ; (changed by each egg's toy: egg_init)
     INCBIN "data/thingtypes.bin"
 .mon_types
@@ -195,6 +190,35 @@ ENDMACRO
     .code_end
     PRINT "code &", ~code_start, "-&", ~code_end, " (", CODE_TOP - code_end, " bytes free)"
     ENDSECTION
+IF DEFINED(STREAM)
+    \ The streaming edition's cache (disc.6502), up to the mailbox: not in
+    \ the file (stream_init sets it up).
+    SECTION Cache, org = code_end, guard = CODE_TOP, virtual = TRUE
+    NI = 10                     ; items at most: two rooms' (a body, 4 groups)
+.it_id      SKIP NI             ; 0-119 a room's body (room - 1), &80 + n group n
+.it_lo      SKIP NI             ; where
+.it_hi      SKIP NI
+.it_nlo     SKIP NI             ; how long
+.it_nhi     SKIP NI
+.it_keep    SKIP NI             ; (compact's marks)
+.it_n       SKIP 1
+.ld_on      SKIP 1              ; an item is being read
+.ia_id      SKIP 1
+.ia_ahead   SKIP 1              ; item_add is reading ahead (its own stage page)
+.stage_alt  SKIP 1              ; the other stage page, or 0 for only one
+.fb_room    SKIP 1
+.fb_id      SKIP 1
+.fb_n       SKIP 1
+.gy         SKIP 1
+.pf_cur     SKIP 1              ; the room the cache was set up for
+.pf_room    SKIP 1              ; the room being read ahead
+.arena
+    SKIP CODE_TOP - P%
+.arena_end
+    PRINT "the cache's arena: ", arena_end - arena, " bytes"
+    ASSERT arena_end - arena >= ROOM_MAX
+    ENDSECTION
+ENDIF
 
     \ Constant tables for the OS's pages 1-3.
 IF DEFINED(STREAM)

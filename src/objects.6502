@@ -606,9 +606,9 @@ KIND_FIXED = &40            ; kind bit 6 (with bit 7): a machine part
 .egg_init
 {
     \ Every room's visit bonus again.
-    LDX #120
+    LDX #15 : LDA #0
 .visit_reset
-    LDA visits,X : AND #&7F : STA visits,X
+    STA visited,X
     DEX : BPL visit_reset
     \ The portable things back where they start.
     LDX #&28

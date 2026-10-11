@@ -235,6 +235,9 @@ IF DEFINED(STREAM)
 .fe_pos        SKIP 2          ; where in CE2DATA
 .fe_len        SKIP 2          ; how many bytes
 .fe_dst        SKIP 2          ; to where
+.item_top      SKIP 2          ; (disc.6502: the cache's next free byte)
+.stage_p       SKIP 2          ; the page a sector is read into (its low byte 0)
+.copy_p        SKIP 2          ; ... and one has been read into
 ENDIF
 ENDSECTION
 
@@ -252,8 +255,7 @@ STATE      = &6000
 \ bank to keep it in: CE2DATA's first bytes (its magic and state.6502's
 \ mailbox) at the top of main RAM, where MENU reads and writes them. CE2S
 \ loads over them, so MENU leaves a copy at MB_XFER for its loader to put
-\ back. (Room for the longest build stamp.)
-MB_STREAM = &5000 - &120
+\ back. (MB_STREAM is in main.6502, which knows the stamp's length.)
 MB_XFER   = &7600
 ASSERT MB_XFER >= STATE + &800
 

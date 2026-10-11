@@ -316,5 +316,27 @@ CHECKPOINT_VARS = h_frame + 2 - h_cell    ; h_cell .. h_frame
 \ loop, with no truck.
 .resume_room
     JSR show_room
+IF DEFINED(STREAM)
+    \ The monsters' and the lift's frames were saved as addresses, and the
+    \ streaming edition's cache (disc.6502) may have the room's graphics
+    \ somewhere else now: point them at its frames again. (The frame last
+    \ drawn, which a monster's erasing uses, becomes the one it shows: the
+    \ room has just been drawn without them.)
+{
+    LDX m_count
+.monster
+    DEX : BMI monsters_done
+    JSR choose_frame
+    LDA m_frame_lo,X : STA m_oframe_lo,X
+    LDA m_frame_hi,X : STA m_oframe_hi,X
+    JMP monster
+.monsters_done
+    LDA l_type : BEQ no_lift
+    CLC : ADC #&95 : JSR sprite_frame
+    STA l_frame : STA l_oframe
+    STX l_frame+1 : STX l_oframe+1
+.no_lift
+}
+ENDIF
     JSR room_things
     JMP game_loop

@@ -56,8 +56,22 @@ IF DEFINED(STREAM)
     DEX : BPL nmi
     LDA #RTI_OP : STA NMI_AREA  ; not armed until a read (the set-up's own
                                 ; NMIs would store through it)
+    \ The controller's reader, into disc.6502's slot.
+    LDX #FDC_SLOT - 1
+.reader
+    LDA reader_8271,X
+    LDY mb_fdc : BEQ copy
+    LDA reader_1770,X
+.copy
+    STA fdc_slot,X
+    DEX : BPL reader
     LDA mb_fdc : STA fdc_type
     LDA #0 : STA fdc_state
+    STA it_n : STA ld_on : STA pf_cur : STA pf_room
+    STA stage_p : STA copy_p : STA stage_alt
+    LDA #LO(arena) : STA item_top
+    LDA #HI(arena) : STA item_top+1
+    LDA #0
     LDA fdc_type : BNE w
     LDA #LO(I_DATA) : STA nmi_data + 1
     LDA #HI(I_DATA) : STA nmi_data + 2
@@ -117,6 +131,111 @@ I_LOAD   = &E8
     TXA
     RTS
 }
+
+\ The 8271's reader (disc.6502's fdc_slot, where stream_init copies it).
+.reader_8271
+    SECTION Fdc8271, org = fdc_slot, guard = fdc_slot + FDC_SLOT
+    JMP i_read
+    JMP i_poll
+.i_read
+    STA fdc_track : STX fdc_sect : STY fdc_page
+.i_start
+{
+    JSR arm
+.idle
+    BIT I_STATUS : BMI idle
+    LDA #&53 : STA I_COMMAND                    ; Read Data, drive 0
+    LDA fdc_track : JSR i_param
+    LDA fdc_sect : JSR i_param
+    LDA #&21                                    ; one 256-byte sector
+    \ Fall into i_param.
+}
+\ An 8271 command's parameter, once the register is free.
+.i_param
+{
+    PHA
+.full
+    LDA I_STATUS : AND #&20 : BNE full
+    PLA : STA I_PARAM
+    RTS
+}
+.i_poll
+{
+    LDA fdc_state : BEQ done    ; (carry clear: CMP or LDA leaves it)
+    \ The result drops its interrupt.
+    BIT I_STATUS : BMI still
+    LDA I_RESULT : AND #&1E
+    CMP #&10 : BNE finished
+    \ Not ready (a B makes the drive ready on the second index pulse after
+    \ it is selected), latched until a Read Drive Status: that, and again.
+    LDA #&6C : STA I_COMMAND
+.rds
+    BIT I_STATUS : BMI rds
+    LDA I_RESULT
+    JSR i_start
+.still
+    SEC
+    RTS
+.finished
+    LDX #0 : STX fdc_state
+.done
+    CLC
+    RTS
+}
+    ENDSECTION
+
+\ The 1770's: it can't seek within a read, so a read on another track is
+\ a Seek (or a Restore first, if where the head is isn't known), then the
+\ Read Sector, which fdc_poll starts once the seek is done.
+.reader_1770
+    SECTION Fdc1770, org = fdc_slot, guard = fdc_slot + FDC_SLOT
+    JMP w_read
+    JMP w_poll
+.w_read
+{
+    STA fdc_track : STX fdc_sect : STY fdc_page
+    CMP fdc_cur : BEQ w_start
+    LDA fdc_cur : BPL known
+    LDA #&00 + W_RATE : BPL go                  ; Restore, then the seek
+.known
+    LDA fdc_track : STA W_DATA
+    LDA #&10 + W_RATE
+.go
+    STA W_COMMAND
+    LDA #1 : STA fdc_state
+    RTS
+}
+.w_start
+    JSR arm
+    LDA fdc_sect : STA W_SECTOR
+    LDA #&80 : STA W_COMMAND                    ; Read Sector
+    RTS
+.w_poll
+{
+    LDA fdc_state : BEQ done
+    LDA W_STATUS : LSR A : BCS still            ; busy (reading drops INTRQ)
+    LDA fdc_state : CMP #1 : BNE read
+    \ The seek (or restore) is done: now the read.
+    LDA fdc_cur : BPL sought
+    LDA #0 : STA fdc_cur                        ; restored: now the seek
+    LDA fdc_track : STA W_DATA
+    LDA #&10 + W_RATE : STA W_COMMAND
+.still
+    SEC
+    RTS
+.sought
+    LDA fdc_track : STA fdc_cur
+    JSR w_start
+    SEC
+    RTS
+.read
+    LDA W_STATUS : AND #&1C                     ; record not found, CRC, lost data
+    LDX #0 : STX fdc_state
+.done
+    CLC
+    RTS
+}
+    ENDSECTION
 
 \ The NMI routine, copied to NMI_AREA: the same on both controllers but for
 \ the data register stream_init puts in. Its first byte is RTI until a read

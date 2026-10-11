@@ -25,26 +25,15 @@ W_TRACK  = &FE29 : W_SECTOR = &FE2A : W_DATA = &FE2B
 W_LATCH  = &25              ; drive 0, not reset, side 0, single density
 W_RATE   = 0                ; 6ms steps (r1 r0)
 
-\ Start reading sector X of track A into page Y, and return at once:
-\ fdc_poll says when it's done.
-.fdc_read
-{
-    STA fdc_track : STX fdc_sect : STY fdc_page
-    LDA fdc_type : BNE w
-    JMP i_start
-.w
-    LDA fdc_track : CMP fdc_cur : BEQ w_start
-    \ A Seek first (the 1770 can't seek within a read); fdc_poll goes on.
-    LDA fdc_cur : BPL known
-    LDA #&00 + W_RATE : BPL go                  ; Restore, then the seek
-.known
-    LDA fdc_track : STA W_DATA
-    LDA #&10 + W_RATE
-.go
-    STA W_COMMAND
-    LDA #1 : STA fdc_state
-    RTS
-}
+\ The reader for the machine's controller, which stream_init (startup.6502)
+\ copies here from its two: fdc_read starts reading sector X of track A
+\ into page Y and returns at once; fdc_poll says when it's done (carry set
+\ while it's reading; then carry clear and A = 0, or the controller's error
+\ bits).
+FDC_SLOT = 112
+.fdc_slot   SKIP FDC_SLOT
+fdc_read = fdc_slot
+fdc_poll = fdc_slot + 3
 
 \ Aim the NMI routine at the page and arm it, for the read command.
 .arm
@@ -56,90 +45,28 @@ W_RATE   = 0                ; 6ms steps (r1 r0)
     RTS
 }
 
-.i_start
-{
-    JSR arm
-.idle
-    BIT I_STATUS : BMI idle
-    LDA #&53 : STA I_COMMAND                    ; Read Data, drive 0
-    LDA fdc_track : JSR i_param
-    LDA fdc_sect : JSR i_param
-    LDA #&21                                    ; one 256-byte sector
-    \ Fall into i_param.
-}
-\ An 8271 command's parameter, once the register is free.
-.i_param
-{
-    PHA
-.full
-    LDA I_STATUS : AND #&20 : BNE full
-    PLA : STA I_PARAM
-    RTS
-}
+\ --- The loader: one item at a time, a sector at a time -------------------
 
-.w_start
-    JSR arm
-    LDA fdc_sect : STA W_SECTOR
-    LDA #&80 : STA W_COMMAND                    ; Read Sector
-    RTS
+\ disc_tick moves it on, from wait_vsync's wait (in the background) or
+\ disc_wait (waiting): ld_on says an item is being read, fe_pos, fe_len and
+\ fe_dst what's left of it.
 
-\ C set while a read is under way; then C clear and A = 0 (read) or the
-\ controller's error bits. Where a 1770's seek becomes its read, and an
-\ 8271's not-ready is tried again.
-.fdc_poll
-{
-    LDA fdc_state : BNE busy
-    CLC
-    RTS
-.busy
-    LDA fdc_type : BNE w
-    \ 8271: the result drops its interrupt.
-    BIT I_STATUS : BMI still
-    LDA I_RESULT : AND #&1E
-    CMP #&10 : BNE finished
-    \ Not ready (a B makes the drive ready on the second index pulse after
-    \ it is selected), latched until a Read Drive Status: that, and again.
-    LDA #&6C : STA I_COMMAND
-.rds
-    BIT I_STATUS : BMI rds
-    LDA I_RESULT
-    JSR i_start
-.still
-    SEC
-    RTS
-.w
-    LDA W_STATUS : LSR A : BCS still            ; busy (reading drops INTRQ)
-    LDA fdc_state : CMP #1 : BNE w_read
-    \ The seek (or restore) is done: now the read.
-    LDA fdc_cur : BPL sought
-    LDA #0 : STA fdc_cur                        ; restored: now the seek
-    LDA fdc_track : STA W_DATA
-    LDA #&10 + W_RATE : STA W_COMMAND
-    SEC
-    RTS
-.sought
-    LDA fdc_track : STA fdc_cur
-    JSR w_start
-    SEC
-    RTS
-.w_read
-    LDA W_STATUS : AND #&1C                     ; record not found, CRC, lost data
-.finished
-    LDX #0 : STX fdc_state
-    CLC
-    RTS
-}
+\ A sector is read into a page, stage_p's, before sector_done takes what's
+\ wanted from it (page-aligned: the NMI routine counts a page). With two
+\ (stage_alt not 0), the next sector is read into the other while one is
+\ copied, so an item's sectors come one after another; with one, the next
+\ is gone by when the copy is done, and comes round again a revolution
+\ later. Reading ahead, they're pages of the arena's free space above the
+\ item (item_add); entering a room, with the display blanked, the screen's
+\ last two, which the room's drawing clears.
+SCREEN_STAGE = screen + &2E00
 
-\ Read fe_len bytes of CE2DATA from fe_pos to fe_dst, waiting, a sector at
-\ a time through `stage`; fe_pos and fe_dst move on past them.
-.disc_read
+\ Start reading CE2DATA's page A into stage_p's.
+.sector_start
 {
-    ZA_AUTO2 ptr                ; fe_dst less the bytes skipped in the sector
-    ZA_AUTO1 last               ; Y after the last byte wanted (0: 256)
-.sector
-    \ The disc's sector: CE2DATA's first, plus fe_pos's page. Then track
-    \ and sector, ten to a track (sector counted in X and A, track in Y).
-    CLC : LDA fe_pos+1 : ADC mb_disc : TAX
+    \ The disc's sector: CE2DATA's first, plus the page. Then track and
+    \ sector, ten to a track (sector counted in X and A, track in Y).
+    CLC : ADC mb_disc : TAX
     LDA mb_disc+1 : ADC #0
     LDY #0
 .tens
@@ -149,49 +76,436 @@ W_RATE   = 0                ; 6ms steps (r1 r0)
     PHA : TXA : SEC : SBC #10 : TAX : PLA : SBC #0
     INY : BNE tens              ; (always)
 .divided
-    STY fdc_track : STX fdc_sect
-.again
-    LDA fdc_track : LDX fdc_sect : LDY #HI(stage)
-    JSR fdc_read
-.wait
-    JSR fdc_poll : BCS wait
-    CMP #0 : BNE again          ; an error: read it again
-    \ The bytes from fe_pos's in this sector, as many as are wanted.
+    TYA
+    LDY stage_p+1
+    JMP fdc_read
+}
+
+\ The sector read: take the bytes wanted from it, from fe_pos's offset,
+\ to fe_dst; fe_pos, fe_dst and fe_len move on.
+.sector_done
+{
+    ZA_AUTO2 ptr                ; fe_dst less the bytes skipped in the sector
+    ZA_AUTO1 last               ; Y after the last byte wanted (0: 256)
+    ZA_AUTO2 n
     SEC : LDA fe_dst : SBC fe_pos : STA ptr
     LDA fe_dst+1 : SBC #0 : STA ptr+1
-    LDA fe_len+1 : BNE to_end
-    CLC : LDA fe_pos : ADC fe_len : BCS to_end
+    LDA #0 : STA last : STA n+1
+    LDA fe_len+1 : BNE have
+    CLC : LDA fe_pos : ADC fe_len : BCS have
     STA last
-    BCC have                    ; (always)
-.to_end
-    LDA #0 : STA last
 .have
     LDY fe_pos
 .copy
-    LDA stage,Y : STA (ptr),Y
+    LDA (copy_p),Y : STA (ptr),Y
     INY : CPY last : BNE copy
-    \ Then on by what was copied: Y - fe_pos (from 256 if last was 0).
-    TYA : SEC : SBC fe_pos : TAX                ; 0 for a whole sector
-    CLC : TXA : ADC fe_dst : STA fe_dst
-    BCC dst_ok
-    INC fe_dst+1
-.dst_ok
-    TXA : BNE part
-    INC fe_dst+1                ; a whole sector: 256 on
-    INC fe_pos+1
-    DEC fe_len+1
-    LDA fe_len : ORA fe_len+1 : BEQ done
-    JMP sector
-.part
-    CLC : TXA : ADC fe_pos : STA fe_pos
-    BCC pos_ok
-    INC fe_pos+1
-.pos_ok
-    STX ptr                     ; (ptr is done with) len - copied
-    SEC : LDA fe_len : SBC ptr : STA fe_len
-    LDA fe_len+1 : SBC #0 : STA fe_len+1
-    ORA fe_len : BEQ done
-    JMP sector
+    \ n = what was copied: Y - fe_pos, 0 meaning 256.
+    TYA : SEC : SBC fe_pos : STA n : BNE add
+    INC n+1
+.add
+    LDX #fe_dst - fe_pos        ; fe_dst, then fe_pos, on by n
+.on
+    CLC : LDA fe_pos,X : ADC n : STA fe_pos,X
+    LDA fe_pos+1,X : ADC n+1 : STA fe_pos+1,X
+    DEX : DEX : DEX : DEX : BPL on
+    SEC : LDA fe_len : SBC n : STA fe_len
+    LDA fe_len+1 : SBC n+1 : STA fe_len+1
+    RTS
+}
+
+\ Move the loader on as far as it can without waiting: carry set while
+\ it's still reading an item.
+.disc_step
+{
+    LDA ld_on : BEQ idle
+    LDA fdc_state : BEQ next
+    JSR fdc_poll : BCS busy
+    CMP #0 : BNE next           ; an error: read the sector again
+    LDA stage_p+1 : STA copy_p+1
+    \ With two pages, and a sector to come after this one (fe_pos's offset
+    \ + fe_len over 256): read it into the other now.
+    LDA stage_alt : BEQ copy
+    CLC : LDA fe_pos : ADC fe_len : TAX
+    LDA fe_len+1 : ADC #0 : BEQ copy
+    CMP #1 : BNE more
+    CPX #0 : BEQ copy
+.more
+    LDA stage_alt : LDX stage_p+1 : STA stage_p+1 : STX stage_alt
+    LDX fe_pos+1 : INX : TXA
+    JSR sector_start
+.copy
+    JSR sector_done
+    LDA fe_len : ORA fe_len+1 : BEQ finished
+    LDA fdc_state : BNE busy    ; (the next is being read already)
+.next
+    LDA fe_pos+1 : JSR sector_start
+.busy
+    SEC
+    RTS
+.finished
+    STA ld_on                   ; the item's all here
+.idle
+    CLC
+    RTS
+}
+
+\ From wait_vsync's wait: the loader on, or if it's idle, reading ahead.
+.disc_tick
+    JSR disc_step : BCS ticked
+    JMP prefetch
+.ticked
+    RTS
+
+\ Wait for the loader to finish its item.
+.disc_wait
+    JSR disc_step : BCS disc_wait
+    RTS
+
+\ --- The cache ------------------------------------------------------------
+
+\ The arena (main.6502) holds items, in address order from its start: a
+\ room's body (its id the room - 1) or a graphics group (&80 + its number).
+\ item_top is where the next goes. Entering a room keeps its items, moved
+\ down to the start, and reads what it lacks; reading ahead adds the next
+\ room's above them.
+
+\ X = the item with id A, carry set; carry clear if there isn't one.
+.item_find
+{
+    LDX it_n
+.loop
+    DEX : BMI none
+    CMP it_id,X : BNE loop
+    SEC
+    RTS
+.none
+    CLC
+    RTS
+}
+
+\ Item A's place in CE2DATA (fe_pos) and length (fe_len).
+.item_where
+{
+    TAX : BMI group
+    \ A body: it follows rooms 1 to A's.
+    LDA body_len,X : STA fe_len
+    LDA #0 : STA fe_len+1
+    LDA #LO(REC_BASE) : STA fe_pos
+    LDA #HI(REC_BASE) : STA fe_pos+1
+    INX
+.skip
+    DEX : BEQ found
+    LDA body_len-1,X : CLC : ADC fe_pos : STA fe_pos
+    BCC skip
+    INC fe_pos+1 : BNE skip     ; (always)
+.found
+    RTS
+.group
+    TXA : AND #&7F : TAX
+    SEC : LDA group_lo+1,X : SBC group_lo,X : STA fe_len
+    LDA group_hi+1,X : SBC group_hi,X : STA fe_len+1
+    CLC : LDA group_lo,X : ADC #LO(REC_BASE) : STA fe_pos
+    LDA group_hi,X : ADC #HI(REC_BASE) : STA fe_pos+1
+    RTS
+}
+
+\ Start reading item A at item_top, if it fits: carry clear if it does,
+\ set if not.
+.item_add
+{
+    ZA_AUTO2 end
+    STA ia_id
+    JSR item_where
+    LDX it_n : CPX #NI : BCS full
+    CLC : LDA item_top : ADC fe_len : STA end
+    LDA item_top+1 : ADC fe_len+1 : STA end+1
+    LDA end : CMP #LO(arena_end + 1) : LDA end+1 : SBC #HI(arena_end + 1) : BCS full
+    LDA ia_ahead : BEQ fits
+    \ Reading ahead: its sectors go through the page after it, which must
+    \ be in the arena too, and the one after that if it is.
+    CLC : LDA end : ADC #&FF
+    LDA end+1 : ADC #0
+    CMP #HI(arena_end) : BCS full
+    STA stage_p+1
+    LDY #0
+    ADC #1 : CMP #HI(arena_end) : BCS one
+    TAY
+.one
+    STY stage_alt
+.fits
+    LDA ia_id : STA it_id,X
+    LDA fe_len : STA it_nlo,X
+    LDA fe_len+1 : STA it_nhi,X
+    LDA item_top : STA it_lo,X : STA fe_dst
+    LDA item_top+1 : STA it_hi,X : STA fe_dst+1
+    LDA end : STA item_top
+    LDA end+1 : STA item_top+1
+    INC it_n
+    LDA #1 : STA ld_on          ; (carry clear)
+.full
+    RTS
+}
+
+\ Mark item A to keep (it_keep), if it's here.
+.keep_id
+    JSR item_find : BCC no_item
+    LDA #1 : STA it_keep,X
+.no_item
+    RTS
+
+\ Mark the body at item X and its groups to keep.
+.keep_room
+{
+    ZA_AUTO2 bp2
+    ZA_AUTO1 g
+    LDA #1 : STA it_keep,X
+    LDA it_lo,X : STA bp2
+    LDA it_hi,X : STA bp2+1
+    LDY #1 : LDA (bp2),Y : STA g
+.group
+    DEC g : BMI done
+    INY : LDA (bp2),Y : ORA #&80
+    STY gy
+    JSR keep_id
+    LDY gy
+    JMP group
 .done
+    RTS
+}
+
+\ Keep the items marked, moved down to the arena's start in their order,
+\ and drop the rest; the marks are cleared. (Never while one is being
+\ read: it would move.)
+.compact
+{
+    ZA_AUTO2 src
+    ZA_AUTO2 len
+    ZA_AUTO1 j
+    LDA #LO(arena) : STA item_top
+    LDA #HI(arena) : STA item_top+1
+    LDX #0 : STX j
+.item
+    CPX it_n : BEQ done
+    LDA it_keep,X : BEQ next
+    LDA #0 : STA it_keep,X
+    \ Item X becomes item j, at item_top.
+    LDY j : INC j
+    LDA it_id,X : STA it_id,Y
+    LDA it_lo,X : STA src
+    LDA it_hi,X : STA src+1
+    LDA item_top : STA it_lo,Y
+    LDA item_top+1 : STA it_hi,Y
+    LDA it_nlo,X : STA it_nlo,Y : STA len
+    LDA it_nhi,X : STA it_nhi,Y : STA len+1
+    \ Its bytes down (item_top <= src, so from the first up); item_top
+    \ moves on past them.
+    LDY #0
+.byte
+    LDA (src),Y : STA (item_top),Y
+    INC src : BNE s_on
+    INC src+1
+.s_on
+    INC item_top : BNE t_on
+    INC item_top+1
+.t_on
+    LDA len : BNE l_on
+    DEC len+1
+.l_on
+    DEC len
+    LDA len : ORA len+1 : BNE byte
+.next
+    INX : BNE item              ; (always)
+.done
+    LDA j : STA it_n
+    RTS
+}
+
+\ --- Entering a room --------------------------------------------------------
+
+\ rb = room A's body, its groups all here too: what's already in the cache
+\ stays, the rest of the cache goes, and what's missing is read now, with
+\ the game waiting.
+.find_body
+{
+    STA fb_room
+    JSR disc_wait               ; an item under way: finish it
+    LDA #0 : STA ia_ahead
+    LDA #HI(SCREEN_STAGE) : STA stage_p+1
+    LDA #HI(SCREEN_STAGE) + 1 : STA stage_alt
+    LDA fb_room : SEC : SBC #1 : STA fb_id
+    JSR item_find : BCS have_body
+    \ Not here: the cache emptied, and the body read.
+    JSR compact                 ; (nothing marked: all go)
+    LDA fb_id : JSR read_now
+    LDA fb_id : JSR item_find
+.have_body
+    \ Keep it and its groups, at the start; read the groups missing.
+    JSR keep_room
+    JSR compact
+    LDA fb_id : JSR item_find
+    LDA it_lo,X : STA rb
+    LDA it_hi,X : STA rb+1
+    LDY #1 : LDA (rb),Y : STA fb_n
+.group
+    DEC fb_n : BMI done
+    INY : STY gy
+    LDA (rb),Y : ORA #&80
+    JSR item_find : BCS got
+    JSR read_now
+.got
+    LDY gy
+    JMP group
+.done
+    LDA fb_room : STA pf_cur
+    LDA #0 : STA pf_room
+    RTS
+}
+
+\ Read item A now, the game waiting, with the display blanked (the
+\ sectors go through the screen).
+.read_now
+    PHA
+    LDA #8 : STA crtc_reg : LDA #CRTC_BLANK : STA crtc_data
+    PLA : JSR item_add
+    JMP disc_wait
+
+\ gp = group X, which find_body has seen to.
+.find_group
+    TXA : ORA #&80 : JSR item_find
+    LDA it_lo,X : STA gp
+    LDA it_hi,X : STA gp+1
+    RTS
+
+\ --- Reading ahead ----------------------------------------------------------
+
+\ With nothing being read: the room Harry is likeliest to go to next, and
+\ the next item of it the cache lacks, if it fits (dropping what was read
+\ ahead for another room).
+.prefetch
+{
+    ZA_AUTO2 pf_p
+    LDA #1 : STA ia_ahead
+    LDA pf_cur : BEQ done       ; (before the first room)
+    JSR next_room : STA pf_room
+    BEQ done
+    SEC : SBC #1 : STA fb_id
+    JSR item_find : BCS have_body
+    LDA fb_id : JSR room_item
+.done
+    RTS
+.have_body
+    \ Its groups: the first missing.
+    LDA it_lo,X : STA pf_p
+    LDA it_hi,X : STA pf_p+1
+    LDY #1 : LDA (pf_p),Y : STA fb_n
+.group
+    DEC fb_n : BMI done
+    INY
+    LDA (pf_p),Y : ORA #&80
+    JSR item_find : BCS group
+    LDA (pf_p),Y : ORA #&80
+    \ Fall into room_item.
+}
+\ Read item A ahead, if it fits, or fits once whatever isn't this room's
+\ or the next's is dropped.
+.room_item
+{
+    PHA
+    JSR item_add : BCC started
+    \ Too big: keep only the two rooms' items, if that frees anything.
+    LDA pf_cur : SEC : SBC #1 : JSR item_find
+    BCC no_cur
+    JSR keep_room
+.no_cur
+    LDA fb_id : JSR item_find : BCC no_next
+    JSR keep_room
+.no_next
+    LDX it_n : LDA #0
+.count
+    DEX : BMI counted
+    CLC : ADC it_keep,X
+    JMP count
+.counted
+    CMP it_n : BEQ stuck            ; all kept: it can't fit
+    JSR compact
+    PLA : JMP item_add
+.stuck
+    LDX it_n
+.unmark
+    DEX : BMI unmarked
+    LDA #0 : STA it_keep,X
+    JMP unmark
+.unmarked
+.started
+    PLA
+    RTS
+}
+
+\ The room through the exit Harry is nearest, or heading for: 0 if none.
+\ The body's first byte says which of the room's edges can be crossed. The
+\ distance to each, in cells, is shortened by 8 for the side he faces, and
+\ halved for up when he's climbing and down when he's falling.
+.next_room
+{
+    ZA_AUTO1 best
+    ZA_AUTO1 dist
+    ZA_AUTO1 exits
+    ZA_AUTO1 row
+    ZA_AUTO1 col
+    LDA h_cell : AND #31 : STA col
+    LDA h_cell+1 : STA row
+    LDA h_cell
+    ASL A : ROL row : ASL A : ROL row : ASL A : ROL row
+    LDY #0 : LDA (rb),Y : STA exits
+    LDA #&FF : STA dist
+    LDA #0 : STA best
+    LSR exits : BCC no_left
+    LDA col : LDX h_face : CPX #4 : JSR facing
+    LDX pf_cur : DEX
+    CPX #70 : BNE left
+    LDX #80
+.left
+    JSR consider
+.no_left
+    LSR exits : BCC no_right
+    LDA #30 : SEC : SBC col : LDX h_face : CPX #0 : JSR facing
+    LDX pf_cur : INX
+    CPX #81 : BNE right
+    LDX #71
+.right
+    JSR consider
+.no_right
+    LSR exits : BCC no_up
+    LDA row : SEC : SBC #2
+    LDX h_face : CPX #8 : BNE up
+    LSR A
+.up
+    TAY : LDA pf_cur : SEC : SBC #10 : TAX : TYA
+    JSR consider
+.no_up
+    LSR exits : BCC no_down
+    LDA #21 : SEC : SBC row
+    LDX h_state : BNE down
+    LSR A
+.down
+    TAY : LDA pf_cur : CLC : ADC #10 : TAX : TYA
+    JSR consider
+.no_down
+    LDA best
+    RTS
+\ A less 8 (not below 0) if Z is set: he faces that way.
+.facing
+    BNE faced
+    SEC : SBC #8 : BCS faced
+    LDA #0
+.faced
+    RTS
+\ Room X, A away: the best if it's a room and nearer.
+.consider
+    CPX #1 : BCC not
+    CPX #121 : BCS not
+    CMP dist : BCS not
+    STA dist : STX best
+.not
     RTS
 }

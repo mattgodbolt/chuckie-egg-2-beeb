@@ -1253,3 +1253,30 @@ gathers any number of one ingredient (and makes jumps lower).
   are constant and only `thing_load` reads them, for the round robin's
   thing, always in the current room: into the bodies (decision 30), 645
   bytes back.
+
+### Step 3: the cache and reading ahead
+
+- The cache needed RAM CE2S didn't have: 650 bytes free and a 1,021-byte
+  room buffer, against cache code that first came to 1,000 bytes and left
+  an arena of 554, smaller than room 120. Clawed back: each room's exits
+  and visit bonus as one byte in its body, `visited` as bits (106), the
+  driver split so only the machine's controller's code is loaded (copied
+  into a slot at start-up), `MB_STREAM` exact from the stamp's length
+  (baron's `LEN`), tighter code, and finally the sector buffer itself:
+  entering a room the display is blanked and the screen is the buffer;
+  reading ahead uses free pages of the cache. 1,094-1,246 bytes of arena.
+- Two bugs on the way. `item_where` counted X down to 0 before reading
+  `body_len,X`, so every body was read at room 1's length (82): rooms
+  with shorter bodies drew, room 5's 109 was cut short and its drawing
+  never ended (the sampled PCs pointed at the interrupt handler, which
+  was a red herring: VSyncs came at 50Hz). And room 1 has nowhere a
+  tool would stand Harry, so `roomwait.mjs` put him at an undefined cell
+  and he went up into room 247; it refuses such a room now.
+- Reading one sector a command, the next one is gone by the time the copy
+  is done: a revolution a sector, 1.4-2s a room change. Two buffer pages,
+  the next sector's read started before the copy, bring a miss down to
+  0.4-0.8s.
+- `tools/roomwait.mjs` times room changes in random play. From room 45,
+  150s: sideways RAM median 258ms; CE2S median 300ms, 6 of 19 changes
+  read while waiting. The start area (rooms 1, 2, 11) is the worst case:
+  room 1 (966 bytes) and room 2 (929) leave no room to read a neighbour.

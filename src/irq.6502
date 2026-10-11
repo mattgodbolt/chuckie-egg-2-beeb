@@ -93,6 +93,10 @@ FUNCTION ula_entry(l, n, phys) = ((l AND 2) * 4 + (n AND 2) * 2 + (l AND 1) * 2 
 {
     LDA vsyncs
 .wait
+IF DEFINED(STREAM)
+    \ The streaming edition reads in the background while it waits.
+    PHA : JSR disc_tick : PLA
+ENDIF
     CMP vsyncs : BEQ wait
     RTS
 }

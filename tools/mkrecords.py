@@ -4,7 +4,9 @@ the graphics groups the bodies share (docs/streaming.md).
 
     .venv/bin/python tools/mkrecords.py
 
-Reads what the other generators wrote (src/data/: packed.bin and
+Reads the original's rooms as its own code draws them (build/rooms, from
+tools/zxrooms.py: make rooms) and what the other generators wrote
+(src/data/: packed.bin and
 packlens.txt from packrooms.py, roombands.txt from mkrooms.py, sprites.bin,
 gfx.6502, monsters.bin and montypes.bin from mkgfx.py) and writes,
 committed (the build never runs this):
@@ -17,6 +19,10 @@ committed (the build never runs this):
 
 A room's body, its parts one after another (rooms.6502's room_load finds
 where each starts):
+    exits and visit bonus: bits 0-3 which edges Harry can cross, left,
+            right, up, down (from the original's cell types, build/rooms:
+            below), for the streaming edition's reading ahead (disc.6502);
+            bits 4-7 the room's first-visit bonus (visits.bin, status.6502)
     groups: how many, then their numbers
     monsters: how many, then four bytes each, in the order the original
             scans its monster table (entries 1-255, then 0): the entry's
@@ -74,6 +80,20 @@ def twin_of(blob, o):
     return ((o + (blob[o + 2] | blob[o + 3] << 8)) & 0xFFFF) - 2
 
 
+def exits(r):
+    """Which edges of room r Harry could cross, from its cell types (a
+    superset is safe: it only steers the reading ahead). Left or right: two
+    cells free of solid (&21), one above the other, at the edge; up: a cell
+    in row 2 free of &2D, or a ladder or rope (&12); down: one in row 23 with
+    no floor (&21), or a ladder or rope."""
+    t = open(f"build/rooms/room_{r:03d}.bin", "rb").read()[6912 + 1536:6912 + 2304]
+    cell = lambda row, col: t[row * 32 + col]
+    side = lambda col: any(cell(y, col) & 0x21 == 0 and cell(y + 1, col) & 0x21 == 0 for y in range(2, 23))
+    up = any(cell(2, c) & 0x2D == 0 or cell(2, c) & 0x12 for c in range(32))
+    down = any(cell(23, c) & 0x21 == 0 or cell(23, c) & 0x12 for c in range(32))
+    return side(0) | side(31) << 1 | up << 2 | down << 3
+
+
 def type_frames(types, t):
     """Every frame monster type t can show (monsters.6502's choose_frame):
     one if static; base + 0-3 if it moves vertically or is special; else
@@ -100,6 +120,8 @@ def main():
             bands[r].append((row * 8 + colour, cmap))
     mon, types, sprites = read("monsters.bin"), read("montypes.bin"), read("sprites.bin")
     things = read("things.bin")
+    visits = read("visits.bin")
+    assert all(v < 16 for v in visits)
     t_room, t_row, t_col, t_type = (things[k * 256:(k + 1) * 256] for k in range(4))
     gfx = open(f"{DATA}/gfx.6502").read()
     harry_offs = [int(x, 16) for x in re.findall(r"EQUW sprites \+ &([0-9A-F]+)", gfx.split(".sprite_frames")[0])]
@@ -150,7 +172,7 @@ def main():
         fixd = bytes([b for x in fixed for b in (t_row[x], t_col[x], t_type[x])])
         stream = packed[start:start + lens[r - 1]]
         start += lens[r - 1]
-        body = head + mons + bnds + fixd + stream
+        body = bytes([exits(r) | visits[r] << 4]) + head + mons + bnds + fixd + stream
         assert len(body) < 256
         bodies.append(body)
 

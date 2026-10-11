@@ -30,6 +30,8 @@
 \ (FDC_8271 or FDC_1770) and the sector CE2DATA starts at.
 .mb_fdc      EQUB 0
 .mb_disc     EQUW 0
+\ MENU's D (with sideways RAM): 1 to play the streaming edition anyway.
+.mb_edition  EQUB 0
 .mb_score    SKIP 10            ; the score, when a game ended
 .mb_rng      EQUS "9090"        ; the RNG between games (the tape's seed)
 \ The keys, internal key numbers in the order of the game's control bits:

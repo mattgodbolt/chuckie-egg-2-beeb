@@ -1,12 +1,13 @@
 \ ***************************************************************************
-\ Constant tables for the OS's pages 1 and 2, which the game doesn't use
-\ once it has the interrupts and reads the keyboard itself (decision 11):
-\ loaded after the code, copied into place at start-up (startup.6502's
+\ Constant tables for the OS's page 1, which the game doesn't use once it
+\ has the interrupts and reads the keyboard itself (decision 11): loaded
+\ after the code, copied into place at start-up (startup.6502's
 \ copy_os_pages), then overwritten by the screen. Only where a soft BREAK
-\ doesn't look (decision 22): the stack page below the stack, and page 2's
-\ vectors, which every reset puts back. The rest of page 2, page 3, zero
-\ page &D0 and &0D9F-&0DFF stay as the OS left them, so that BREAK in play
-\ comes back to MENU on a Model B and on a Master.
+\ doesn't look (decision 22): the stack page below the stack. Page 2, page
+\ 3, zero page &D0 and &0D9F-&0DFF stay as the OS left them, so that BREAK
+\ in play comes back to MENU on a Model B and on a Master. (Page 2's
+\ vectors held tables too until decision 33: a Master's soft BREAK keeps
+\ the vectors, and with tables in them its filing system didn't boot.)
 \
 \ Page 1 keeps &01C0-&01FF for the stack: the deepest the game reaches is
 \ &01EA (22 bytes, the interrupt's included), measured in jsbeeb over every
@@ -39,20 +40,3 @@
 .page1_end
     ENDSECTION
 
-.page2_load
-    SECTION Page2, org = &0206, guard = &0236
-.page2
-\ TEXT_CHARS in tools/packrooms.py (unpack.6502).
-.text_chars
-    EQUS " &ABCDEFGHIJKLMNOPQRSTUVWXYZ"
-\ The lifts (&9090, table &90E0): room, row, column, type (machines.6502).
-.lift_table
-    EQUB 26, 23, 7, 1
-    EQUB 55, 23, 23, 1
-    EQUB 34, 4, 15, 2
-    EQUB 104, 4, 17, 2
-\ A byte of four pixels in logical colour 0-3 (screen.6502).
-.colour_bytes
-    EQUB cbyte(0), cbyte(1), cbyte(2), cbyte(3)
-.page2_end
-    ENDSECTION

@@ -240,4 +240,6 @@ MTF_TYPE = 6
     LDA #&80 : JMP emit
 }
 
-\ (TEXT_CHARS in tools/packrooms.py, text_chars, is in page 2: pages.6502.)
+\ TEXT_CHARS in tools/packrooms.py.
+.text_chars
+    EQUS " &ABCDEFGHIJKLMNOPQRSTUVWXYZ"

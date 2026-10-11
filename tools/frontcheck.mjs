@@ -4,7 +4,8 @@
 // save screen, ESCAPE and RETURN), the abort key back to the menu, S and L
 // with filenames and refusals (decision 23), L to load and carry on, game over
 // with a new high score and its name, CTRL-BREAK after it, BREAK in play,
-// and the developers' cheats. Exits non-zero on the first failure.
+// the developers' cheats, and D for the other edition. Exits non-zero on
+// the first failure.
 //
 //   node tools/frontcheck.mjs [--disc build/ce2.ssd] [--model B-DFS1.2]
 //
@@ -17,7 +18,7 @@ const args = process.argv.slice(2);
 const discIdx = args.indexOf("--disc");
 const disc = discIdx >= 0 ? args[discIdx + 1] : "build/ce2.ssd";
 const modelIdx = args.indexOf("--model");
-const model = modelIdx >= 0 ? args[modelIdx + 1] : "B-DFS1.2";
+const model = modelIdx >= 0 ? args[modelIdx + 1] : process.env.CE2_MODEL || "B-DFS1.2";
 const b = await startBeeb({ disc, bootUntil: "menu", model });
 
 let failed = false;
@@ -249,6 +250,32 @@ try {
     const room = await b.peek("room");
     check(room > 1, `... SHIFT and right skip rooms (room ${room})`);
     check(await firstCell(), "... the room number in the status bar");
+
+    // D (decision 32), with sideways RAM: the streaming edition instead,
+    // CE2S, kept through a BREAK, and D again for CE2. (The streaming
+    // edition's own discs have no sideways RAM to choose.) CE2S is known
+    // by its NMI routine at &0D00 (LDA from the controller's data register).
+    await b.call("reset", { session_id: b.session_id, hard: false });
+    check(await menuReady(), "BREAK: the menu");
+    if ((await screen()).includes("D TO PLAY FROM DISC")) {
+        await hold("D", 0.1);
+        check(await waitText("FROM DISC: D FOR RAM", 10), "D: the streaming edition chosen");
+        await b.run(0.5);
+        await hold("P", 0.1);
+        await b.run(10);
+        const nmi = await b.read(0xd03, 2);
+        check(nmi[0] === 0xad && (nmi[1] === 0x84 || nmi[1] === 0x2b), "... P plays CE2S");
+        await b.call("reset", { session_id: b.session_id, hard: false });
+        check(await menuReady() && (await screen()).includes("FROM DISC: D FOR RAM"), "... and after a BREAK, still");
+        await hold("D", 0.1);
+        check(await waitText("D TO PLAY FROM DISC", 10), "D again: sideways RAM");
+        await b.run(0.5);
+        await hold("P", 0.1);
+        r = await b.runUntil("game_loop", 60);
+        check(r.stopped_reason === "breakpoint", "... P plays CE2");
+    } else {
+        check(!(await screen()).includes("FROM DISC"), "no sideways RAM: no choice of edition");
+    }
 } finally {
     await b.close();
 }

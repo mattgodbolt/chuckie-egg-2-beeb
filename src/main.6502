@@ -44,7 +44,7 @@ ENDIF
 
 \ The streaming edition's mailbox (memory.6502): CE2DATA's magic and
 \ state.6502's mailbox, at the very top of main RAM.
-MAILBOX_SIZE = 229
+MAILBOX_SIZE = 230
 MB_STREAM = screen - LEN(DATA_MAGIC) - LEN(build_stamp) - MAILBOX_SIZE
 
 \ Two editions from this file (docs/streaming.md): the sideways RAM
@@ -175,6 +175,10 @@ ENDMACRO
 \ This room's palette bands (bands.6502), set when the room is drawn. Out
 \ of LowState so that &0D9F-&0DEF, a Master's extended vectors, survive a
 \ BREAK (decision 22).
+\ (band_ula, 56 bytes on, must not cross a page: below.)
+IF HI(P% + 52) <> HI(P% + 63)
+    SKIP &100 - LO(P% + 52)
+ENDIF
 .band_cmaps SKIP 24             ; band k's colour map at 8k (band 0 = the room's)
 .band_off   SKIP 32             ; for each screen row (and a little beyond), 8 * its band
 .band_ula   SKIP 8              ; bands 1 and 2: logical 2's four &FE21 values

@@ -29,6 +29,7 @@ M_NAME      = mbox + (mb_name - mailbox)
 M_CHEAT     = mbox + (mb_cheat - mailbox)
 M_FDC       = mbox + (mb_fdc - mailbox)
 M_DISC      = mbox + (mb_disc - mailbox)
+M_EDITION   = mbox + (mb_edition - mailbox)
 \ Where the streaming edition keeps the mailbox (memory.6502).
 MB_STREAM_BOX = MB_STREAM + (mailbox - data_magic)
 
@@ -107,6 +108,13 @@ ENDIF
     CMP #'I' : BNE not_i
     JSR instructions : JMP main_menu
 .not_i
+    \ D, with sideways RAM: the other edition (decision 32).
+    CMP #'D' : BNE not_d
+    LDX have_bank : BEQ key
+    LDA M_EDITION : EOR #1 : STA M_EDITION : STA stream
+    JSR stream_disc
+    JMP main_menu
+.not_d
     \ The original's developers' cheats (decision 27), behind keys the menu
     \ doesn't mention: f0 turns them on or off, and while they're on, f1-f8
     \ choose the starting egg.
@@ -198,7 +206,7 @@ CHEATS = %10111000
 .find_bank
 {
 IF DEFINED(PLAY_STREAM)
-    JMP stream_edition          ; the streaming edition's test discs
+    RTS                         ; the streaming edition's test discs: no bank
 ENDIF
     SEI
     LDX #15
@@ -209,7 +217,7 @@ ENDIF
 .compare
     LDA &8000,Y : CMP data_id,Y : BNE next
     DEY : BPL compare
-    STX data_bank
+    STX data_bank : INC have_bank
     JMP page_back
 .next
     DEX : BPL try
@@ -230,10 +238,10 @@ ENDIF
     \ No sideways RAM: the streaming edition (docs/streaming.md), with
     \ CE2DATA (at &3000) to start its mailbox from.
     LDA #1 : STA data_loaded
-    JMP stream_edition
+    RTS
 .found
     EOR #&FF : STA &8000        ; put the byte back
-    STX data_bank
+    STX data_bank : INC have_bank
     LDA #&30 : STA mz_ptr+1 : LDA #&80 : STA mz_ptr2+1
     LDY #0 : STY mz_ptr : STY mz_ptr2
 .copy
@@ -250,65 +258,69 @@ ENDIF
 .data_id EQUS DATA_MAGIC, build_stamp
 .data_id_end
 
-\ The streaming edition: its mailbox in main RAM (memory.6502), kept there
-\ by the game through its reset or a BREAK; or, if it doesn't hold this
-\ build's, CE2DATA's own.
-.stream_edition
-{
-    LDA #1 : STA stream
-    LDX #data_id_end - data_id - 1
-.compare
-    LDA MB_STREAM,X : CMP data_id,X : BNE fresh
-    DEX : BPL compare
-    RTS
-.fresh
-    LDA data_loaded : BNE loaded
-    LDX #LO(load_data) : LDY #HI(load_data) : JSR oscli
-.loaded
-    LDX #0
-.copy
-    LDA &3000,X : STA MB_STREAM,X
-    INX : BNE copy
-.rest
-    LDA &3100,X : STA MB_STREAM + &100,X
-    INX : CPX #REC_BASE - &100 : BNE rest
-    RTS
-}
-
-\ The mailbox from the bank (or the streaming edition's main RAM) into
-\ mbox, and back.
+\ The mailbox into mbox: from the bank, or for the streaming edition (no
+\ bank, or D chose it) from main RAM, where the game keeps it through its
+\ reset or a BREAK (memory.6502), if it holds this build's: or failing
+\ both, CE2DATA's own.
 .get_mailbox
 {
-    LDA stream : BNE streaming
+    LDA have_bank : BEQ streaming
     SEI
     LDA data_bank : STA romsel
     LDX #MAILBOX_LEN - 1
 .copy
     LDA mailbox,X : STA mbox,X
     DEX : CPX #&FF : BNE copy
-    JMP page_back
+    JSR page_back
+    LDA M_EDITION : BNE streaming
+    RTS
 .streaming
+    LDA #1 : STA stream
+    LDX #data_id_end - data_id - 1
+.compare
+    LDA MB_STREAM,X : CMP data_id,X : BNE not_ram
+    DEX : BPL compare
     LDX #MAILBOX_LEN - 1
-.copy_s
+.copy_ram
     LDA MB_STREAM_BOX,X : STA mbox,X
-    DEX : CPX #&FF : BNE copy_s
+    DEX : CPX #&FF : BNE copy_ram
+    RTS
+.not_ram
+    LDA have_bank : BNE done    ; the bank's, then
+    LDA data_loaded : BNE loaded
+    LDX #LO(load_data) : LDY #HI(load_data) : JSR oscli
+.loaded
+    LDX #MAILBOX_LEN - 1
+.copy_data
+    LDA &3000 + (mailbox - data_magic),X : STA mbox,X
+    DEX : CPX #&FF : BNE copy_data
+.done
     RTS
 }
+
+\ mbox back: to the bank, and for the streaming edition to main RAM, with
+\ the magic that says it's this build's.
 .put_mailbox
 {
-    LDA stream : BNE streaming
+    LDA have_bank : BEQ ram
     SEI
     LDA data_bank : STA romsel
     LDX #MAILBOX_LEN - 1
 .copy
     LDA mbox,X : STA mailbox,X
     DEX : CPX #&FF : BNE copy
-    JMP page_back
-.streaming
+    JSR page_back
+.ram
+    LDA stream : BEQ done
+    LDX #data_id_end - data_id - 1
+.magic
+    LDA data_id,X : STA MB_STREAM,X
+    DEX : BPL magic
     LDX #MAILBOX_LEN - 1
-.copy_s
+.copy_ram
     LDA mbox,X : STA MB_STREAM_BOX,X
-    DEX : CPX #&FF : BNE copy_s
+    DEX : CPX #&FF : BNE copy_ram
+.done
     RTS
 }
 
@@ -458,6 +470,14 @@ CAT_BUF = MB_XFER               ; (free until run_game)
     JSR draw_hiscores
     LDX #LO(menu_text) : LDY #HI(menu_text) : JSR print_lines
     LDX #LO(menu_extra) : LDY #HI(menu_extra) : JSR print_lines
+    \ With sideways RAM, which edition P plays, and D for the other.
+    LDA have_bank : BEQ no_choice
+    LDX #LO(edition_ram) : LDY #HI(edition_ram)
+    LDA stream : BEQ edition
+    LDX #LO(edition_disc) : LDY #HI(edition_disc)
+.edition
+    JSR print_lines
+.no_choice
     \ The cheats' banner, on the row between the table and the menu.
     LDA M_CHEAT : BEQ done
     AND #7 : CLC : ADC #'1' : STA cheat_egg
@@ -469,6 +489,12 @@ CAT_BUF = MB_XFER               ; (free until run_game)
     EQUB 14, 0, 2, 0 : EQUS 136, "CHEATS", 137, 135, " SHIFT+LEFT/RIGHT  EGG "
 .cheat_egg
     EQUS "1" : EQUB 0
+    EQUB &FF
+.edition_ram
+    EQUB 22, 2, 7, 0 : EQUS "D TO PLAY FROM DISC" : EQUB 0
+    EQUB &FF
+.edition_disc
+    EQUB 22, 2, 3, 0 : EQUS "FROM DISC: D FOR RAM" : EQUB 0
     EQUB &FF
 \ The original's row 23 says JOYSTICK COMPATIBLE; this one hasn't a joystick
 \ yet, but it has the instructions again, and its build.
@@ -967,7 +993,8 @@ SAVE_LEN = STATE_END - SAVE_HDR
 .after_save EQUW main_menu      ; where save_game goes on
 .name_buf   SKIP NAME_MAX
 .data_bank  EQUB 0
-.stream     EQUB 0              ; the streaming edition (no sideways RAM)
+.stream     EQUB 0              ; the streaming edition (no sideways RAM, or D)
+.have_bank  EQUB 0              ; sideways RAM holds CE2DATA
 .data_loaded EQUB 0             ; CE2DATA is at &3000
 .osfile_block SKIP 18
 .mbox       SKIP MAILBOX_LEN

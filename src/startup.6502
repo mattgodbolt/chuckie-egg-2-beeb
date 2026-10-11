@@ -337,18 +337,13 @@ ENDIF
 }
 
 \ The tables that live in pages 1-3 (main.6502), from where they loaded.
-\ Only once the interrupts are ours: the OS's handler uses pages 2 and 3.
-\ Each is 1-256 bytes.
+\ Only once the interrupts are ours: the OS's handler uses page 1's stack.
 .copy_os_pages
 {
     LDX #page1_end - page1 - 1
 .p1
     LDA page1_load,X : STA page1,X
     DEX : CPX #&FF : BNE p1
-    LDX #page2_end - page2 - 1
-.p2
-    LDA page2_load,X : STA page2,X
-    DEX : CPX #&FF : BNE p2
     RTS
 }
 

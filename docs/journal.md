@@ -1280,3 +1280,19 @@ gathers any number of one ingredient (and makes jumps lower).
   150s: sideways RAM median 258ms; CE2S median 300ms, 6 of 19 changes
   read while waiting. The start area (rooms 1, 2, 11) is the worst case:
   room 1 (966 bytes) and room 2 (929) leave no room to read a neighbour.
+
+### D for the disc edition, and BREAK on a Master
+
+- MENU's D (decision 32), so Matt's Master, which has sideways RAM, can
+  play CE2S. The mailbox lives in both places then, and MENU takes the
+  main-RAM copy after a CE2S game.
+- Writing a check for D found that `frontcheck.mjs` had never run on a
+  Master: it passed `--model`'s default, B-DFS1.2, to jsbeeb, so
+  `CE2_MODEL` never reached it. On a real (jsbeeb) Master, BREAK in play
+  came up at `*`. Narrowed by putting back one page at a time before the
+  BREAK: page 2's vectors, which decision 19 had filled with tables, and
+  which MOS 3.20's soft BREAK keeps. A BREAK intercept at `&0287` (called
+  twice, as documented) that put them back came too late: the Master came
+  up in ADFS. So the tables went back to main RAM (decision 33), 48 bytes.
+- `make check` passes on both editions and both machines, the Master's
+  front end included, for the first time for real.

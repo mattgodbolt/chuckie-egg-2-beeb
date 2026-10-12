@@ -17,11 +17,17 @@ t_col  = t_row + NPORT
 \ The thing types (NTYPES, renumbered: tools/mkobjects.py), as three
 \ tables a type indexes: ink, kind, and graphic from type TOY_TYPES. Types
 \ 0-8, the toy's parts and the toy, show each egg's toy (thing_load). None
-\ changes. The streaming edition keeps the graphics of the portable
-\ things' types alone (PORT_TYPES): the others' are in the rooms' records.
+\ changes. The streaming edition keeps the portable things' types alone
+\ (PORT_TYPES): each fixed thing in a room's record carries its own ink,
+\ kind and graphic.
+IF DEFINED(STREAM)
+    TY_KEPT = PORT_TYPES
+ELSE
+    TY_KEPT = NTYPES
+ENDIF
 ty_ink  = thing_types
-ty_kind = ty_ink + NTYPES
-ty_gfx  = ty_kind + NTYPES - TOY_TYPES
+ty_kind = ty_ink + TY_KEPT
+ty_gfx  = ty_kind + TY_KEPT - TOY_TYPES
 
 KIND_FIXED = &40            ; kind bit 6 (with bit 7): a machine part
 
@@ -87,6 +93,7 @@ KIND_FIXED = &40            ; kind bit 6 (with bit 7): a machine part
     LDY tl_t
     LDA ty_ink,Y : STA o_ink
     LDA ty_kind,Y : STA o_kind
+.type_gfx
     CPY #TOY_TYPES : BCS table
     \ The toy and its parts (types 0-8) are this egg's toy's: graphic
     \ 4 x the type + egg AND 3 (as egg_init set the original's types).
@@ -94,9 +101,6 @@ KIND_FIXED = &40            ; kind bit 6 (with bit 7): a machine part
     LDA egg : AND #3 : ORA tl_t : TAY
     BPL graphic                             ; (always: 35 at most)
 .table
-IF DEFINED(STREAM)
-    CPY #PORT_TYPES : BCS in_record
-ENDIF
     LDA ty_gfx,Y : TAY                      ; its graphic
 .graphic
     LDA object_lo,Y : STA o_frame
@@ -115,33 +119,43 @@ NEXT
 .fixed
     \ A thing that never moves, so in this room (the round robin found it
     \ here): its type, row and column in the body, by its place among the
-    \ room's (room_load's room_fixed). (The streaming edition's: type, its
-    \ graphic's place among the room's own, row, column.)
+    \ room's (room_load's room_fixed). (The streaming edition's: its ink,
+    \ kind, graphic, row and column.)
     LDY #&FF : TXA
 .find
     INY : CMP room_fixed,Y : BNE find   ; (it's there)
+    STY tl_t : TYA : ASL A
 IF DEFINED(STREAM)
-    TYA : ASL A : ASL A                     ; 4 * its place (carry clear)
+    ASL A : ADC tl_t                        ; 5 * its place (carry clear)
+    ADC rb_things : TAY
+    LDA (rb),Y : STA o_ink
+    INY : LDA (rb),Y : STA o_kind
+    INY : LDA (rb),Y : STA tl_g             ; its graphic
+    INY : LDA (rb),Y : PHA                  ; row
+    INY : LDA (rb),Y : TAY                  ; column
+    PLA : JSR row_col_cell
+    STA o_cell : STY o_cell+1
+    \ The toy maker's lights (&29-&30) have the toy's parts' types, a
+    \ portable kind, and show this egg's toy's parts: tl_g is the part's
+    \ type. The rest show a graphic of the room's own.
+    LDY tl_g
+    BIT o_kind : BPL in_record : BVS in_record
+    BMI type_gfx                            ; (always: the BIT's N)
+.in_record
+    \ In the room's record, tl_g on from where room_load found the room's
+    \ fixed things' graphics (fx_gfx).
+    CLC : TYA : ADC fx_gfx : STA o_frame
+    LDA fx_gfx+1 : ADC #0 : STA o_frame+1
+    STA o_sel                               ; (not 0: the record's in main RAM)
+    RTS
 ELSE
-    STY tl_t : TYA : ASL A : ADC tl_t       ; 3 * its place (carry clear)
-ENDIF
+    ADC tl_t                                ; 3 * its place (carry clear)
     ADC rb_things : TAY
     LDA (rb),Y : STA tl_t                   ; type
-IF DEFINED(STREAM)
-    INY : LDA (rb),Y : STA tl_g             ; (in_record)
-ENDIF
     INY : LDA (rb),Y : PHA                  ; row
     INY : LDA (rb),Y : TAY                  ; column
     PLA
     BCC place                       ; (always: the body's offsets are bytes)
-IF DEFINED(STREAM)
-.in_record
-    \ A graphic only fixed things show: in the room's record, tl_g on from
-    \ where room_load found them (fx_gfx).
-    CLC : LDA tl_g : ADC fx_gfx : STA o_frame
-    LDA fx_gfx+1 : ADC #0 : STA o_frame+1
-    STA o_sel                               ; (not 0: the record's in main RAM)
-    RTS
 ENDIF
 }
 

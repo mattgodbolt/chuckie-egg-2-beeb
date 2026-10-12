@@ -61,11 +61,11 @@ ENDIF
     INX : BNE fixed
     \ bp = the packed room's bit stream (unpack.6502), after them. (The
     \ streaming edition's: its palette, which the packed room follows.)
+    STY n : TYA : ASL A
 IF DEFINED(STREAM)
-    TYA : ASL A : ASL A             ; 4 a thing (carry clear)
-ELSE
-    STY n : TYA : ASL A : ADC n     ; 3 a thing (carry clear)
+    ASL A                           ; (the streaming edition's 5 a thing)
 ENDIF
+    ADC n                           ; 3 a thing (carry clear)
     ADC rb_things                   ; (carry clear: the body's offsets fit a byte)
     ADC rb : STA bp
     LDA rb+1 : ADC #0 : STA bp+1

@@ -1570,3 +1570,21 @@ graphic column for those types went with them (decision 42).
   section's `org`. The disc gets it from `ssdmerge.py`, as it is.
 - The sideways edition keeps them resident: its bank hadn't the room,
   and its main RAM has plenty.
+
+### The fixed things' types too (issue #6)
+
+The issue suggested copying a room's fixed things' types into a small
+resident table on entering it. Counting first: the rooms hold 215 fixed
+things of 213 room-and-type pairs, so a table per room would cost the
+records more than putting each type's ink and kind in the thing's own
+entry, and would need the copy as well. CE2S's entries are now ink,
+kind, graphic, row, column, and its type tables stop at the portable
+things' types (decision 43).
+
+- The eight lights on the toy maker are fixed things with the toy's
+  parts' types, so their graphic changes with the egg. Their kind is a
+  portable one, which no other fixed thing has, so `thing_load` tells
+  them by it and takes the graphic byte as the part's type.
+- `make passes` never lights them, and `screencmp` starts each egg with
+  them off, so a script lit them in room 95 and compared the screen with
+  the build before, eggs 1, 2 and 4: the same.

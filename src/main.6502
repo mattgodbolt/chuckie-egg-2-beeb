@@ -221,14 +221,10 @@ ENDMACRO
 .things                         ; (objects.6502; tools/mkrecords.py)
     INCBIN "data/thingsres.bin"
 .visited    SKIP 16             ; a bit a room, its visit bonus taken (status.6502)
-\ The thing types' inks, kinds and graphics (objects.6502; tools/mkobjects.py).
+\ The thing types' inks, kinds and graphics (objects.6502; tools/mkobjects.py),
+\ TY_KEPT of them.
 .thing_types
-    EQUB TY_INK, TY_KIND
-IF DEFINED(STREAM)                  ; (the fixed things' own: in their rooms' records)
-    EQUB TY_GFX[0..PORT_TYPES - TOY_TYPES - 1]
-ELSE
-    EQUB TY_GFX
-ENDIF
+    EQUB TY_INK[0..TY_KEPT - 1], TY_KIND[0..TY_KEPT - 1], TY_GFX[0..TY_KEPT - TOY_TYPES - 1]
 IF NOT(DEFINED(STREAM))             ; (the streaming edition's are in its bodies)
 .mon_types
     INCBIN "data/montypes.bin"

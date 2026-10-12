@@ -53,9 +53,10 @@ where each starts):
             objects.6502's thing_load finds a thing's by its place among
             them; things.bin's other rows and columns (the portable
             things', 0-&28) stay in main RAM. The streaming edition's
-            have four bytes: type, its graphic's offset among the room's
-            fixed things' graphics (if it is one only fixed things show,
-            from fixgfx.bin; 0 if not), row, column.
+            have five bytes: the type's ink and kind, its graphic's offset
+            among the room's fixed things' graphics (or for the toy
+            maker's lights, of a portable kind, the toy part's type),
+            row, column; main RAM keeps the portable things' types alone.
     packed room: the bit stream (unpack.6502)
 
 A group is the frames of one monster graphic (every frame its types can
@@ -189,6 +190,12 @@ def main():
     PORT_GFX, PORT_TYPES, TOY_TYPES = const("PORT_GFX"), const("PORT_TYPES"), const("TOY_TYPES")
     obj_offs = [int(x, 16) for x in re.findall(r"&([0-9A-F]{4})", objs.split("OBJ_OFFS = {")[1].split("}")[0])]
     ty_gfx = [int(x) for x in re.findall(r"\d+", objs.split("TY_GFX = {")[1].split("}")[0])]
+    ty_ink, ty_kind = ([int(x, 16) for x in re.findall(r"&([0-9A-F]{2})", objs.split(f"{name} = {{")[1].split("}")[0])]
+                       for name in ("TY_INK", "TY_KIND"))
+    # A portable kind (bit 7 set, bit 6 clear: objects.6502's KIND_FIXED)
+    # on a fixed thing is one of the toy maker's lights, a toy part's type.
+    portable_kind = lambda t: ty_kind[t] & 0xC0 == 0x80
+    assert all(portable_kind(t) == (t < PORT_TYPES) for t in range(len(ty_kind)))
     objgfx = read("objgfx.bin") + read("fixgfx.bin")
     gfx = open(f"{DATA}/gfx.6502").read()
     harry_offs = [int(x, 16) for x in re.findall(r"EQUW sprites \+ &([0-9A-F]+)", gfx.split(".sprite_frames")[0])]
@@ -244,13 +251,16 @@ def main():
         assert len(fixed) <= FIXED_MAX
         fixd = bytes([b for x in fixed for b in (type_number[t_type[x]], t_row[x], t_col[x])])
         # The streaming edition's: the graphics only fixed things show, the
-        # room's once each, follow the body; a thing's offset among them
-        # after its type (0 if it shows another).
+        # room's once each, follow the body; each thing has its type's ink
+        # and kind, and its graphic's offset among them (or a light's type,
+        # objects.6502's thing_load: the toy's parts' are worked out).
         shown = sorted({ty_gfx[t - TOY_TYPES] for t in (type_number[t_type[x]] for x in fixed) if t >= PORT_TYPES})
         assert all(g >= PORT_GFX for g in shown)
         chunk, at = fixed_graphics(objgfx, [obj_offs[g] for g in shown])
-        place = lambda t: at[obj_offs[ty_gfx[t - TOY_TYPES]]] if t >= PORT_TYPES else 0
-        fixd_s = bytes([b for x in fixed for t in [type_number[t_type[x]]] for b in (t, place(t), t_row[x], t_col[x])])
+        place = lambda t: at[obj_offs[ty_gfx[t - TOY_TYPES]]] if t >= PORT_TYPES else t
+        fixd_s = bytes([b for x in fixed for t in [type_number[t_type[x]]]
+                        for b in (ty_ink[t], ty_kind[t], place(t), t_row[x], t_col[x])])
+        assert all(type_number[t_type[x]] < TOY_TYPES or type_number[t_type[x]] >= PORT_TYPES for x in fixed)
         for g in shown:
             assert unpack(chunk, at[obj_offs[g]]) == unpack(objgfx, obj_offs[g])
         stream = packed[start:start + lens[r - 1]]

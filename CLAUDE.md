@@ -184,8 +184,10 @@ handoff, the front end or anything paged.
   always taken (`LDA #0 : BEQ x`) still "falls through", and a variable
   read on that path, or read only when a condition the allocator can't
   see holds, looks live everywhere and eats the pool (`No free zero-page
-  byte`, or "held live across recursion"). Where that bites, use `JMP`
-  for the always-taken branch, and set such variables on every path.
+  byte`, or "held live across recursion"). Where that bites, put
+  `ZA_UNREACHABLE` after the always-taken branch (it prunes the
+  fall-through; a `JMP` costs a byte more), and set such variables on
+  every path.
 
 ## Reading the original
 

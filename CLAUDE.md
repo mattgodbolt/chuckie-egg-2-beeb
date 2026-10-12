@@ -133,12 +133,16 @@ handoff, the front end or anything paged.
   Harry on walking into a room: `make passes` compares state, so it
   missed the port drawing a frame on the pass that changes room, which
   the original never shows (issue #2).
+- `make toy` (`tools/toycheck.mjs`) draws the toy's parts, the toy and
+  the toy maker's lights in eggs that cover all four toys and compares
+  them with the original's pictures: only `toy_load` knows which egg's
+  toy is in memory (decision 45), so a wrong one shows only past egg 1.
 - `tools/mkrooms.py`, `tools/packrooms.py` and `tools/mkgfx.py` regenerate
   `src/data/` from the original, and `tools/mkrecords.py` then splits the
   rooms and sprites into per-room records (`records.bin`: each room's
   body, then the graphics groups they share; and `roomrecs.bin`, CE2S's
-  CE2ROOM: each room's body and groups together, from a sector, none
-  crossing a track). The build never runs them;
+  CE2ROOM: the four toys' blocks, then each room's body and groups
+  together, each from a sector, none crossing a track). The build never runs them;
   their output is committed.
 - Loading takes 4.6s: tools run to a symbol after booting
   (`startBeeb({bootUntil})`, `play.mjs --until`), never a guessed wait.

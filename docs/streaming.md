@@ -98,7 +98,7 @@ that counts: Matt's Master, and a B if one can be found.
   the monster table out into the records, leaves **~1,580 bytes for a
   cache**, **~1,940** with two small moves (monster types into the
   records, decision 37; MENU keeping the high scores in a file, decisions
-  38 and 50). A B-only memory map
+  38 and 41). A B-only memory map
   could add 337 (page 3, `&0D9F-&0DEF`: BREAK on a B leaves them alone,
   measured), but then the Master wouldn't test the B's budget, so not at
   first.

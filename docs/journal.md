@@ -1538,7 +1538,7 @@ after a game, the high-score table with it, though only MENU reads the
 table and `CE2HI` has held a copy since decision 38. The table now sits at
 the end of the mailbox and CE2S's copy stops before it (`mb_ram_end`); its
 MENU reads `CE2HI` every time it starts. The cache's arena gained the
-table's bytes (decision 50 has the figures).
+table's bytes (decision 41 has the figures).
 
 - The first plan kept a fallback for a disc without `CE2HI`: MENU filling
   in A&F's table itself. Matt preferred the file on every disc, built

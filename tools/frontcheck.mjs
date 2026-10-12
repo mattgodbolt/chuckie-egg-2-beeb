@@ -72,7 +72,7 @@ try {
     await b.run(0.5);
     await hold("SPACE", 0.2);
     check(await menuReady(), "the menu");
-    // A&F's table, from the CE2HI every disc has (decision 50).
+    // A&F's table, from the CE2HI every disc has (decision 41).
     check((await screen()).includes("A&F.........0000000000"), "... with A&F's high scores");
 
     // R: the keys in the original's order (up, down, left, right, jump,
@@ -200,7 +200,7 @@ try {
     check((await screen()).includes("CE2HI"), "... CE2HI saved to the disc");
     await hold("ESCAPE", 0.1);
     // A game, then the abort key: the table kept. The streaming edition
-    // keeps none between games; its MENU reads CE2HI again (decision 50).
+    // keeps none between games; its MENU reads CE2HI again (decision 41).
     check(await menuReady(), "... the menu again");
     await hold("P", 0.1);
     r = await b.runUntil("game_loop", 60);

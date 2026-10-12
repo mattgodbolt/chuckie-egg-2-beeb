@@ -36,6 +36,8 @@ constraints the layout has to fit around, set by the OS and the hardware.
   `low_state_end` is the saved state).
 - **`Code`:** code and data, loaded above the DFS's workspace and copied
   down (`main.6502`); in CE2S the room cache (`Cache`) follows it to `CODE_TOP`.
+  Of the toy's graphics only this egg's are there (decision 45): CE2S
+  reads them into `toy_slot`, and CE2 keeps all four toys' blocks.
 - **The screen** (`screen`): 256 x 192 in MODE 1's pixels (decision 1).
 
 Between games (decision 13), `MENU` runs from the `Menu` section in

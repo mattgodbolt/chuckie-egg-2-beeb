@@ -26,10 +26,10 @@ ENDIF
 
 \ The thing types (NTYPES, renumbered: tools/mkobjects.py), as three
 \ tables a type indexes: ink, kind, and graphic from type TOY_TYPES. Types
-\ 0-8, the toy's parts and the toy, show each egg's toy (thing_load). None
-\ changes. The streaming edition keeps the portable things' types alone
-\ (PORT_TYPES): each fixed thing in a room's record carries its own ink,
-\ kind and graphic.
+\ 0-8, the toy's parts and the toy, show this egg's toy (toy_load's
+\ toy_lo and toy_hi, type t's graphic at t). None changes. The streaming
+\ edition keeps the portable things' types alone (PORT_TYPES): each fixed
+\ thing in a room's record carries its own ink, kind and graphic.
 IF DEFINED(STREAM)
     TY_KEPT = PORT_TYPES
 ELSE
@@ -111,15 +111,13 @@ ENDIF
     LDA ty_kind,Y : STA o_kind
 .type_gfx
     CPY #TOY_TYPES : BCS table
-    \ The toy and its parts (types 0-8) are this egg's toy's: graphic
-    \ 4 x the type + egg AND 3 (as egg_init set the original's types).
-    TYA : ASL A : ASL A : STA tl_t
-    LDA egg : AND #3 : ORA tl_t : TAY
-    BPL graphic                             ; (always: 35 at most)
+    \ The toy and its parts (types 0-8) are this egg's toy's (toy_load).
+    LDA toy_lo,Y : STA o_frame
+    LDA toy_hi,Y
+    BNE graphic_hi                          ; (always: toy_load's ASSERT)
     ZA_UNREACHABLE
 .table
     LDA ty_gfx,Y : TAY                      ; its graphic
-.graphic
     LDA object_lo,Y : STA o_frame
     \ Its high byte: objgfx's, + 1 for each of its next pages that starts
     \ at or below this graphic (data/objects.6502: they are in order).
@@ -127,6 +125,7 @@ ENDIF
 FOR page = 0..4
     CPY #OBJ_PAGES[page] : ADC #0           ; (+ C: never past 255, so C clear)
 NEXT
+.graphic_hi
     STA o_frame+1
     \ Selected: o_sel non-zero (the original: the attribute's high byte),
     \ as the graphic's high byte is.
@@ -713,8 +712,8 @@ GIRDER_COL = 10
 .limit
     STA mon_limit               ; the last entry on (setup_monsters)
     LDA #4 : STA truck_strip    ; (&9AF5)
-    \ (This egg's toy, &9B08's graphics for types 0-8: thing_load works
-    \ them out from egg.)
+    \ (This egg's toy, &9B08's graphics for types 0-8: next_egg's
+    \ toy_load, before the room is drawn.)
     \ Fall into train_reset.
 }
 \ The train back to its start (&9AFD).
@@ -723,3 +722,39 @@ GIRDER_COL = 10
     LDA #6 : STA train_pos
     RTS
 \ (port_types is in data/objects.6502.)
+
+\ This egg's toy (decision 45): toy_lo and toy_hi, where each of its nine
+\ graphics is, type t's at t, from its block (tools/mkobjects.py: the
+\ nine's offsets from the block's start, then the graphics). The original
+\ rewrites the toy's types' graphics (&9B08); here only this knows which
+\ egg's toy is in, by egg AND 3. The streaming edition reads the block
+\ from the disc into toy_slot, the game waiting, as for a room it hasn't
+\ got (disc.6502), the cache untouched; the sideways edition keeps all
+\ four in main RAM. Each time egg changes (next_egg), and on carrying on
+\ with a saved game (startup.6502's resume).
+.toy_load
+{
+    ZA_AUTO2 tb                     ; the block
+IF DEFINED(STREAM)
+    JSR disc_wait                   ; an item under way: finish it
+    LDA egg : AND #3 : ORA #TOY_ITEM
+    ASSERT (TOY_ITEM AND 3) = 0
+    JSR item_place                  ; (fe_pos and fe_len)
+    LDA #LO(toy_slot) : STA fe_dst : STA tb
+    LDA #HI(toy_slot) : STA fe_dst+1 : STA tb+1
+    JSR fdc_read
+    JSR disc_wait
+    ASSERT HI(toy_slot) <> 0        ; (thing_load: o_sel)
+ELSE
+    LDA egg : AND #3 : TAX
+    LDA toy_blocks_lo,X : STA tb
+    LDA toy_blocks_hi,X : STA tb+1
+    ASSERT HI(toy_blocks) <> 0      ; (thing_load: o_sel)
+ENDIF
+    LDY #TOY_TYPES - 1
+.each
+    LDA (tb),Y : CLC : ADC tb : STA toy_lo,Y
+    LDA tb+1 : ADC #0 : STA toy_hi,Y
+    DEY : BPL each
+    RTS
+}

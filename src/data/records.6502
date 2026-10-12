@@ -33,8 +33,9 @@ IF NOT(DEFINED(STREAM))
     EQUB  39,  52,  77,  73,  90,  58, 110,  60,  55,  29,  27,  60
 ELSE
 \ Each room's record's length in roomrecs.bin, in fours, less LEN4_BIAS: room
-\ r's starts at the sector after rooms 1 to r - 1's, or the next track's
-\ first if it wouldn't fit in what's left of this one (disc.6502).
+\ r's starts at the sector after the toys' blocks and rooms 1 to r - 1's, or
+\ the next track's first if it wouldn't fit in what's left of this one
+\ (disc.6502's item_place).
 .room_len4
     EQUB 222, 218,  78,  95,  93, 131, 165,  91, 112,  35,  96,  48
     EQUB  97,  95,  53, 142,  94, 141, 124, 105,  38,  94, 106,  52
@@ -46,6 +47,12 @@ ELSE
     EQUB 100,  98,  82,  68, 204,  31,  95, 160, 110,  22,  19,   2
     EQUB  77, 116,  65,  78,  68,  71,  43,  13,  54,  12,   4,  31
     EQUB   2,   3, 237,  79, 100,  14,  28,  17,  17,  19,  54, 246
+\ ... then the toys' blocks, by egg AND 3, items TOY_ITEM on (objects.6502's
+\ toy_load), which come first on the disc.
+    EQUB  17,  17,  19,  19
+TOY_ITEM = 120
+\ The largest toy's block, as it is read (objects.6502's toy slot).
+TOY_MAX = 148
 ENDIF
 
 IF NOT(DEFINED(STREAM))

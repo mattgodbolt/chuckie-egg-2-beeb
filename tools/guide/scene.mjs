@@ -32,9 +32,10 @@ try {
             await b.write(b.addr("t_room") + carry, [(await b.peek(b.addr("t_room") + carry)) | 0x80]);
             // (As tools/passlog.mjs: thing_load's type and graphic.)
             const type = carry < 8 ? carry : carry < 0x24 ? 8 + (carry >> 3) : await b.peek(b.addr("port_types") + carry - 0x24);
-            const gfx = type < 9 ? 4 * type + ((await b.peek("egg")) & 3) : await b.peek(b.addr("ty_gfx") + type);
             const kind = await b.peek(b.addr("ty_kind") + type);
-            const frame = b.addr("objgfx") + b.syms.OBJ_OFFS[gfx];    // (data/objects.6502)
+            const frame = type < 9
+                ? (await b.peek(b.addr("toy_lo") + type)) | ((await b.peek(b.addr("toy_hi") + type)) << 8)
+                : b.addr("objgfx") + b.syms.OBJ_OFFS[await b.peek(b.addr("ty_gfx") + type)];  // (data/objects.6502)
             await b.write("carried_h", [(await b.peek(frame)) & 7]);
             await b.write("carrying_name", [(kind & 15) + 1]);
         }

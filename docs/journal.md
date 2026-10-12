@@ -1640,3 +1640,63 @@ number, and `t_out` keeps a bit for each, so a saved game shrinks too
   T1 is running by then, so in those first frames it falls through.
 - No call to a routine that never returns was found: those routines are
   all reached by `JMP`.
+
+### Only this egg's toy in memory (issue #4)
+
+All four toys' pictures were resident, 36 graphics of which an egg shows
+nine, and `thing_load` picked one by egg AND 3. Matt: a new egg comes
+about once a game (completing one takes an hour), so keep only this
+egg's toy, in a fixed slot, and let only the loader know which egg it is
+(decision 45).
+
+- `tools/mkobjects.py` now writes each toy's nine pictures as a block
+  (`toys.bin`): their offsets from its start, then the pictures packed as
+  objgfx's are, a mirror image's twin one of the nine or kept whole. The
+  toy's types lose their graphic numbers, and the other graphics are
+  numbered from 0.
+- `toy_load` sets `toy_lo` and `toy_hi`, where each of the nine is, and
+  `thing_load` reads them for types 0-8, the toy maker's lights included
+  (they come through the same path in CE2S, from their portable kind). It
+  runs in `next_egg` straight after the egg goes up, before room 1's
+  things are placed (`thing_cells` reads a picture's header for its
+  footprint), and in `resume`: a saved game holds no pictures, so its
+  format is unchanged.
+- In CE2S the four blocks are records in CE2ROOM, items `TOY_ITEM` on,
+  read with the rooms' own reader: `item_add`'s walk over the records
+  became `item_place`, which `toy_load` calls before `fdc_read` into
+  `toy_slot` and `disc_wait`. It waits for any read ahead under way
+  first, and lands outside the arena, so the cache keeps every room.
+- The toys' records went after the rooms' at first, as the issue
+  suggested. Measured from `next_egg` to the first pass, a game then
+  started 70 frames later than before on a B and 30 on a Master: the seek
+  to CE2ROOM's end for the toy and back to room 1, which a new egg always
+  reads next. With the toys first on the disc and `item_place` walking
+  them first, the two reads share a track: 4 frames more than before on
+  each.
+- CE2 keeps all four blocks in main RAM and points the tables at the
+  egg's, so it shares everything but the fetch. Its main RAM pays a
+  little (the blocks' offsets, the tables, the code); its bank has too
+  few bytes free to take them.
+- Checked: `screencmp` over the rooms on both editions, and with a new
+  `--egg n --toy` (the egg poked as `next_egg` starts, the toy and the
+  lights put in) for eggs 1-8 in the toys' rooms and room 95, against the
+  build before: the same. `make toy` (`tools/toycheck.mjs`) is new: in
+  eggs 2-5 it looks at each room with the toy's things out of the world,
+  then in, and each picture's pixels must be lit where the original's
+  picture for that egg is (`tools/toylog.py`, from the tape's tables). A
+  build loading the wrong egg's toy fails it in every room. Part 4 is left
+  out, as room 92's machine repaints its cells; the lights show its
+  picture. Its first version waited a second in each room: on a Master,
+  CE2S's room reads took most of that, and in egg 4 room 83's ostrich
+  killed Harry until the game was over and the test disc started egg 1.
+  It now counts the round robin's choices (`next_object` runs twice a
+  pass, so `o_index` is read at each call), and turns the monsters off
+  (`mon_limit` 1). `make front` now saves a game in egg 3 and checks that, carried
+  on, its toy's nine pictures are as they were; a build without
+  `resume`'s `toy_load` fails it.
+- That new save, made in room 2 after the cheat's room skip, found a bug
+  older than this work: on a Master, CE2S handed over to MENU with a read
+  ahead still under way, and the reset left the 1770 busy (jsbeeb stops
+  when its control register is written mid-command). `handoff` now
+  finishes the read first (`disc_wait`, with the interrupts still on), at
+  a cost of 3 bytes of the cache.

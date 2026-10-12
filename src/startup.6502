@@ -507,6 +507,7 @@ ENDIF
 .seed_rng
     LDA resumed_rng,X : STA rng_state,X
     DEX : BPL seed_rng
+    JSR toy_load                ; the saved egg's toy (a saved game holds none)
     LDX #&FF : TXS
     JMP resume_room
 }

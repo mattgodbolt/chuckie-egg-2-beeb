@@ -165,6 +165,13 @@ part-line glitch for a frame, only while loading.
   waited for: ~0.2-0.5s warm on either machine, ~1.3s on a Master with the
   motor stopped. A read error is retried; a disc taken out shows a message
   in the status bar until it is put back.
+- **The toy** (decision 45, as built): only this egg's toy's nine
+  pictures are in main RAM, in `toy_slot`. The four toys' blocks are
+  records in CE2ROOM too, items `TOY_ITEM` on but first on the disc, so
+  a new egg's read and room 1's are on the same track. `toy_load` reads
+  the egg's with the cache's own reader (`item_place`, `fdc_read`,
+  `disc_wait`), the game waiting, when an egg starts and when a saved
+  game carries on; it lands outside the arena, so no room is dropped.
 - **The drive**: kept going while there are reads to do, then let rest
   after ~3s, so it is quiet while Harry stays in a room. (Whether to keep
   it spinning all game is a choice to make on hardware, by ear.)

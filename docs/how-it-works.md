@@ -543,7 +543,11 @@ room 1 with his score and lives. Three things change (`egg_init`):
   in new places, not faster ones. (Entry 0 is the sitting dog, which the
   dog's event switches on.)
 - **A different toy.** The parts and the finished toy are a motorbike for
-  the first egg, then a car, a boat and a jet, then round again.
+  the first egg, then a car, a boat and a jet, then round again. (The
+  original rewrites the toy's types' pictures at each egg. The port keeps
+  each toy's nine pictures as a block and loads only this egg's, as the
+  egg starts or a saved game carries on: the streaming edition reads it
+  from the disc beside room 1's record, decision 45.)
 - **Bigger scores.** Every reward is multiplied by the egg number.
 
 ## The main loop

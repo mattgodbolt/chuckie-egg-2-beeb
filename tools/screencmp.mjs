@@ -5,8 +5,11 @@
 // and --move cycle), and at every wait for VSync in the main loop the
 // screen and Harry's state must be the same on both.
 //
-//   node tools/screencmp.mjs old.ssd new.ssd [--passes n] [--idle] [rooms...]
+//   node tools/screencmp.mjs old.ssd new.ssd [--passes n] [--idle] [--egg n] [--toy] [rooms...]
 //
+// --egg n plays egg n (egg poked as next_egg starts, no cheat byte), and
+// --toy puts the toy and the toy maker's lights (room 95) in the world,
+// so every egg's toy can be compared (decision 45).
 // Each disc's symbols are beside it (.json). Exits non-zero on a difference.
 import { readFileSync, existsSync, mkdtempSync, rmSync } from "fs";
 import { tmpdir } from "os";
@@ -18,6 +21,8 @@ const flag = (name) => { const i = args.indexOf(`--${name}`); if (i < 0) return 
 const opt = (name, dflt) => { const i = args.indexOf(`--${name}`); if (i < 0) return dflt; const v = args[i + 1]; args.splice(i, 2); return v; };
 const idle = flag("idle");
 const passes = parseInt(opt("passes", "24"));
+const egg = parseInt(opt("egg", "1"));
+const toy = flag("toy");
 const [discA, discB, ...rest] = args;
 const wanted = rest.map(Number);
 
@@ -40,7 +45,19 @@ const keysFor = (pass) => (idle ? [] : PHASES[Math.floor(pass / 4) % PHASES.leng
 // each is read and deleted, and the directory goes on any exit.)
 const dir = mkdtempSync(join(tmpdir(), "screencmp-"));
 process.on("exit", () => rmSync(dir, { recursive: true, force: true }));
-const boot = (disc) => startBeeb({ disc, symbols: disc.replace(/\.ssd$/, ".json"), bootUntil: "game_loop" });
+async function boot(disc) {
+    const b = await startBeeb({ disc, symbols: disc.replace(/\.ssd$/, ".json"), bootUntil: egg === 1 ? "game_loop" : "next_egg" });
+    if (egg !== 1) {
+        await b.write("egg", [egg - 1]);    // (next_egg adds the 1)
+        await b.runUntil("game_loop");
+    }
+    if (toy) {
+        // The toy (&27) and the lights (&29-&30: t_out's first byte) in.
+        await b.write(b.addr("t_room") + 0x27, [(await b.peek(b.addr("t_room") + 0x27)) & 0x7f]);
+        await b.write("t_out", [0]);
+    }
+    return b;
+}
 let machines = await Promise.all([boot(discA), boot(discB)]);
 let held = machines.map(() => new Set());
 // Both machines afresh: after a death, as the two may not be at the same

@@ -10,8 +10,8 @@ tools/zxrooms.py: make rooms) and what the other generators wrote
 (src/data/: packed.bin and
 packlens.txt from packrooms.py, roombands.txt from mkrooms.py, sprites.bin,
 gfx.6502, monsters.bin and montypes.bin from mkgfx.py; things.bin,
-objgfx.bin, fixgfx.bin and objects.6502 from mkobjects.py) and writes,
-committed (the build never runs this):
+objgfx.bin, fixgfx.bin, toys.bin and objects.6502 from mkobjects.py) and
+writes, committed (the build never runs this):
     src/data/records.bin    the bodies, rooms 1-120, then the groups (the
                             sideways edition's bank)
     src/data/roomrecs.bin   the streaming edition's: for each room its
@@ -22,7 +22,9 @@ committed (the build never runs this):
                             read straight into place (disc.6502). No
                             record crosses a track (ten sectors, the file
                             starting one: tools/ssdmerge.py): one that
-                            wouldn't fit starts the next
+                            wouldn't fit starts the next. Before the
+                            rooms, the four toys' blocks (toys.bin), a
+                            record each, by egg AND 3 (decision 45)
     src/data/records.6502   what stays in main RAM to find them, and
                             Harry's frame pointers
     src/data/harry.bin      Harry's frames, which every room shows
@@ -316,25 +318,43 @@ def main():
         records += blob
     pad4 = lambda b: b + bytes(-len(b) % 4)
     roomrecs, room_at, room_len = b"", [], []
-    for r in range(1, 121):
-        chunk = bodies[r - 1][3]
-        fours, at = [], (len(body(r, room_groups[r], True)) + 3) // 4 + (len(chunk) + 3) // 4
-        for g in room_groups[r]:
-            fours.append(at)
-            at += (len(group_blobs[g]) + 3) // 4
-        rec = pad4(body(r, fours, True)) + pad4(chunk) + b"".join(pad4(group_blobs[g]) for g in room_groups[r])
+
+    def add_record(rec):
+        """rec on the end of roomrecs, from a sector: the next track's first
+        if it wouldn't fit in what's left of this one."""
+        nonlocal roomrecs
         sectors = (len(rec) + 255) // 256
         if len(roomrecs) // 256 % 10 + sectors > 10:
             roomrecs += bytes(-len(roomrecs) % 2560)
         room_at.append(len(roomrecs))
         room_len.append(len(rec))
         roomrecs += rec + bytes(-len(rec) % 256)
+    # First the four toys' blocks (tools/mkobjects.py's toys.bin, by egg
+    # AND 3), which the streaming edition reads into its toy slot
+    # (objects.6502's toy_load) as a room's record is read into the cache:
+    # items TOY_ITEM on, but first on the disc, beside room 1's, which a
+    # new egg reads next (decision 45). (disc.6502's item_place walks the
+    # items in this order.)
+    toys = read("toys.bin")
+    toy_at = [int(x) for x in re.search(r"^TOY_AT = \{(.*)\}", objs, re.M).group(1).split(",")]
+    assert len(toy_at) == 5 and toy_at[-1] == len(toys)
+    for e in range(4):
+        add_record(toys[toy_at[e]:toy_at[e + 1]])
+    for r in range(1, 121):
+        chunk = bodies[r - 1][3]
+        fours, at = [], (len(body(r, room_groups[r], True)) + 3) // 4 + (len(chunk) + 3) // 4
+        for g in room_groups[r]:
+            fours.append(at)
+            at += (len(group_blobs[g]) + 3) // 4
+        add_record(pad4(body(r, fours, True)) + pad4(chunk) + b"".join(pad4(group_blobs[g]) for g in room_groups[r]))
+    # By item: the rooms', then the toys'.
+    room_at, room_len = room_at[4:] + room_at[:4], room_len[4:] + room_len[:4]
 
     # Check: every room's frames, installed from its groups, are the frames
     # sprites.bin has at the original's pointers.
     # (Both files, each room's group list read as room_load reads it.)
     body_at = [sum(body_len[:r - 1]) for r in range(1, 122)]
-    for blob, start in ((records, body_at), (roomrecs, room_at + [len(roomrecs)])):
+    for blob, start in ((records, body_at), (roomrecs, room_at)):
         for r in range(1, 121):
             b = start[r - 1]
             assert blob[b + 1] == len(room_groups[r])
@@ -350,7 +370,11 @@ def main():
             for i, p in ptr.items():
                 assert unpack(blob[b:], p - b) == unpack(sprites, frame_offs[i]), (r, i)
 
-    room_max = max(room_len)
+    room_max = max(room_len[:120])
+    toy_max = max(room_len[120:])
+    for e in range(4):
+        assert roomrecs[room_at[120 + e]:room_at[120 + e] + room_len[120 + e]] == toys[toy_at[e]:toy_at[e + 1]]
+    assert toy_max <= 256 and all(n % 4 == 0 for n in room_len)
     # room_len4 is a record's length in fours less the shortest's, so a
     # byte reaches 255 fours past it (disc.6502 adds it back, a ninth bit
     # in the carry).
@@ -380,10 +404,17 @@ def main():
     ] + ["    EQUB " + ", ".join(f"{n:3d}" for n in body_len[i:i + 12]) for i in range(0, 120, 12)] + [
         "ELSE",
         "\\ Each room's record's length in roomrecs.bin, in fours, less LEN4_BIAS: room",
-        "\\ r's starts at the sector after rooms 1 to r - 1's, or the next track's",
-        "\\ first if it wouldn't fit in what's left of this one (disc.6502).",
+        "\\ r's starts at the sector after the toys' blocks and rooms 1 to r - 1's, or",
+        "\\ the next track's first if it wouldn't fit in what's left of this one",
+        "\\ (disc.6502's item_place).",
         ".room_len4",
     ] + ["    EQUB " + ", ".join(f"{n // 4 - LEN4_BIAS:3d}" for n in room_len[i:i + 12]) for i in range(0, 120, 12)] + [
+        "\\ ... then the toys' blocks, by egg AND 3, items TOY_ITEM on (objects.6502's",
+        "\\ toy_load), which come first on the disc.",
+        "    EQUB " + ", ".join(f"{n // 4 - LEN4_BIAS:3d}" for n in room_len[120:]),
+        "TOY_ITEM = 120",
+        "\\ The largest toy's block, as it is read (objects.6502's toy slot).",
+        f"TOY_MAX = {toy_max}",
         "ENDIF",
         "",
         "IF NOT(DEFINED(STREAM))",

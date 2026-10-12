@@ -7,16 +7,12 @@
 \ edition keeps in its rooms' records instead); their low bytes; and
 \ how many start below each of the next five pages (objects.6502's
 \ thing_load counts the ones at or below a graphic for its high byte).
-PORT_GFX = 44
+PORT_GFX = 8
 OBJ_OFFS = {
-    &0000, &0004, &000C, &0016, &001F, &0026, &0030, &003A,
-    &0044, &004E, &0055, &005E, &0066, &0070, &0078, &007F,
-    &0086, &008A, &0094, &009E, &00A7, &00AE, &00B4, &00BC,
-    &00C6, &00D0, &00D6, &00DF, &00E9, &00F3, &00FD, &0107,
-    &0110, &0152, &0194, &01D6, &0218, &022A, &0239, &0246,
-    &0254, &027E, &02A8, &030A, &0314, &031E, &0328, &032C,
-    &0346, &03A8, &03B4, &03BE, &03D0, &03E2, &03EC, &03FE,
-    &0410, &0422, &0434, &0441, &0453, &0461, &0469, &047B
+    &0000, &0012, &0021, &002E, &003C, &0066, &0090, &00F2,
+    &00FC, &0106, &0110, &0114, &012E, &0190, &019C, &01A6,
+    &01B8, &01CA, &01D4, &01E6, &01F8, &020A, &021C, &0229,
+    &023B, &0249, &0251, &0263
 }
 IF DEFINED(STREAM)
     OBJ_KEPT = OBJ_OFFS[0..PORT_GFX - 1]
@@ -28,9 +24,13 @@ ENDIF
 OBJ_PAGES = {SUM(objgfx + OBJ_KEPT < (HI(objgfx) + 1) * 256), SUM(objgfx + OBJ_KEPT < (HI(objgfx) + 2) * 256), SUM(objgfx + OBJ_KEPT < (HI(objgfx) + 3) * 256), SUM(objgfx + OBJ_KEPT < (HI(objgfx) + 4) * 256), SUM(objgfx + OBJ_KEPT < (HI(objgfx) + 5) * 256)}
     ASSERT HI(objgfx + OBJ_KEPT[LEN(OBJ_KEPT) - 1]) <= HI(objgfx) + 5
 
+\ Where each toy's block starts in toys.bin (tools/mkobjects.py), by egg
+\ AND 3, and where the last ends (objects.6502's toy_load).
+TOY_AT = {0, 140, 280, 428, 576}
+
 \ The types (renumbered: tools/mkobjects.py): how many, the portable
 \ things' first (PORT_TYPES of them); their inks, kinds, and graphics
-\ from type TOY_TYPES (the toy's are worked out); and the portable
+\ from type TOY_TYPES (the toy's are its block's); and the portable
 \ things' from &24, the bone, the girder, the ladder, the toy and the
 \ egg (thing_load works out the others').
 NTYPES = 62
@@ -38,6 +38,6 @@ PORT_TYPES = 17
 TOY_TYPES = 9
 TY_INK = {&05, &05, &05, &05, &05, &05, &05, &05, &06, &07, &02, &07, &06, &07, &04, &04, &06, &04, &07, &02, &07, &00, &00, &06, &07, &06, &04, &07, &02, &06, &07, &06, &02, &07, &02, &05, &06, &07, &02, &06, &02, &04, &04, &02, &06, &07, &05, &00, &02, &06, &07, &05, &02, &04, &02, &06, &05, &04, &05, &07, &06, &01}
 TY_KIND = {&80, &80, &80, &80, &80, &80, &80, &80, &87, &81, &82, &83, &89, &84, &85, &86, &88, &C0, &C1, &C0, &C1, &C2, &C0, &0A, &05, &02, &01, &05, &07, &0A, &01, &02, &03, &05, &0A, &0F, &14, &05, &07, &0F, &03, &02, &03, &05, &04, &02, &03, &04, &05, &02, &02, &03, &05, &02, &03, &04, &05, &01, &03, &05, &0A, &C0}
-TY_GFX = {36, 37, 38, 43, 39, 40, 41, 42, 44, 46, 44, 45, 47, 48, 55, 55, 52, 52, 56, 56, 56, 61, 61, 61, 57, 57, 57, 57, 58, 58, 58, 49, 49, 50, 50, 50, 59, 59, 59, 59, 53, 60, 60, 60, 54, 54, 54, 54, 51, 51, 63, 63, 62}
+TY_GFX = {0, 1, 2, 7, 3, 4, 5, 6, 8, 10, 8, 9, 11, 12, 19, 19, 16, 16, 20, 20, 20, 25, 25, 25, 21, 21, 21, 21, 22, 22, 22, 13, 13, 14, 14, 14, 23, 23, 23, 23, 17, 24, 24, 24, 18, 18, 18, 18, 15, 15, 27, 27, 26}
 .port_types
     EQUB 13, 14, 15, 8, 16

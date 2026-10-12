@@ -9,8 +9,16 @@
 {
     ZA_AUTO2 sr_mem
     ZA_AUTO2 sr_blk
-    SEI
     STA mb_reason
+IF DEFINED(STREAM)
+    \ A read under way (reading ahead) finished first, with the interrupts
+    \ still on (the 8271's wait for the drive counts frames): the reset
+    \ mustn't leave a command in flight for the MOS and MENU's DFS to meet
+    \ (on a Master, jsbeeb's 1770 stops when its control register is
+    \ written mid-command).
+    JSR disc_wait
+ENDIF
+    SEI
     LDA lives : STA mb_game     ; (MENU only asks if it's 0)
     LDX #9
 .keep

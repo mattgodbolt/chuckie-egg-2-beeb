@@ -201,30 +201,7 @@ ENDIF
 .item_add
 {
     ZA_AUTO1 id
-    STA id
-    \ Room id + 1's record's place on the disc (fe_pos: sector, then track,
-    \ from CE2ROOM's, mb_disc) and length (fe_len). Each record takes
-    \ (room_len4 + LEN4_BIAS - 1) / 64 + 1 sectors from the one after the last room's, or from
-    \ the next track's first if it wouldn't fit in this one
-    \ (tools/mkrecords.py).
-    LDY #0 : STY fe_pos
-    LDA mb_disc : STA fe_pos+1
-.each
-    LDA room_len4,Y : CLC : ADC #LEN4_BIAS - 1  ; (a ninth bit in the carry)
-    ROL A : ROL A : ROL A : AND #7
-    TAX                         ; its sectors, less 1
-    SEC : ADC fe_pos            ; where the next would start
-    CMP #11 : BCC fits
-    INC fe_pos+1                ; from the next track's first
-    LDA #0 : STA fe_pos
-    TXA : ADC #0                ; (carry set)
-.fits
-    CPY id : BEQ found
-    STA fe_pos
-    INY : BNE each              ; (always)
-    ZA_UNREACHABLE
-.found
-    JSR item_len                ; (Y = id)
+    JSR item_place : STY id
     \ Nothing changes until it fits: X is where in the table it would go,
     \ fe_dst where it would start, each moving down past the item below
     \ (dropping it) while it doesn't. If it never fits, nothing is dropped.
@@ -256,8 +233,42 @@ ENDIF
     ZA_UNREACHABLE
 }
 
-\ fe_len = item Y's length: room Y + 1's record, room_len4 + LEN4_BIAS
-\ fours. Keeps Y; returns carry clear (fe_len+1's top bit, rolled out).
+\ Item A's place on the disc (fe_pos: sector, then track, from CE2ROOM's,
+\ mb_disc) and length (fe_len), Y = A: room A + 1's record, or from
+\ TOY_ITEM a toy's block (objects.6502's toy_load). The four toys' come
+\ first on the disc, then the rooms' (tools/mkrecords.py): each item takes
+\ (room_len4 + LEN4_BIAS - 1) / 64 + 1 sectors from the one after the
+\ last item's, or from the next track's first if it wouldn't fit in this
+\ one.
+.item_place
+{
+    ZA_AUTO1 id
+    STA id
+    LDY #0 : STY fe_pos
+    LDA mb_disc : STA fe_pos+1
+    LDY #TOY_ITEM
+.each
+    LDA room_len4,Y : CLC : ADC #LEN4_BIAS - 1  ; (a ninth bit in the carry)
+    ROL A : ROL A : ROL A : AND #7
+    TAX                         ; its sectors, less 1
+    SEC : ADC fe_pos            ; where the next would start
+    CMP #11 : BCC fits
+    INC fe_pos+1                ; from the next track's first
+    LDA #0 : STA fe_pos
+    TXA : ADC #0                ; (carry set)
+.fits
+    CPY id : BEQ found
+    STA fe_pos
+    INY : CPY #TOY_ITEM + 4 : BCC each
+    LDY #0                      ; the toys' done: the rooms'
+    BEQ each                    ; (always)
+    ZA_UNREACHABLE
+.found
+    \ Fall into item_len (Y = id).
+}
+
+\ fe_len = item Y's length: room_len4 + LEN4_BIAS fours. Keeps Y; returns
+\ carry clear (fe_len+1's top bit, rolled out).
 .item_len
 {
     LDA #0 : STA fe_len+1

@@ -256,6 +256,23 @@ ENDMACRO
 IF NOT(DEFINED(STREAM))             ; (the streaming edition's are in its records)
     INCBIN "data/fixgfx.bin"        ; what only fixed things show
 ENDIF
+\ This egg's toy (objects.6502's toy_load, decision 45): where each of its
+\ graphics is, type t's at t. The streaming edition reads the egg's block
+\ into toy_slot (its offsets become toy_lo there); the sideways edition
+\ keeps the four toys' blocks, by egg AND 3.
+IF DEFINED(STREAM)
+.toy_slot   SKIP TOY_MAX
+toy_lo = toy_slot
+ELSE
+.toy_blocks
+    INCBIN "data/toys.bin"
+.toy_blocks_lo
+    EQUB LO(toy_blocks + TOY_AT[0..3])
+.toy_blocks_hi
+    EQUB HI(toy_blocks + TOY_AT[0..3])
+.toy_lo     SKIP TOY_TYPES
+ENDIF
+.toy_hi     SKIP TOY_TYPES
 
     .code_end
     PRINT "code &", ~code_start, "-&", ~code_end, " (", CODE_TOP - code_end, " bytes free)"

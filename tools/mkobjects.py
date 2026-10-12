@@ -14,35 +14,41 @@ the tables yet). Writes, committed (the build never runs this):
                             at a time, packed as the monsters' are
                             (tools/mkgfx.py), in the port's order of the
                             graphics (below): the ones a portable thing
-                            can show
+                            other than the toy and its parts can show
     src/data/fixgfx.bin     ... and after them, the ones only fixed things
                             show (the streaming edition keeps those in its
                             rooms' records: tools/mkrecords.py)
-    src/data/objects.6502   the graphics' offsets in objgfx (&8A98's 73
-                            pointers, without the nine the original keeps
-                            twice: below), their low bytes relocated to
-                            `objgfx`, and where its pages start; the
-                            types that things have (&6A00-&6AC8,
-                            renumbered: below) as three lists, inks,
-                            kinds, and the graphics of types 9 on; the
-                            portable things' types from &24 (below)
+    src/data/toys.bin       the four toys, a block each (below), one after
+                            another, in the order of egg AND 3
+    src/data/objects.6502   the graphics' offsets in objgfx (&8A98's
+                            pointers but the toys'), their low bytes
+                            relocated to `objgfx`, and where its pages
+                            start; where each toy's block starts in
+                            toys.bin; the types that things have
+                            (&6A00-&6AC8, renumbered: below) as three
+                            lists, inks, kinds, and the graphics of types
+                            9 on; the portable things' types from &24
+                            (below)
 See docs/research/objects.md.
 
 The graphics: the original's pointers &00-&07 and &0E are the boat's (the
 tape's types 0-8 have them), and &37-&3F the boat's again, for &9B08's
 base + t, each egg's toy and its parts (types 0-8) taking the nine of
-toy ((egg - 1) AND 3) + 1 from &1C + 9 x the toy. The port keeps one copy
-of the boat, and puts the four toys' first: type t's graphic for egg e is
-4 x t + (e AND 3) (objects.6502's thing_load works it out, so the types'
-table needn't change each egg), the jet's, the motorbike's, the car's,
-then the boat's; then the rest in the original's order, those a portable
-thing shows first (so the ones only fixed things show come last, and the
-streaming edition can leave them out of main RAM: decision 42), and the
-types' graphics renumbered to match, so every type has the same picture.
-They
-are packed in that order, so their offsets in objgfx go up with their
-numbers, and thing_load works out a graphic's high byte from which of
-objgfx's pages starts at or below it (OBJ_PAGES), instead of a table.
+toy ((egg - 1) AND 3) + 1 from &1C + 9 x the toy. The port keeps each
+toy's nine apart, in a block of its own (decision 45): the jet's for egg
+AND 3 = 0, the motorbike's, the car's, then the boat's. A block is the
+nine graphics' offsets from its start, type t's at t, then the graphics,
+packed as objgfx's are (a mirror image's twin one of the nine, or kept
+whole). Only the loader (objects.6502's toy_load) knows which egg's is
+in: the rest reads the toy's graphics from it, so the toy's types have
+no graphic numbers. The rest of the graphics are in the original's
+order, those a portable thing shows first (so the ones only fixed things
+show come last, and the streaming edition can leave them out of main
+RAM: decision 42), and the types' graphics renumbered to match, so every
+type has the same picture. They are packed in that order, so their
+offsets in objgfx go up with their numbers, and thing_load works out a
+graphic's high byte from which of objgfx's pages starts at or below it
+(OBJ_PAGES), instead of a table.
 
 The types: only the ones some thing has (five never are), in the order
 (objects.6502's thing_load relies on it, as its port_types): the toy's
@@ -135,24 +141,26 @@ def main():
     tape_boat = [*range(8), 0x0E]
     assert [pointers[g] for g in boat] == [pointers[g] for g in tape_boat]
     toy = lambda e, t: 0x1C + 9 * (((e - 1) & 3) + 1) + t
-    order = [tape_boat[t] if toy(e, t) in boat else toy(e, t) for t in range(TOY_TYPES) for e in range(4)]
-    # Then the rest: first the graphics of the portable things' other types
+    toys = [[tape_boat[t] if toy(e, t) in boat else toy(e, t) for t in range(TOY_TYPES)] for e in range(4)]
+    toy_ptrs = {pointers[g] for gs in toys for g in gs}
+    # The rest: first the graphics of the portable things' other types
     # (the thing table's first NPORT things'), then the ones only fixed
     # things show.
     things = bytes(m[THINGS:THINGS + 1024])
     t_type = things[768:]
     types = bytes(m[TYPES:TYPES_END])
     shown = {types[3 * t_type[x] + 1] for x in range(NPORT)}
-    rest = [g for g in range(OBJ_POINTER_COUNT) if g not in order and g not in boat]
-    order += [g for g in rest if g in shown]
+    rest = [g for g in range(OBJ_POINTER_COUNT) if all(g not in gs for gs in toys) and g not in boat]
+    # (No other graphic is a toy's.)
+    assert not {pointers[g] for g in rest} & toy_ptrs
+    order = [g for g in rest if g in shown]
     port_gfx = len(order)
     order += [g for g in rest if g not in shown]
-    assert len(order) == len(set(pointers))
+    assert len(order) + len(toy_ptrs) == len(set(pointers))
     renumber = {g: i for i, g in enumerate(order)}
-    renumber.update({g: renumber[b] for g, b in zip(boat, tape_boat)})
     # Packed in that order: the offsets go up with the numbers.
     blob, where = pack_in_order(m, [pointers[g] for g in order])
-    for p in set(pointers):
+    for p in {pointers[g] for g in order}:
         assert unpack(blob, where[p]) == columns(m, p), hex(p)
     offs = [where[pointers[g]] for g in order]
     assert offs == sorted(offs) and len(set(offs)) == len(offs)
@@ -161,20 +169,29 @@ def main():
     assert (255 + offs[-1]) // 256 <= 5
     open(f"{args.out}/objgfx.bin", "wb").write(blob[:offs[port_gfx]])
     open(f"{args.out}/fixgfx.bin", "wb").write(blob[offs[port_gfx]:])
+    # The toys' blocks (the docstring), each from a multiple of 4 bytes
+    # (the streaming edition's records' unit: tools/mkrecords.py).
+    toy_blob, toy_at = b"", []
+    for e, gs in enumerate(toys):
+        packed, at = pack_in_order(m, [pointers[g] for g in gs])
+        block = bytes(TOY_TYPES + at[pointers[g]] for g in gs) + packed
+        assert TOY_TYPES + max(at.values()) < 256
+        for t, g in enumerate(gs):
+            assert unpack(block, block[t]) == columns(m, pointers[g]), (e, t)
+        toy_at.append(len(toy_blob))
+        toy_blob += block + bytes(-len(block) % 4)
+    open(f"{args.out}/toys.bin", "wb").write(toy_blob)
     # The types some thing has, renumbered (the docstring), as three lists
     # (ink, kind, graphic): a type indexes each, the graphics' only from
-    # type 9 (the toy's are 4 x t + egg AND 3).
+    # type 9 (the toy's are its block's).
     number = type_numbers(t_type)
     old = sorted(number, key=number.get)
     assert sorted({number[t_type[x]] for x in range(NPORT)}) == list(range(PORT_TYPES))
     ink, kind = (bytes(types[3 * t + k] for t in old) for k in (0, 2))
-    gfx = [renumber[types[3 * t + 1]] for t in old]
-    assert all(g < port_gfx for g in gfx[:PORT_TYPES])
     # The tape's toy (the boat) is egg 3's, which every egg's replaces.
-    assert gfx[:TOY_TYPES] == [4 * t + 3 for t in range(TOY_TYPES)]
-    for e in range(4):
-        for t in range(TOY_TYPES):
-            assert order[4 * t + e] in (toy(e, t), tape_boat[t])
+    assert [types[3 * t + 1] for t in old[:TOY_TYPES]] == tape_boat
+    gfx = [None] * TOY_TYPES + [renumber[types[3 * t + 1]] for t in old[TOY_TYPES:]]
+    assert all(g < port_gfx for g in gfx[TOY_TYPES:PORT_TYPES])
     hexes = lambda b: ", ".join(f"&{x:02X}" for x in b)
     lines = [
         "\\ Generated by tools/mkobjects.py from the original: do not edit.",
@@ -202,12 +219,16 @@ def main():
         "    EQUB LO(objgfx + OBJ_KEPT)",
         "OBJ_PAGES = {" + ", ".join(f"SUM(objgfx + OBJ_KEPT < (HI(objgfx) + {i}) * 256)" for i in range(1, 6)) + "}",
         "    ASSERT HI(objgfx + OBJ_KEPT[LEN(OBJ_KEPT) - 1]) <= HI(objgfx) + 5",
+        "",
+        "\\ Where each toy's block starts in toys.bin (tools/mkobjects.py), by egg",
+        "\\ AND 3, and where the last ends (objects.6502's toy_load).",
+        "TOY_AT = {" + ", ".join(str(a) for a in toy_at + [len(toy_blob)]) + "}",
     ]
     lines += [
         "",
         "\\ The types (renumbered: tools/mkobjects.py): how many, the portable",
         "\\ things' first (PORT_TYPES of them); their inks, kinds, and graphics",
-        "\\ from type TOY_TYPES (the toy's are worked out); and the portable",
+        "\\ from type TOY_TYPES (the toy's are its block's); and the portable",
         "\\ things' from &24, the bone, the girder, the ladder, the toy and the",
         "\\ egg (thing_load works out the others').",
         f"NTYPES = {len(old)}",
@@ -221,7 +242,8 @@ def main():
     ]
     open(f"{args.out}/objects.6502", "w").write("\n".join(lines) + "\n")
     print("things: 1024, types:", 3 * len(old) - TOY_TYPES, "visits:", VISITS_END - VISITS,
-          "graphics:", len(blob), f"(the original's {OBJGFX_END - OBJGFX}; only fixed things', {len(blob) - offs[port_gfx]})")
+          "graphics:", len(blob), f"(the original's {OBJGFX_END - OBJGFX}; only fixed things', {len(blob) - offs[port_gfx]});",
+          "toys:", len(toy_blob), [b - a for a, b in zip(toy_at, toy_at[1:] + [len(toy_blob)])])
 
 
 if __name__ == "__main__":

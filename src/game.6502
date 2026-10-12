@@ -13,6 +13,7 @@
     LDX #&FF : TXS
     LDA #1 : STA room
     INC egg
+    JSR toy_load                    ; (before the room's things are placed)
     JSR show_room
     LDX #CHECKPOINT_VARS - 1
 .harry

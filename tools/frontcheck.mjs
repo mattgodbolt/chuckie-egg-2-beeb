@@ -271,6 +271,33 @@ try {
     check(room > 1, `... SHIFT and right skip rooms (room ${room})`);
     check(await firstCell(), "... the room number in the status bar");
 
+    // Saved in egg 3 and carried on (decision 45): the game is loaded
+    // afresh, and its toy, which a saved game doesn't hold, is egg 3's
+    // again (toy_load), each of its nine pictures as it was.
+    const toyGfx = async () => {
+        const [lo, hi] = [await b.read("toy_lo", 9), await b.read("toy_hi", 9)];
+        const bytes = [];
+        for (let t = 0; t < 9; t++) {
+            const a = lo[t] | (hi[t] << 8);
+            const [h, w] = await b.read(a, 2);
+            // (sprite.6502's header: a mirror image's is a 4-byte stub)
+            const len = w & 0x80 ? 4 : 2 + ((h & 7) * 8 - (h >> 3) - ((w >> 4) & 7)) * (w & 15);
+            bytes.push(...(await b.read(a, len)));
+        }
+        return bytes.join(",");
+    };
+    const toy = await toyGfx();
+    await b.keyDown("V");
+    r = await b.runUntil("handoff", 5);
+    saved = await state();
+    await b.run(0.2);
+    await b.keyUp("V");
+    await saveScreen("RETURN SAVES");
+    await type(..."DELETE ".repeat(6).trim().split(" "), "C", "E", "G", "A", "M", "E", "RETURN");
+    r = await b.runUntil("game_loop", 60);
+    check(r.stopped_reason === "breakpoint" && (await state()) === saved && (await b.peek("egg")) === 3
+        && (await toyGfx()) === toy, "... saved and carried on: egg 3, its toy's pictures as they were");
+
     // D (decision 32), with sideways RAM: the streaming edition instead,
     // CE2S, kept through a BREAK, and D again for CE2. (The streaming
     // edition's own discs have no sideways RAM to choose.) CE2S is known

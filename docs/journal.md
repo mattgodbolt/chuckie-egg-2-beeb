@@ -1530,3 +1530,21 @@ takes about 13 seconds, `make check` about 80, and all four
 configurations together about three minutes. Each configuration's logs
 now have their own directory: the editions' runs, side by side, had
 shared `build/bbc_*.json`.
+
+### The high-score table out of CE2S's main RAM (issue #8)
+
+CE2S kept the whole mailbox under the screen so that MENU found it again
+after a game, the high-score table with it, though only MENU reads the
+table and `CE2HI` has held a copy since decision 38. The table now sits at
+the end of the mailbox and CE2S's copy stops before it (`mb_ram_end`); its
+MENU reads `CE2HI` every time it starts. The cache's arena gained the
+table's bytes (decision 50 has the figures).
+
+- The first plan kept a fallback for a disc without `CE2HI`: MENU filling
+  in A&F's table itself. Matt preferred the file on every disc, built
+  from the one definition of the defaults (the `HiScores` section), so
+  `load_table` lost its checks and the mailbox in CE2DATA starts empty.
+- `make front` now looks for A&F's table at first boot, and for the new
+  high score after another game and the abort key. With the reload taken
+  out of CE2S's MENU the second check fails on the streaming edition's
+  disc, so it does test the disc.

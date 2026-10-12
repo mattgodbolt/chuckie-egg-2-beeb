@@ -5,7 +5,8 @@
 \
 \ It puts CE2DATA in a sideways RAM bank (decision 8) unless this build's
 \ data is there already, then reads the mailbox in that bank: why the game
-\ stopped, its score, the keys and the high-score table. Then the
+\ stopped, its score, the keys and the high-score table (CE2HI's, loaded
+\ at start-up; for the streaming edition, every time). Then the
 \ original's front end (docs/research/frontend.md sections 1-5): the
 \ instructions on first boot, the menu with the high scores, a new high
 \ score's name, redefining the keys, and loading and saving a game, here to
@@ -30,8 +31,10 @@ M_CHEAT     = mbox + (mb_cheat - mailbox)
 M_FDC       = mbox + (mb_fdc - mailbox)
 M_DISC      = mbox + (mb_disc - mailbox)
 M_EDITION   = mbox + (mb_edition - mailbox)
-\ Where the streaming edition keeps the mailbox (memory.6502).
+\ Where the streaming edition keeps the mailbox (memory.6502), and how much
+\ of it: not the high-score table (decision 50).
 MB_STREAM_BOX = MB_STREAM + (mailbox - data_magic)
+MB_RAM_BOX  = mb_ram_end - mailbox
 
 \ Where a game's lives are in the state block: its regions start with the
 \ fixed zero page, then LowState (state.6502).
@@ -71,6 +74,16 @@ mz_r    = &78               ; redefine's prompt (print_lines uses mz_i)
 IF DEFINED(DIRECT) OR DEFINED(VIEWER)
     JMP play                    ; the tests' discs: straight into the program
 ENDIF
+    \ CE2HI's table at start-up and after a BREAK, and with no bank every
+    \ time: the streaming edition keeps no table between games (decision
+    \ 50). (A disc error goes to the menu, as from anywhere else.)
+    PHA
+    LDX have_bank : BEQ table
+    CMP #MB_BOOT : BNE kept
+.table
+    JSR load_table
+.kept
+    PLA
     CMP #MB_OVER : BNE not_over
     JSR hiscore_check
     JMP main_menu
@@ -80,7 +93,6 @@ ENDIF
     JMP save_game               ; then carry on playing
 .not_save
     CMP #MB_BOOT : BNE main_menu    ; aborted, or BREAK pressed in a game
-    JSR load_table
     JSR instructions
 }
 .main_menu
@@ -277,7 +289,7 @@ ENDIF
 .compare
     LDA MB_STREAM,X : CMP data_id,X : BNE not_ram
     DEX : BPL compare
-    LDX #MAILBOX_LEN - 1
+    LDX #MB_RAM_BOX - 1
 .copy_ram
     LDA MB_STREAM_BOX,X : STA mbox,X
     DEX : CPX #&FF : BNE copy_ram
@@ -313,7 +325,7 @@ ENDIF
 .magic
     LDA data_id,X : STA MB_STREAM,X
     DEX : BPL magic
-    LDX #MAILBOX_LEN - 1
+    LDX #MB_RAM_BOX - 1
 .copy_ram
     LDA mbox,X : STA MB_STREAM_BOX,X
     DEX : CPX #&FF : BNE copy_ram
@@ -629,26 +641,14 @@ CAT_BUF = MB_XFER               ; (free until run_game)
     LDA #0 : LDX #LO(osfile_block) : LDY #HI(osfile_block) : JMP osfile
 }
 
-\ CE2HI's table into the mailbox's, if the disc has it at its length: at
-\ start-up and after a BREAK (between, the mailbox keeps it, and the file
-\ is the same).
+\ CE2HI's table into the mailbox's: every disc has the file (main.6502).
 .load_table
 {
     LDX #17
 .block
     LDA table_load,X : STA osfile_block,X
     DEX : BPL block
-    LDA #5 : LDX #LO(osfile_block) : LDY #HI(osfile_block) : JSR osfile
-    CMP #1 : BNE none                   ; not a file
-    LDA osfile_block+10 : CMP #HS_LEN : BNE none
-    LDA osfile_block+11 : ORA osfile_block+12 : ORA osfile_block+13 : BNE none
-    LDX #17
-.again
-    LDA table_load,X : STA osfile_block,X
-    DEX : BPL again
     LDA #&FF : LDX #LO(osfile_block) : LDY #HI(osfile_block) : JMP osfile
-.none
-    RTS
 }
 .table_name EQUS "CE2HI", 13
 .table_save

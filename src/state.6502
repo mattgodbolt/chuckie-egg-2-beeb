@@ -38,21 +38,19 @@
 \ jump, right, left, down, up, save, take/drop, abort. Matt's BBC keys to
 \ start with (decision 25): RETURN, X, Z, /, :, S, TAB, R.
 .mb_keys     EQUB &49, &42, &61, &68, &48, &51, &60, &33
-\ The high-score table (&A56B): ten names of 10 characters, each followed
-\ by its score's 10 digits, most significant first, two to a byte (the
-\ original's has a byte a digit; only MENU reads it); A&F's to start with.
-HS_ENTRY = 15
-.mb_table
-FOR n = 1..10
-    EQUS "A&F......."
-    EQUB 0, 0, 0, 0, 0
-NEXT
-HS_LEN = P% - mb_table
 \ The last filename saved or loaded (decision 23), ended by a return.
 NAME_MAX = 19
 .mb_name     EQUS "CEGAME", 13
     SKIP NAME_MAX + 1 - 7
 .mb_os       SKIP OS_KEPT_LEN   ; what a soft BREAK keeps of page 2
+\ The end of what the streaming edition keeps in main RAM (decision 50).
+.mb_ram_end
+\ The high-score table (&A56B): CE2HI's (main.6502), which MENU loads at
+\ start-up and after a BREAK. The streaming edition keeps none between
+\ games: its MENU loads CE2HI every time (decision 50).
+IF NOT(DEFINED(STREAM))
+.mb_table    SKIP HS_LEN
+ENDIF
 .mailbox_end
 
 MB_BOOT     = 0                 ; first boot, or BREAK pressed in a game

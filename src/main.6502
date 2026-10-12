@@ -43,9 +43,10 @@ ELSE
 ENDIF
 
 \ The streaming edition's mailbox (memory.6502): CE2DATA's magic and
-\ state.6502's mailbox, at the very top of main RAM.
-MAILBOX_SIZE = 230
-MB_STREAM = screen - LEN(DATA_MAGIC) - LEN(build_stamp) - MAILBOX_SIZE
+\ state.6502's mailbox up to mb_ram_end (not the high-score table,
+\ decision 50), at the very top of main RAM.
+MB_RAM_SIZE = 80
+MB_STREAM = screen - LEN(DATA_MAGIC) - LEN(build_stamp) - MB_RAM_SIZE
 
 \ Two editions from this file (docs/streaming.md): the sideways RAM
 \ edition, as below; and with -D STREAM=1 the streaming edition's game,
@@ -65,6 +66,21 @@ SECTION Menu, org = &1900, load = &FFFF1900, exec = &FFFF0000 + menu, filename =
     INCLUDE "menu.6502"
     INCLUDE "data/front.6502"
     ASSERT P% <= &3000
+ENDSECTION
+
+\ The high-score table's file (decisions 38 and 50), on every disc, with
+\ A&F's table to start with; MENU loads it into the mailbox's (state.6502).
+\ Ten names of 10 characters, each followed by its score's 10 digits, most
+\ significant first, two to a byte (the original's, &A56B, has a byte a
+\ digit; only MENU reads it).
+SECTION HiScores, org = M_TABLE, load = &FFFF0000 OR M_TABLE, exec = &FFFF0000 OR M_TABLE, filename = "CE2HI"
+.hs_file
+FOR n = 1..10
+    EQUS "A&F......."
+    EQUB 0, 0, 0, 0, 0
+NEXT
+HS_LEN = P% - hs_file
+HS_ENTRY = HS_LEN / 10
 ENDSECTION
 
 SECTION Data, org = &8000, load = &FFFF3000, filename = "CE2DATA", guard = &C000
@@ -93,9 +109,9 @@ SECTION Rooms, org = &0000, load = &FFFF0000, filename = "CE2ROOM"
     INCBIN "data/roomrecs.bin"
 ENDSECTION
 ENDIF
-\ Where the records start in CE2DATA (the same in both editions).
-REC_BASE = mailbox_end - data_magic
-ASSERT mailbox_end - mailbox = MAILBOX_SIZE
+\ What CE2S keeps of CE2DATA's start at MB_STREAM.
+MB_RAM_LEN = mb_ram_end - data_magic
+ASSERT mb_ram_end - mailbox = MB_RAM_SIZE
 
 IF DEFINED(STREAM)
     LOADER_NAME = "CE2S"
@@ -267,8 +283,8 @@ ENDIF
 IF DEFINED(STREAM)
     \ (Above where stream_init puts the mailbox back over the loaded file:
     \ the file padded up to there if the code ends before it.)
-    IF P% < MB_STREAM + REC_BASE
-        SKIP MB_STREAM + REC_BASE - P%
+    IF P% < MB_STREAM + MB_RAM_LEN
+        SKIP MB_STREAM + MB_RAM_LEN - P%
     ENDIF
 ENDIF
     INCLUDE "pages.6502"

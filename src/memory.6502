@@ -273,7 +273,8 @@ SAVE_KEYS  = STATE - 8
 
 \ The streaming edition's mailbox (docs/streaming.md), with no sideways
 \ bank to keep it in: CE2DATA's first bytes (its magic and state.6502's
-\ mailbox) at the top of main RAM, where MENU reads and writes them. CE2S
+\ mailbox up to mb_ram_end, without the high-score table: decision 50) at
+\ the top of main RAM, where MENU reads and writes them. CE2S
 \ loads over them, so MENU leaves a copy at MB_XFER for its loader to put
 \ back. (MB_STREAM is in main.6502, which knows the stamp's length.)
 MB_XFER   = &7600

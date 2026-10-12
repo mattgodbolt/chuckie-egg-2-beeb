@@ -40,8 +40,9 @@ From the menu: **P** plays, **R** redefines the keys, **L** loads a saved
 game, **I** shows the instructions again, and with sideways RAM **D**
 switches to the edition that reads its rooms from the disc (below). Saving
 (from the game) and loading list the disc and ask for a filename, offering
-the last one used. The high-score table keeps itself: it's saved to the disc
-as `CE2HI` whenever a new score goes in, and read back when the disc boots.
+the last one used. The high-score table keeps itself: it's `CE2HI` on the
+disc (A&F's to start with), saved whenever a new score goes in and read
+back when the disc boots, and after every game in the disc edition.
 
 The original's hidden developers' cheats are here too: **f0** on the menu
 turns them on (SHIFT with left or right changes room, and lives never run

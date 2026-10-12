@@ -3,7 +3,8 @@
 // release disc: the instructions, P to play, the save key in play (the
 // save screen, ESCAPE and RETURN), the abort key back to the menu, S and L
 // with filenames and refusals (decision 23), L to load and carry on, game over
-// with a new high score and its name, CTRL-BREAK after it, BREAK in play,
+// with a new high score and its name, kept through another game (from CE2HI
+// in the streaming edition), CTRL-BREAK after it, BREAK in play,
 // the developers' cheats, and D for the other edition. Exits non-zero on
 // the first failure.
 //
@@ -71,6 +72,8 @@ try {
     await b.run(0.5);
     await hold("SPACE", 0.2);
     check(await menuReady(), "the menu");
+    // A&F's table, from the CE2HI every disc has (decision 50).
+    check((await screen()).includes("A&F.........0000000000"), "... with A&F's high scores");
 
     // R: the keys in the original's order (up, down, left, right, jump,
     // take/drop, abort, save), each refused if it's taken already.
@@ -196,6 +199,16 @@ try {
     await saveScreen("RETURN LOADS");
     check((await screen()).includes("CE2HI"), "... CE2HI saved to the disc");
     await hold("ESCAPE", 0.1);
+    // A game, then the abort key: the table kept. The streaming edition
+    // keeps none between games; its MENU reads CE2HI again (decision 50).
+    check(await menuReady(), "... the menu again");
+    await hold("P", 0.1);
+    r = await b.runUntil("game_loop", 60);
+    check(r.stopped_reason === "breakpoint", "P starts another game");
+    await b.run(3);
+    await hold("Q", 0.5);
+    check(await menuReady(), "... the abort key: the menu");
+    check((await screen()).includes(`MAT.........${final}`), "... with the new high score");
 
     // CTRL-BREAK, then SHIFT-BREAK: a first boot again (the instructions),
     // not the same name asked for again; the new high score kept.

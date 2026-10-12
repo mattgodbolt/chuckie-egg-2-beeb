@@ -43,11 +43,11 @@ NAME_MAX = 19
 .mb_name     EQUS "CEGAME", 13
     SKIP NAME_MAX + 1 - 7
 .mb_os       SKIP OS_KEPT_LEN   ; what a soft BREAK keeps of page 2
-\ The end of what the streaming edition keeps in main RAM (decision 50).
+\ The end of what the streaming edition keeps in main RAM (decision 41).
 .mb_ram_end
 \ The high-score table (&A56B): CE2HI's (main.6502), which MENU loads at
 \ start-up and after a BREAK. The streaming edition keeps none between
-\ games: its MENU loads CE2HI every time (decision 50).
+\ games: its MENU loads CE2HI every time (decision 41).
 IF NOT(DEFINED(STREAM))
 .mb_table    SKIP HS_LEN
 ENDIF

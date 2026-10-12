@@ -44,7 +44,7 @@ ENDIF
 
 \ The streaming edition's mailbox (memory.6502): CE2DATA's magic and
 \ state.6502's mailbox up to mb_ram_end (not the high-score table,
-\ decision 50), at the very top of main RAM.
+\ decision 41), at the very top of main RAM.
 MB_RAM_SIZE = 80
 MB_STREAM = screen - LEN(DATA_MAGIC) - LEN(build_stamp) - MB_RAM_SIZE
 
@@ -68,7 +68,7 @@ SECTION Menu, org = &1900, load = &FFFF1900, exec = &FFFF0000 + menu, filename =
     ASSERT P% <= &3000
 ENDSECTION
 
-\ The high-score table's file (decisions 38 and 50), on every disc, with
+\ The high-score table's file (decisions 38 and 41), on every disc, with
 \ A&F's table to start with; MENU loads it into the mailbox's (state.6502).
 \ Ten names of 10 characters, each followed by its score's 10 digits, most
 \ significant first, two to a byte (the original's, &A56B, has a byte a

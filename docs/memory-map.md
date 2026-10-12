@@ -45,7 +45,7 @@ this build's. The game's state block (`SAVE_HDR`, then the regions from
 `CE2` loads over (checked by the build) and below MODE 7's screen, so it
 survives the reset, `MENU` and the game's reload. CE2S keeps its mailbox
 at `MB_STREAM`, under the screen, up to `mb_ram_end` (not the high-score
-table, which its `MENU` reads from `CE2HI` every time: decision 50), and
+table, which its `MENU` reads from `CE2HI` every time: decision 41), and
 `MENU` leaves a copy at `MB_XFER` for its loader to put back
 (docs/streaming.md).
 

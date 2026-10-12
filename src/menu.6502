@@ -32,7 +32,7 @@ M_FDC       = mbox + (mb_fdc - mailbox)
 M_DISC      = mbox + (mb_disc - mailbox)
 M_EDITION   = mbox + (mb_edition - mailbox)
 \ Where the streaming edition keeps the mailbox (memory.6502), and how much
-\ of it: not the high-score table (decision 50).
+\ of it: not the high-score table (decision 41).
 MB_STREAM_BOX = MB_STREAM + (mailbox - data_magic)
 MB_RAM_BOX  = mb_ram_end - mailbox
 
@@ -76,7 +76,7 @@ IF DEFINED(DIRECT) OR DEFINED(VIEWER)
 ENDIF
     \ CE2HI's table at start-up and after a BREAK, and with no bank every
     \ time: the streaming edition keeps no table between games (decision
-    \ 50). (A disc error goes to the menu, as from anywhere else.)
+    \ 41). (A disc error goes to the menu, as from anywhere else.)
     PHA
     LDX have_bank : BEQ table
     CMP #MB_BOOT : BNE kept

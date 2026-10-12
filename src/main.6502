@@ -45,8 +45,7 @@ ENDIF
 \ The streaming edition's mailbox (memory.6502): CE2DATA's magic and
 \ state.6502's mailbox up to mb_ram_end (not the high-score table,
 \ decision 41), at the very top of main RAM.
-MB_RAM_SIZE = 80
-MB_STREAM = screen - LEN(DATA_MAGIC) - LEN(build_stamp) - MB_RAM_SIZE
+MB_STREAM = screen - LEN(DATA_MAGIC) - LEN(build_stamp) - (mb_ram_end - mailbox)
 
 \ Two editions from this file (docs/streaming.md): the sideways RAM
 \ edition, as below; and with -D STREAM=1 the streaming edition's game,
@@ -110,7 +109,6 @@ ENDSECTION
 ENDIF
 \ What CE2S keeps of CE2DATA's start at MB_STREAM.
 MB_RAM_LEN = mb_ram_end - data_magic
-ASSERT mb_ram_end - mailbox = MB_RAM_SIZE
 
 IF DEFINED(STREAM)
     LOADER_NAME = "CE2S"

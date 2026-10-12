@@ -25,6 +25,7 @@
     RTS
 }
 
+K_M      = &65                  ; the music off and on (music.6502)
 K_Z      = &61
 K_X      = &42
 K_LEFT   = &19

@@ -5,7 +5,9 @@
 // writes (channel 1's tone, its high bits, on, off), the tune as channel 0
 // loud, then death_notes' two bytes a note in order, then off. (Once the
 // keyboard, left enabled, cleared bit 7 of every byte, and nothing noticed:
-// docs/journal.md.) Exits non-zero on a failure.
+// docs/journal.md.) With the music (decision 46) switched off by M, so
+// that these are the only writes: tools/musiccheck.mjs checks the music.
+// Exits non-zero on a failure.
 //
 //   node tools/soundcheck.mjs [--disc build/test.ssd] [--model B-DFS1.2]
 import { startBeeb, KEYS } from "./beeb.mjs";
@@ -34,6 +36,7 @@ const capture = async (during) => {
 const hex = (bytes) => bytes.map((x) => x.toString(16).padStart(2, "0")).join(" ");
 
 try {
+    if ("mu_on" in b.syms) await b.tap("M");         // the music off
     await b.run(3);                                   // the truck backs in
     const tick = await capture(async () => {
         await b.keyDown(KEYS.right);

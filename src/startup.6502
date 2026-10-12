@@ -331,7 +331,11 @@ ENDIF
 .loop
     LDA sound_init_bytes,X : JSR sound_write
     DEX : BPL loop
+IF MUSIC
+    JMP music_init
+ELSE
     RTS
+ENDIF
 }
 
 \ Note what a soft BREAK keeps of page 2, for MENU to put back and the
@@ -372,6 +376,9 @@ ENDIF
 .t1
     STA band_t1,X
     DEX : BPL t1
+IF MUSIC
+    STA mu_on : STA mu_busy         ; (music.6502: silent until sound_init)
+ENDIF
     JMP install_irq
 }
 

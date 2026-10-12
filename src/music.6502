@@ -1,0 +1,198 @@
+\ ***************************************************************************
+\ Music (decision 46; the sideways RAM edition only): Rameau's La Poule
+\ (1728), from Pierre Gouin's MIDI (music/README.md), which
+\ tools/mkmusic.py turns into music (events) and music_latch/music_data
+\ (the dividers the events index; data/music.6502).
+\
+\ The VSync interrupt plays it (music_tick): the tune on tone channel 0, an
+\ inner voice on channel 1, the bass on the noise channel as periodic noise
+\ clocked by channel 2 (a fifteenth of its pitch), channel 2 itself
+\ silent. Each note starts loud and loses a step every MU_DECAY frames, as
+\ a harpsichord's dies away.
+\
+\ The game's own sounds come first: the death tune holds the music, the
+\ movement tick borrows channel 1, and the train's noise takes the noise
+\ channel and channel 2 back while it's on. A channel they used is marked
+\ in mu_dirty, and the next VSync writes its note again. M switches it off
+\ and on (read_keys).
+\
+\ The interrupt's writes to the sound chip go through the System VIA, as
+\ the game's do. The chip takes a register's number in one byte and its
+\ value in the next, so the game's code keeps the interrupt off the chip
+\ (mu_busy) while it writes a sound, and sound_write for each byte; a
+\ frame the interrupt missed then is played with the next (mu_owed). It
+\ puts back the port as the code it interrupted had it (key_down's
+\ included).
+\ ***************************************************************************
+
+MU_DECAY = 4                        ; frames a step of attenuation, a power of 2
+MU_ON = &80                         ; mu_on: M has it on
+MU_HELD = &40                       ; ... and the death tune holds it
+
+\ The SN76489's volume register for each voice: channels 0 and 1, then the
+\ noise channel (the bass).
+.mu_volreg  EQUB &90, &B0, &F0
+\ Each voice's first attenuation (0 the loudest).
+.mu_attack  EQUB 1, 4, 2
+.mu_bits    EQUB 1, 2, 4
+
+\ The VSync interrupt's (irq.6502, which keeps X): the frame's events,
+\ then the decay.
+.music_tick
+{
+    LDA mu_on : CMP #MU_ON : BNE out
+    LDA mu_busy : BEQ playing
+    INC mu_owed
+.out
+    RTS
+.playing
+    TYA : PHA
+    LDA sysvia_ddra : PHA
+    LDA sysvia_ora_nh : PHA
+    \ The voices the game's sounds used.
+    LDX #2
+.dirty
+    LDA mu_dirty : AND mu_bits,X : BEQ clean
+    JSR mu_voice
+.clean
+    DEX : BPL dirty
+    \ The events due, this frame's and any missed.
+.frame
+    LDA mu_wait : BEQ read
+    DEC mu_wait
+.frame_done
+    LDA mu_owed : BEQ decay
+    DEC mu_owed
+    JMP frame
+.read
+    JSR mu_byte
+    CMP #&C0 : BCS not_note
+    \ A note: its voice from the latch byte's channel.
+    TAY
+    LDA music_latch,Y
+    LSR A : LSR A : LSR A : LSR A : LSR A : AND #3 : TAX
+    TYA : STA mu_note,X
+    LDA mu_attack,X : STA mu_att,X
+    JSR mu_voice
+    JMP read
+.not_note
+    CMP #&FE : BCC wait : BEQ repeat
+    \ &FF: from the start again.
+    JSR music_init.from_start
+    JMP read
+.wait
+    SBC #&BF                        ; (carry clear) the frames less one
+    STA mu_wait
+    BCS frame_done                  ; (always: no borrow)
+    ZA_UNREACHABLE
+.repeat
+    \ The bytes at music + (hi lo), len of them, then back here.
+    JSR mu_byte : CLC : ADC #LO(music) : PHA
+    JSR mu_byte : ADC #HI(music) : PHA      ; (mu_byte keeps the carry)
+    JSR mu_byte : STA mu_left
+    LDA mu_ptr : STA mu_ret
+    LDA mu_ptr+1 : STA mu_ret+1
+    PLA : STA mu_ptr+1
+    PLA : STA mu_ptr
+    JMP read
+.decay
+    LDA vsyncs : AND #MU_DECAY - 1 : BNE done
+    LDX #2
+.voice
+    LDA mu_att,X : CMP #15 : BCS next
+    INC mu_att,X
+    CPX #2 : BNE write
+    LDA noise_on : BNE next         ; (the train's)
+.write
+    LDA mu_att,X : ORA mu_volreg,X : JSR sound_write
+.next
+    DEX : BPL voice
+.done
+    \ The port as it was. key_down's (bit 7 an input) wants the keyboard
+    \ back on the bus; sound_write's leaves it off.
+    PLA : STA sysvia_ora_nh
+    PLA : STA sysvia_ddra
+    CMP #&7F : BNE port_done
+    LDA #3 : STA sysvia_orb
+.port_done
+    PLA : TAY
+    RTS
+}
+
+\ The next byte of the tune, from a repeat's bytes while there are any.
+\ Keeps X and the carry.
+.mu_byte
+{
+    LDY #0 : LDA (mu_ptr),Y
+    INC mu_ptr : BNE same
+    INC mu_ptr+1
+.same
+    LDY mu_left : BEQ done
+    DEC mu_left : BNE done
+    LDY mu_ret : STY mu_ptr
+    LDY mu_ret+1 : STY mu_ptr+1
+.done
+    RTS
+}
+
+\ Voice X's note and volume to the chip (and its mu_dirty bit cleared),
+\ but the bass's not while the train's noise has the noise channel.
+\ Keeps X.
+.mu_voice
+{
+    CPX #2 : BNE tone
+    LDA noise_on : BNE done
+    LDA #&E3 : JSR sound_write      ; periodic noise, clocked by channel 2
+.tone
+    LDA mu_bits,X : EOR #&FF : AND mu_dirty : STA mu_dirty
+    LDY mu_note,X : BMI volume      ; (none yet)
+    LDA music_latch,Y : JSR sound_write
+    LDY mu_note,X
+    LDA music_data,Y : JSR sound_write
+.volume
+    LDA mu_att,X : ORA mu_volreg,X : JMP sound_write
+.done
+    RTS
+}
+
+\ Silence the music's voices: the death tune holds it, or M switched it
+\ off. (The noise channel is the train's while its noise is on.)
+.music_quiet
+{
+    LDA #&9F : JSR sound_write
+    LDA #&BF : JSR sound_write
+    LDA noise_on : BNE done
+    LDA #&FF : JMP sound_write
+.done
+    RTS
+}
+
+\ M: the music off, or on again where it was.
+.music_switch
+{
+    LDA mu_on : EOR #MU_ON : STA mu_on
+    BMI on
+    JMP music_quiet
+.on
+    LDA #7 : STA mu_dirty
+    RTS
+}
+
+\ From the start, every voice silent, and on (sound_init: each time the
+\ game is loaded, after the chip is set up for the game's sounds).
+.music_init
+{
+    LDX #2
+.voice
+    LDA #&FF : STA mu_note,X
+    LDA #15 : STA mu_att,X
+    DEX : BPL voice
+    LDA #7 : STA mu_dirty           ; the noise channel to periodic
+    LDA #0 : STA mu_wait : STA mu_key : STA mu_owed
+    LDA #MU_ON : STA mu_on
+.from_start
+    LDA #LO(music) : STA mu_ptr
+    LDA #HI(music) : STA mu_ptr+1
+    LDA #0 : STA mu_left
+    RTS
+}

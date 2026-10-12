@@ -248,6 +248,20 @@ i_since = fdc_cur               ; (8271: when the wait for the drive began)
 .epoch         SKIP 1          ; on one at each room entered
 .pf_cur        SKIP 1          ; the room the cache was set up for, less 1 (&FF: none yet)
 .nr_n          SKIP 1          ; (prefetch: how many in nr_rooms)
+ELSE
+\ (music.6502: the interrupt reads them from install_irq on, so
+\ init_system clears mu_on and mu_busy)
+.mu_on         SKIP 1          ; MU_ON: playing, MU_HELD: held for the death tune
+.mu_busy       SKIP 1          ; non-zero: sound_write is part-way through a byte
+.mu_ptr        SKIP 2          ; the next event
+.mu_ret        SKIP 2          ; ... after a repeat's
+.mu_left       SKIP 1          ; the repeat's bytes still to play, 0 none
+.mu_wait       SKIP 1          ; frames before the next events
+.mu_dirty      SKIP 1          ; a bit a voice the game's sounds used
+.mu_key        SKIP 1          ; M is down (one switch a press)
+.mu_owed       SKIP 1          ; frames the interrupt missed (mu_busy)
+.mu_note       SKIP 3          ; each voice's note (music_latch's entry), &FF none
+.mu_att        SKIP 3          ; ... and attenuation
 ENDIF
 ENDSECTION
 \ &FD-&FF too: neither MOS's IRQ entry touches them, and a soft BREAK

@@ -1700,3 +1700,38 @@ egg's toy, in a fixed slot, and let only the loader know which egg it is
   when its control register is written mid-command). `handoff` now
   finishes the read first (`disc_wait`, with the interrupts still on), at
   a cost of 3 bytes of the cache.
+
+### Music: La Poule (on the music branch)
+
+Matt's first new feature: music in play, which a key turns off, on a branch
+for him to try before anything is released (decision 46).
+
+- The piece: Rameau's *La Poule*, for a game about hens. Matt found Pierre
+  Gouin's MIDI on IMSLP (CC BY-SA 4.0), behind a captcha, so he fetched
+  it. Mutopia has other Rameau harpsichord pieces but not this one; a copy
+  of the same MIDI on kunstderfuge carries a notice forbidding
+  republication, so it was used only to size the work before Matt's
+  arrived.
+- The MIDI is a performance: one track, chords rolled a few ticks apart,
+  ornaments written out, the ritardandos at the ends of sections in its
+  tempo map, and the repeats played out. `tools/mkmusic.py` keeps all of
+  that at 50Hz. Each bar starts at a whole frame and its notes are placed
+  from there, so bars played alike are byte for byte alike and the
+  repeats are stored once (a repeat event plays earlier bytes).
+- Three voices from six: the highest note sounding to channel 0, the
+  lowest to the bass, another to channel 1. The bass is the noise
+  channel's periodic noise, clocked by channel 2: one pulse every fifteen
+  of channel 2's cycles (jsbeeb's `shiftLfsrPeriodicNoise`), so it goes
+  down to the piece's G1, where the tone channels stop at B2.
+- The player runs in the VSync interrupt. The first capture of the chip's
+  writes (jsbeeb-mcp's `start_sound_capture`) showed the movement tick's
+  divider landing in channel 0's volume: the interrupt had written a
+  volume between the tick's register byte and its value byte. The game's
+  sounds now keep the interrupt off the chip for the whole sound
+  (`mu_busy`), and a frame it missed is played with the next.
+- `make music` (`tools/musiccheck.mjs`): after a counted stretch of play
+  the player must be where the data says, the tune's and the bass's
+  dividers must reach the chip in its order, and M must silence it, keep
+  its place, and carry on. A copy that counted one frame too many failed
+  it. `make sound` now switches the music off first: its log was the
+  game's sounds alone.

@@ -75,6 +75,9 @@ FUNCTION ula_entry(l, n, phys) = ((l AND 2) * 4 + (n AND 2) * 2 + (l AND 1) * 2 
     LDA status_ula,X : STA ula_pal  ; room_ula's ten, then the status bar's
     DEX : BPL entries
     INX : STX irq_split         ; 0
+IF MUSIC
+    JSR music_tick
+ENDIF
 .done
     PLA : TAX
     LDA &FC                     ; the interrupted A, saved by the OS

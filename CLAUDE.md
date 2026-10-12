@@ -137,12 +137,19 @@ handoff, the front end or anything paged.
   the toy maker's lights in eggs that cover all four toys and compares
   them with the original's pictures: only `toy_load` knows which egg's
   toy is in memory (decision 45), so a wrong one shows only past egg 1.
+- `make music` (`tools/musiccheck.mjs`, CE2 only) plays a stretch and
+  checks the music player's place and the notes the chip gets against
+  `src/data/music.bin`, then M. The player runs in the VSync interrupt and
+  writes the chip too: a sound the game writes (a register byte, then its
+  value) must hold `mu_busy` throughout (decision 46). `make sound`
+  switches the music off first.
 - `tools/mkrooms.py`, `tools/packrooms.py` and `tools/mkgfx.py` regenerate
   `src/data/` from the original, and `tools/mkrecords.py` then splits the
   rooms and sprites into per-room records (`records.bin`: each room's
   body, then the graphics groups they share; and `roomrecs.bin`, CE2S's
   CE2ROOM: the four toys' blocks, then each room's body and groups
-  together, each from a sector, none crossing a track). The build never runs them;
+  together, each from a sector, none crossing a track). `tools/mkmusic.py`
+  makes the music from `music/la-poule.mid`. The build never runs them;
   their output is committed.
 - Loading takes 4.6s: tools run to a symbol after booting
   (`startBeeb({bootUntil})`, `play.mjs --until`), never a guessed wait.

@@ -13,6 +13,22 @@
     LDA noise_flag : CMP noise_on : BEQ sound_write.done
     STA noise_on
     LSR A                           ; (the flag is 0 or 1)
+IF MUSIC
+    \ The music's bass (music.6502) has the noise channel and channel 2
+    \ otherwise: when the noise stops, the bass comes back, and when it
+    \ starts, the noise and channel 2 are set up as sound_init has them.
+    BCS on
+    LDA #&FF : JSR sound_write
+    LDA #4 : ORA mu_dirty : STA mu_dirty
+    RTS
+.on
+    INC mu_busy
+    LDX #noise_setup_end - noise_setup - 1
+.setup
+    LDA noise_setup,X : JSR sound_write     ; (which keeps X and the carry)
+    DEX : BPL setup
+    DEC mu_busy
+ENDIF
     LDA #&FF : BCC off
     LDA #&F3
 .off
@@ -21,6 +37,9 @@
 \ Write A to the sound chip, through the System VIA's slow bus. X is kept.
 .sound_write
 {
+IF MUSIC
+    INC mu_busy                     ; (music.6502's interrupt waits)
+ENDIF
     \ The keyboard off the bus first: key_down leaves it enabled, and then
     \ it drives port A's bit 7 (the addressed key's state), which would
     \ replace the byte's top bit; the OS only writes with it on auto-scan.
@@ -32,6 +51,9 @@
 .hold
     DEY : BNE hold
     LDY #8 : STY sysvia_orb
+IF MUSIC
+    DEC mu_busy
+ENDIF
 .done
     RTS
 }
@@ -52,6 +74,13 @@
     \ X counts up to 0 through the notes, from 256 less their length.
     DT_FROM = 256 - (death_notes_end - death_notes)
     ASSERT DT_FROM > 0 AND ((death_notes_end - death_notes) MOD 3) = 0
+IF MUSIC
+    \ The music held (and quiet, if M hasn't already made it).
+    LDA mu_on : BPL held
+    ORA #MU_HELD : STA mu_on
+    JSR music_quiet
+.held
+ENDIF
     LDA #&90 : JSR sound_write      ; channel 0 loud
     LDX #DT_FROM
 .note
@@ -63,7 +92,14 @@
     LDX #LO(4000) : LDY #HI(4000) : JSR wait_us
     DEC dt_n : BNE hold
     LDX dt_i : INX : INX : INX : BNE note
+IF MUSIC
+    LDA #&9F : JSR sound_write
+    LDA mu_on : AND #&FF EOR MU_HELD : STA mu_on
+    LDA #7 : STA mu_dirty           ; every voice back at the next VSync
+    RTS
+ELSE
     LDA #&9F : JMP sound_write
+ENDIF
 }
 \ (Its notes, death_notes, are with the data at the code's end: main.6502.)
 
@@ -97,6 +133,9 @@
     LSR A : LSR A : LSR A : LSR A : LSR A : STA ms_n
     TXA : CLC : ADC #3 : LSR A : LSR A
     CLC : ADC ms_n : ADC #8 : STA ms_n      ; N, under 80
+IF MUSIC
+    INC mu_busy                             ; (music.6502)
+ENDIF
     AND #15 : ORA #&A0 : JSR sound_write
     LDA ms_n : LSR A : LSR A : LSR A : LSR A : TAX : JSR sound_write
     LDA #&B2 : JSR sound_write              ; on
@@ -104,6 +143,18 @@
     TXA : TAY                               ; (N >> 4: sound_write keeps X)
     LDA ms_n : ASL A : ASL A : ASL A : ASL A : TAX
     JSR wait_us
+IF MUSIC
+    \ The music's inner voice back, if it's playing.
+    LDA mu_on : CMP #MU_ON : BNE off
+    LDX #1 : JSR mu_voice
+    JMP done
+.off
+    LDA #&BF : JSR sound_write              ; off
+.done
+    DEC mu_busy
+    RTS
+ELSE
     LDA #&BF : JMP sound_write              ; off
+ENDIF
 }
 

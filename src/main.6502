@@ -6,6 +6,13 @@
 \ down to &0E00 and runs it. The game comes back to MENU by resetting the machine (state.6502).
 \ ***************************************************************************
 
+\ In-game music (decision 46, music.6502): the sideways RAM edition only.
+IF DEFINED(STREAM)
+    MUSIC = FALSE
+ELSE
+    MUSIC = TRUE
+ENDIF
+
 INCLUDE "defs.6502"
 INCLUDE "memory.6502"
 
@@ -144,6 +151,9 @@ SECTION Loader, org = &1900, load = &FFFF1900, exec = &FFFF0000 + loader, filena
     INCLUDE "objects.6502"
     INCLUDE "machines.6502"
     INCLUDE "sound.6502"
+IF MUSIC
+    INCLUDE "music.6502"
+ENDIF
     INCLUDE "handoff.6502"
     INCLUDE "game.6502"
 IF DEFINED(STREAM)
@@ -273,6 +283,12 @@ ELSE
 .toy_lo     SKIP TOY_TYPES
 ENDIF
 .toy_hi     SKIP TOY_TYPES
+IF MUSIC
+\ The music (music.6502; tools/mkmusic.py).
+.music
+    INCBIN "data/music.bin"
+    INCLUDE "data/music.6502"
+ENDIF
 
     .code_end
     PRINT "code &", ~code_start, "-&", ~code_end, " (", CODE_TOP - code_end, " bytes free)"

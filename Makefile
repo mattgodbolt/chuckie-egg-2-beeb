@@ -47,7 +47,7 @@ DISC     = chuckie-egg-2.ssd
 # commit, with + if the tree (the disc itself aside) had changes.
 BUILD   := $(shell date -u '+%Y-%m-%d %H:%M UTC') $(shell git rev-parse --short HEAD 2>/dev/null || echo NOGIT)$(shell git diff --quiet HEAD -- . ':(exclude)$(DISC)' 2>/dev/null || echo +)
 
-.PHONY: all run check rooms passes entry front sound toy fuzz disc fetch zx disasm venv clean
+.PHONY: all run check rooms passes entry front sound music toy fuzz disc fetch zx disasm venv clean
 
 all: $(TARGET) $(TEST)
 
@@ -87,7 +87,7 @@ $(OUT):
 run: $(TARGET)
 	node tools/play.mjs '6,!run' shots/ --disc $(TARGET)
 
-check: rooms passes entry front sound toy
+check: rooms passes entry front sound music toy
 
 front: $(TARGET)
 	node tools/frontcheck.mjs
@@ -95,6 +95,11 @@ front: $(TARGET)
 # The bytes the SN76489 gets: the movement tick and the life-lost tune.
 sound: $(TEST)
 	node tools/soundcheck.mjs
+
+# The music (decision 46; the sideways RAM edition's): where the player is
+# after so many frames, the notes the chip gets, and M.
+music: $(TEST)
+	node tools/musiccheck.mjs
 
 # Each egg's toy as drawn, against the original's pictures for that egg
 # (decision 45: only toy_load knows which egg's toy is in).

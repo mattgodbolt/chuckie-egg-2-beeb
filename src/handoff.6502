@@ -48,7 +48,11 @@ ENDIF
     INX : INX : INX
     CPX #state_regions_end - state_regions : BNE region
     \ Silence: the tone channels already are (move_sound and death_tune end
-    \ each note), so only the train's noise may be on.
+    \ each note), so only the train's noise may be on; and the music.
+IF MUSIC
+    LDA #0 : STA mu_on
+    JSR music_quiet
+ENDIF
     LDA #&FF : JSR sound_write
     \ Every key up first: the abort or save key will still be down, and a
     \ key held through a BREAK stops the DFS booting (it picks a filing

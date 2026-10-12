@@ -129,6 +129,11 @@ The port's own work, its source code, tools and documentation, is under the
 game's design, rooms, graphics, text and sounds, which `src/data/` and the
 disc image carry, are theirs and not covered by that licence.
 
+The in-game music is Rameau's *La Poule* from Pierre Gouin's MIDI file,
+under [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/):
+`music/la-poule.mid` and the arrangement made from it,
+`src/data/music.bin` and `src/data/music.6502` (`music/README.md`).
+
 ## Credits
 
 *Chuckie Egg 2* is by A&F Software ("by the A&F R&D team", as its menu

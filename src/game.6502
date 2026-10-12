@@ -320,6 +320,17 @@ CHECKPOINT_VARS = h_frame + 2 - h_cell    ; h_cell .. h_frame
     JSR change_room.set
     JMP game_loop.same_room
 .actions
+IF MUSIC
+    \ M switches the music (music.6502), once a press.
+    LDX #K_M : JSR key_down : BEQ m_up
+    LDA mu_key : BNE m_done
+    INC mu_key
+    JSR music_switch
+    JMP m_done
+.m_up
+    STA mu_key                      ; (A = 0)
+.m_done
+ENDIF
     \ Abort and save go to the front end at once (&7902). A save needs a
     \ fresh press: the key may still be down when the game carries on.
     LDA #MB_ABORT : BIT ctrl : BMI handoff_a

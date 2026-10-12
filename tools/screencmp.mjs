@@ -8,7 +8,7 @@
 //   node tools/screencmp.mjs old.ssd new.ssd [--passes n] [--idle] [rooms...]
 //
 // Each disc's symbols are beside it (.json). Exits non-zero on a difference.
-import { readFileSync, existsSync, mkdtempSync } from "fs";
+import { readFileSync, existsSync, mkdtempSync, rmSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 import { startBeeb, KEYS } from "./beeb.mjs";
@@ -36,7 +36,10 @@ function spot(room) {
 const PHASES = [[KEYS.right], [KEYS.right, KEYS.jump], [KEYS.left], [KEYS.left, KEYS.jump], [KEYS.up], [KEYS.down]];
 const keysFor = (pass) => (idle ? [] : PHASES[Math.floor(pass / 4) % PHASES.length]);
 
+// (The screens pass through files, as jsbeeb-mcp saves memory to one:
+// each is read and deleted, and the directory goes on any exit.)
 const dir = mkdtempSync(join(tmpdir(), "screencmp-"));
+process.on("exit", () => rmSync(dir, { recursive: true, force: true }));
 const boot = (disc) => startBeeb({ disc, symbols: disc.replace(/\.ssd$/, ".json"), bootUntil: "game_loop" });
 let machines = await Promise.all([boot(discA), boot(discB)]);
 let held = machines.map(() => new Set());
@@ -71,7 +74,9 @@ async function snapshot(b, i, n) {
         const [name, off] = s.split("+");
         state.push(await b.peek(b.addr(name) + (off ? +off : 0)));
     }
-    return { screen: readFileSync(path), state };
+    const screen = readFileSync(path);
+    rmSync(path);
+    return { screen, state };
 }
 
 // Put Harry at cell in room on both machines (the same writes at the same

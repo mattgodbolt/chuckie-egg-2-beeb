@@ -59,17 +59,25 @@
 \ `visited` has a bit a room, set by a visit.
 .visit_bonus
 {
-    LDA room : LSR A : LSR A : LSR A : TAY
-    LDA room : AND #7 : TAX
-    LDA #0 : SEC
-.bit
-    ROL A : DEX : BPL bit
-    ORA visited,Y : CMP visited,Y : BEQ done      ; visited already
-    STA visited,Y
+    LDA room : JSR bit_at
+    ORA visited,X : CMP visited,X : BEQ done      ; visited already
+    STA visited,X
     LDY #0 : LDA (rb),Y
     LSR A : LSR A : LSR A : LSR A
     LDX #7 : JMP times_egg
 .done
+    RTS
+}
+
+\ Bit A of a bitmap (visited, objects.6502's t_out): its byte, A / 8, in
+\ X, and its mask, bit A AND 7, in A. Y kept.
+.bit_at
+{
+    ZA_AUTO1 mask
+    PHA
+    AND #7 : TAX : LDA bit_masks,X : STA mask
+    PLA : LSR A : LSR A : LSR A : TAX
+    LDA mask
     RTS
 }
 

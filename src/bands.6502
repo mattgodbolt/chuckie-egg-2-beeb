@@ -46,7 +46,8 @@ ENDIF
 
 \ The room's bands, from its body (rooms.6502's room_load, which then
 \ finds the fixed things at rb_things; set_room_palette fills band_cmaps'
-\ band 0 after).
+\ band 0 after). They end with a byte below any band's first, a split's
+\ row * 8 + colour (no split is above SPLIT_ROW_MIN: tools/mkrecords.py).
 .setup_bands
 {
     LDA #0 : STA band_count
@@ -64,7 +65,7 @@ IF DEFINED(STREAM)
 ELSE
     LDA band_count : TAX : ASL A : ADC rb_bands : TAY   ; (carry clear: k < 3)
 ENDIF
-    LDA (rb),Y : BEQ done
+    LDA (rb),Y : CMP #8 * SPLIT_ROW_MIN : BCC done  ; (how many fixed things: rooms.6502)
     PHA
     \ Logical 2's entries: &80, &90, &D0, &C0 with the colour (EOR 7).
     AND #7 : EOR #&87 : STA band_ula,X
@@ -90,7 +91,7 @@ ENDIF
     TXA : ASL A : ASL A : ASL A                 ; 8(k + 1)
     BNE rows                                    ; (always)
 .done
-    INY : STY rb_things                         ; (after the bands' 0)
+    INY : STY rb_things                         ; (after the bands' end)
     \ T1's periods (N + 2 microseconds, free-running): 512 a character row.
     \ Band 1's interrupt runs its four writes BAND_ADJ later than the status
     \ bar's last four, so it fires that much later.

@@ -17,7 +17,8 @@ dbg_room).
 
 Each line of the output: pass, room, cell (row * 32 + col), yf, xf,
 state, face, cnt (jump count), fall (fall counter), the RNG's state, and
-each monster as [cell, yf, sub, dx, dy, tick, speed].
+each monster as [cell, yf, sub, dx, dy, tick, speed], and the things:
+the portable ones' rooms, and which fixed ones are out of the world.
 """
 import argparse
 import json
@@ -63,6 +64,8 @@ def harry_state(m, n):
         "sel": 1 if m[0xA405] else 0, "falling": m[0xA54E],
         "train": [m[0xA48D], m[0xA48E]],
         "things": "".join(f"{m[0x6600 + i]:02x}" for i in range(0x29)),
+        # The fixed things, &29-&FF: 1 if out of the world.
+        "out": "".join("1" if m[0x6600 + i] & 0x80 else "0" for i in range(0x29, 0x100)),
     }
 
 

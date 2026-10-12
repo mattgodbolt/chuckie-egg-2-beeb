@@ -42,37 +42,36 @@ ENDIF
     \ The palette bands (bands.6502), which notes where the fixed things
     \ start, after them.
     JSR setup_bands
+    \ The bands end with how many fixed things the room has.
+    LDY rb_things : DEY : LDA (rb),Y : STA n
 IF DEFINED(STREAM)
     \ Where the graphics only its fixed things show are, in fours from rb
     \ (objects.6502's thing_load), then the fixed things.
-    LDY rb_things : LDA (rb),Y : TAX
+    INY : LDA (rb),Y : TAX
     JSR find_group
     LDA gp : STA fx_gfx
     LDA gp+1 : STA fx_gfx+1
     INC rb_things
 ENDIF
-    \ The room's fixed things, in order (objects.6502's thing_load).
-    LDX #NPORT : LDY #0
-.fixed
-    LDA t_room,X : EOR n : ASL A : BNE not_here    ; (bit 7, in the world, aside: n < 128)
-    TXA : STA room_fixed,Y
-    INY
-.not_here
-    INX : BNE fixed
+    \ Their entries, FIX_LEN bytes each, in order of their numbers
+    \ (objects.6502's next_object), to rb_fend.
+    LDA n : ASL A
+IF DEFINED(STREAM)
+    ASSERT FIX_LEN = 6
+    ADC n                           ; (carry clear: n < 128)
+ELSE
+    ASSERT FIX_LEN = 4
+ENDIF
+    ASL A
+    ADC rb_things : STA rb_fend     ; (carry clear: the body's offsets fit a byte)
     \ bp = the packed room's bit stream (unpack.6502), after them. (The
     \ streaming edition's: its palette, which the packed room follows.)
-    STY n : TYA : ASL A
-IF DEFINED(STREAM)
-    ASL A                           ; (the streaming edition's 5 a thing)
-ENDIF
-    ADC n                           ; 3 a thing (carry clear)
-    ADC rb_things                   ; (carry clear: the body's offsets fit a byte)
     ADC rb : STA bp
     LDA rb+1 : ADC #0 : STA bp+1
     \ The frames: a group's are numbered on from its first, so it is its
     \ first, its end and where its run starts in fr_lo and fr_hi, less one
     \ (sprite_frame adds it with the carry set), by its place in the list.
-    STX fi                          ; (X = 0: .fixed)
+    LDX #0 : STX fi
 .group
     \ The group list is at rb + 2 up to the monsters, at rb_mon.
     INC gi : LDY gi : CPY rb_mon : BCS done

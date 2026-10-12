@@ -174,8 +174,6 @@ ENDIF
 .fr_lo      SKIP FRAMES_MAX
 .fr_hi      SKIP FRAMES_MAX
     \ Harry's frames, and the tile font.
-\ The room's fixed things' numbers, in order (rooms.6502's room_load).
-.room_fixed SKIP FIXED_MAX
 .harry_gfx
     INCBIN "data/harry.bin"
 .tiles
@@ -212,15 +210,23 @@ ENDMACRO
 \ the milk's, the cocoa's, the sugar's.
 .hopper_rooms
     EQUB 95, 33, 51, 110
+\ (status.6502's bit_at) Bit n's mask.
+.bit_masks
+    EQUB 1, 2, 4, 8, 16, 32, 64, 128
     \ (Room to spare in the holes, for another table.)
     ASSERT P% <= tiles + 8 * (&3E - &20)
     SKIP tiles + 8 * (&3E - &20) - P%
     INCBIN "data/tiles3.bin"
     ASSERT P% = tiles + 8 * (&5C - &20)
     INCLUDE "data/objects.6502"
-.things                         ; (objects.6502; tools/mkrecords.py)
-    INCBIN "data/thingsres.bin"
+\ The portable things' rooms, rows and columns (objects.6502: egg_init
+\ sets them from thing_init), and a bit for each fixed thing, set while
+\ it's out of the world.
+.things     SKIP 3 * NPORT
+T_OUT_LEN = (256 - NPORT + 7) DIV 8
+.t_out      SKIP T_OUT_LEN
 .visited    SKIP 16             ; a bit a room, its visit bonus taken (status.6502)
+THINGS_LEN = P% - things        ; (a saved game's: pages.6502's state_regions)
 \ The thing types' inks, kinds and graphics (objects.6502; tools/mkobjects.py),
 \ TY_KEPT of them.
 .thing_types

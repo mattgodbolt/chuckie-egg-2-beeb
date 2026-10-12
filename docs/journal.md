@@ -1588,3 +1588,39 @@ things' types (decision 43).
 - `make passes` never lights them, and `screencmp` starts each egg with
   them off, so a script lit them in room 95 and compared the screen with
   the build before, eggs 1, 2 and 4: the same.
+
+### The fixed things' rooms: a bit each (issue #7)
+
+The 215 fixed things kept a room byte each, though only bit 7 (in the
+world or not) ever changes. Now a room's body lists its fixed things by
+number, and `t_out` keeps a bit for each, so a saved game shrinks too
+(decision 44).
+
+- The round robin was the part to get right. The original walks the
+  thing table one at a time, up to 128 on from the last thing it chose,
+  and takes the first in the room. With the fixed things' rooms gone from
+  main RAM, `next_object` instead measures how far on each candidate is
+  (the portable things in the room, the room's fixed things still in the
+  world) and takes the nearest under 128; with none, it moves on 128 as
+  the walk would. Which thing is current decides what can be touched, so
+  `make passes` compares the pointer every pass, as it already did.
+- `make passes` didn't compare the fixed things at all, only the
+  portable things' rooms. Both loggers now record which fixed things are
+  out of the world each pass, and four scenarios change them: the
+  generator's lever jumped across from each side, the LIFT sign, and a
+  toy part dropped into the toy maker's hopper, which lights its lamp
+  (the original's logs ran again, as `passlog.py` changed).
+- A band's first byte is its row * 8 + colour and no split starts above
+  row 3, so the bands' end can be any byte below 24: it is now how many
+  fixed things the room has, and the bank pays only for their numbers.
+- The zero-page scratch area was full; `thing_load`'s two scratch bytes
+  moved into baron's pool, and `bit_at`, shared with the visit bonus's
+  flags, keeps its mask there too, from a table of the eight in the tile
+  font's spare room.
+- The first `next_object` was slower than the walk in a room of few
+  things: it always looks at all 41 portable things, and it tested every
+  fixed thing's bit. Holding the room in A for the portable things'
+  loop, and testing a fixed thing's bit only when it would be the
+  nearest yet, brought it to about the walk's cost: faster in room 95,
+  slower in room 115, its worst call quicker (decision 44 has the
+  figures).

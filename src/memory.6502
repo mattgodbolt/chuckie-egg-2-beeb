@@ -190,10 +190,6 @@ SECTION Scratch, org = &90, guard = &FC, virtual = TRUE
 .box_t         SKIP 1
 .box_b         SKIP 1
 \ (objects.6502)
-.tl_t          SKIP 1
-IF DEFINED(STREAM)
-.tl_g          SKIP 1
-ENDIF
 .drop_x        SKIP 1
 \ (sound.6502)
 .dt_i          SKIP 1
@@ -221,6 +217,7 @@ ENDIF
 \ rb, and how many graphics groups it has)
 .rb_mon        SKIP 1
 .rb_things     SKIP 1
+.rb_fend       SKIP 1          ; (and where they end)
 .rg_count      SKIP 1
 \ &D0 is the Master's VDU status, which its soft BREAK reads (decision 22).
     ASSERT P% <= &D0

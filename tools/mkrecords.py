@@ -26,9 +26,6 @@ committed (the build never runs this):
     src/data/records.6502   what stays in main RAM to find them, and
                             Harry's frame pointers
     src/data/harry.bin      Harry's frames, which every room shows
-    src/data/thingsres.bin  the things' rooms (256), then the portable
-                            things' rows and columns (41 each; their types
-                            objects.6502 works out: tools/mkobjects.py)
 
 A room's body, its parts one after another (rooms.6502's room_load finds
 where each starts):
@@ -43,20 +40,23 @@ where each starts):
             number, row, column, type. The entry's number decides whether
             it is on (monsters.6502: the egg's limit, the dog's swap).
     bands:  two bytes a split, first row * 8 + logical 2's BBC colour, the
-            map's number in band_maps; 0 ends. (The streaming edition's:
-            first row * 8 + colour, then the map itself, two bytes.) The
+            map's number in band_maps (the streaming edition's: first row
+            * 8 + colour, then the map itself, two bytes); then how many
+            fixed things the room has, which is less than any split's
+            first byte (no split starts above SPLIT_ROW_MIN). The
             streaming edition's then has where its fixed things' graphics
             start, in fours from the body's start (rooms.6502's room_load).
-    fixed things: three bytes for each thing from &29 (the machine parts
-            and bonus items, which never move) whose room this is, in order:
-            type (renumbered: tools/mkobjects.py), row, column.
-            objects.6502's thing_load finds a thing's by its place among
-            them; things.bin's other rows and columns (the portable
-            things', 0-&28) stay in main RAM. The streaming edition's
-            have five bytes: the type's ink and kind, its graphic's offset
-            among the room's fixed things' graphics (or for the toy
-            maker's lights, of a portable kind, the toy part's type),
-            row, column; main RAM keeps the portable things' types alone.
+    fixed things: four bytes for each thing from &29 (the machine parts
+            and bonus items, which never move) whose room this is, in order
+            of their numbers: number, type (renumbered:
+            tools/mkobjects.py), row, column. Main RAM keeps only whether
+            each is in the world, a bit (objects.6502's t_out), and the
+            portable things' (0-&28) rooms, rows and columns. The
+            streaming edition's have six bytes: number, the type's ink and
+            kind, its graphic's offset among the room's fixed things'
+            graphics (or for the toy maker's lights, of a portable kind,
+            the toy part's type), row, column; main RAM keeps the portable
+            things' types alone.
     packed room: the bit stream (unpack.6502)
 
 A group is the frames of one monster graphic (every frame its types can
@@ -88,7 +88,7 @@ TRAIN = range(0x47, 0x51)
 LIFTS = {26: 0x96, 55: 0x96, 34: 0x97, 104: 0x97}  # pages.6502's lift_table; frame &95 + type
 DOG_SITS, DINOSAUR_STOPS = 0x0C, 0x37 + 2           # monsters.6502's respawn
 NPORT = 0x29                # things 0-&28 are portable (objects.6502)
-FIXED_MAX = 9               # the most fixed things in a room (rooms.6502's room_fixed)
+SPLIT_ROW_MIN = 3           # no split starts above it (bands.6502: below the status bar's)
 GROUPS_MAX, FRAMES_MAX = 4, 24  # the most groups, and frames, a room has (main.6502)
 
 
@@ -245,11 +245,12 @@ def main():
         # number, so main RAM needn't keep mon_types (monsters.6502).
         mons_s = bytes([len(entries[r])] + [b for e in entries[r] for b in (e, mon[0x100 + e], mon[0x200 + e])
                                             + tuple(types[4 * mon[0x300 + e]:4 * mon[0x300 + e] + 4])])
-        bnds = bytes([b for pair in bands[r] for b in pair] + [0])
-        bnds_s = bytes([b for first, m in bands[r] for b in (first, *band_maps[2 * m:2 * m + 2])] + [0])
         fixed = [x for x in range(NPORT, 256) if t_room[x] & 0x7F == r]
-        assert len(fixed) <= FIXED_MAX
-        fixd = bytes([b for x in fixed for b in (type_number[t_type[x]], t_row[x], t_col[x])])
+        # (The bands end with how many: setup_bands tells it from a split.)
+        assert all(first >= 8 * SPLIT_ROW_MIN for first, _ in bands[r]) and len(fixed) < 8 * SPLIT_ROW_MIN
+        bnds = bytes([b for pair in bands[r] for b in pair] + [len(fixed)])
+        bnds_s = bytes([b for first, m in bands[r] for b in (first, *band_maps[2 * m:2 * m + 2])] + [len(fixed)])
+        fixd = bytes([b for x in fixed for b in (x, type_number[t_type[x]], t_row[x], t_col[x])])
         # The streaming edition's: the graphics only fixed things show, the
         # room's once each, follow the body; each thing has its type's ink
         # and kind, and its graphic's offset among them (or a light's type,
@@ -259,7 +260,7 @@ def main():
         chunk, at = fixed_graphics(objgfx, [obj_offs[g] for g in shown])
         place = lambda t: at[obj_offs[ty_gfx[t - TOY_TYPES]]] if t >= PORT_TYPES else t
         fixd_s = bytes([b for x in fixed for t in [type_number[t_type[x]]]
-                        for b in (ty_ink[t], ty_kind[t], place(t), t_row[x], t_col[x])])
+                        for b in (x, ty_ink[t], ty_kind[t], place(t), t_row[x], t_col[x])])
         assert all(type_number[t_type[x]] < TOY_TYPES or type_number[t_type[x]] >= PORT_TYPES for x in fixed)
         for g in shown:
             assert unpack(chunk, at[obj_offs[g]]) == unpack(objgfx, obj_offs[g])
@@ -362,8 +363,6 @@ def main():
     with open(f"{DATA}/harry.bin", "wb") as f:
         f.write(sprites[:harry_end])
     assert all(1 <= t_room[x] & 0x7F <= 120 for x in range(NPORT, 256))
-    with open(f"{DATA}/thingsres.bin", "wb") as f:
-        f.write(t_room + t_row[:NPORT] + t_col[:NPORT])
     label = lambda g: f"&{g:02X}" if isinstance(g, int) else g
     lines = [
         "\\ Generated by tools/mkrecords.py: do not edit.",
@@ -398,7 +397,7 @@ def main():
         "\\ The most a room needs, its record (the streaming edition's cache).",
         f"ROOM_MAX = {room_max}",
         f"NPORT = &{NPORT:02X}       \\ things 0 to NPORT - 1 are portable",
-        f"FIXED_MAX = {FIXED_MAX}",
+        f"SPLIT_ROW_MIN = {SPLIT_ROW_MIN}",
         f"GROUPS_MAX = {GROUPS_MAX}",
         f"LEN4_BIAS = {LEN4_BIAS}",
         f"FRAMES_MAX = {FRAMES_MAX}",

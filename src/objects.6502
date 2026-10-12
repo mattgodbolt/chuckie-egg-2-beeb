@@ -4,15 +4,25 @@
 \ (bit 7 set: not in the world), row, column, type. 0-&28 are portable,
 \ &29-&39 machine parts, &3A-&FF bonus items. Only the round robin's
 \ current thing is drawn (every frame) and can be touched. The machine
-\ parts and bonus items never move, and only thing_load reads where they
-\ are: their rows, columns and types are in their rooms' bodies
-\ (tools/mkrecords.py), and only the portable things' rows and columns
-\ are kept here (their types never change, and thing_load works them out).
+\ parts and bonus items never move: their numbers, types, rows and
+\ columns are in their rooms' bodies (tools/mkrecords.py), and of their
+\ rooms only whether they are still there is kept here, a bit each in
+\ t_out (set: out of the world, as bit 7 of a room), from thing NPORT
+\ (decision 44). The portable things' rooms, rows and columns are kept
+\ (their types never change, and thing_load works them out).
 \ ***************************************************************************
 
 t_room = things
-t_row  = things + &100
+t_row  = things + NPORT
 t_col  = t_row + NPORT
+\ A fixed thing's entry in its room's body (room_load's rb_things to
+\ rb_fend): its number, then its type, row and column (the streaming
+\ edition's: its ink, kind, graphic, row and column).
+IF DEFINED(STREAM)
+    FIX_LEN = 6
+ELSE
+    FIX_LEN = 4
+ENDIF
 
 \ The thing types (NTYPES, renumbered: tools/mkobjects.py), as three
 \ tables a type indexes: ink, kind, and graphic from type TOY_TYPES. Types
@@ -67,13 +77,18 @@ KIND_FIXED = &40            ; kind bit 6 (with bit 7): a machine part
 }
 
 \ Load thing X's position, ink, graphic and kind into the current-thing
-\ record, as &9A10 and &7F01 do. (The original's &9A10 leaves the kind:
+\ record, as &9A10 and &7F01 do (a fixed thing: its entry at Y in the
+\ room's body, next_object's). (The original's &9A10 leaves the kind:
 \ only touch_thing reads it, for the round robin's pick, which next_object
 \ loads after any other load.) The round robin's pointer (o_index, the
 \ original's &A400) is the round robin's alone: touching and taking act on
 \ that thing, whatever the record last had loaded into it.
 .thing_load
 {
+    ZA_AUTO1 tl_t                   ; the type
+IF DEFINED(STREAM)
+    ZA_AUTO1 tl_g                   ; a fixed thing's graphic
+ENDIF
     CPX #NPORT : BCS fixed
     \ A portable thing's type (tools/mkobjects.py numbers them so): its
     \ number for the toy's parts, 0-7; 8 + thing / 8 for the ingredients
@@ -117,18 +132,11 @@ NEXT
     STA o_sel
     RTS
 .fixed
-    \ A thing that never moves, so in this room (the round robin found it
-    \ here): its type, row and column in the body, by its place among the
-    \ room's (room_load's room_fixed). (The streaming edition's: its ink,
-    \ kind, graphic, row and column.)
-    LDY #&FF : TXA
-.find
-    INY : CMP room_fixed,Y : BNE find   ; (it's there)
-    STY tl_t : TYA : ASL A
+    \ A thing that never moves, in this room (the round robin found it
+    \ here): after its number in its entry, its type, row and column (the
+    \ streaming edition's: its ink, kind, graphic, row and column).
 IF DEFINED(STREAM)
-    ASL A : ADC tl_t                        ; 5 * its place (carry clear)
-    ADC rb_things : TAY
-    LDA (rb),Y : STA o_ink
+    INY : LDA (rb),Y : STA o_ink
     INY : LDA (rb),Y : STA o_kind
     INY : LDA (rb),Y : STA tl_g             ; its graphic
     INY : LDA (rb),Y : PHA                  ; row
@@ -149,13 +157,11 @@ IF DEFINED(STREAM)
     STA o_sel                               ; (not 0: the record's in main RAM)
     RTS
 ELSE
-    ADC tl_t                                ; 3 * its place (carry clear)
-    ADC rb_things : TAY
-    LDA (rb),Y : STA tl_t                   ; type
+    INY : LDA (rb),Y : STA tl_t             ; type
     INY : LDA (rb),Y : PHA                  ; row
     INY : LDA (rb),Y : TAY                  ; column
     PLA
-    BCC place                       ; (always: the body's offsets are bytes)
+    JMP place
 ENDIF
 }
 
@@ -172,7 +178,8 @@ ENDIF
     RTS
 
 \ RoomThings (&99F6): on entering a room, mark the footprints of the
-\ portable things in it; select none. Nothing is drawn yet.
+\ portable things in it; select none. Nothing is drawn yet. (The fixed
+\ things have none.)
 .room_things
 {
     LDX #&28                        ; (the footprints EOR: any order)
@@ -186,24 +193,52 @@ ENDIF
 }
 
 \ NextObject (&7F01): the round robin. Look at up to 128 things after the
-\ last one for the next in this room; it becomes the current thing.
+\ last one for the next in this room; it becomes the current thing. (The
+\ original steps through the things one at a time. The same thing is the
+\ nearest after the last of those in the room: the portable things whose
+\ room this is, and the fixed things in its body still in the world.)
 .next_object
 {
-    LDX o_index
+    ZA_AUTO1 best                   ; the nearest's distance after o_index, less 1
+    ZA_AUTO1 entry                  ; its entry in the body, if it's a fixed thing
+    ZA_AUTO1 near                   ; a fixed thing's distance, while it's checked
+    LDA #128 : STA best             ; (none yet: 128 on is too far)
+    LDX #NPORT - 1
+.portable
     LDA room
-    LDY #128 / 4                    ; four a time: this runs twice a pass
-.loop
-    INX : CMP t_room,X : BEQ found
-    INX : CMP t_room,X : BEQ found
-    INX : CMP t_room,X : BEQ found
-    INX : CMP t_room,X : BEQ found
-    DEY : BNE loop
-    STY o_sel                       ; (Y = 0) none
-    STX o_index
-    RTS
-.found
-    STX o_index
+.port_scan
+    CMP t_room,X : BEQ port_here
+    DEX : BPL port_scan
+    BMI port_done                   ; (always)
+.port_here
+    TXA : CLC : SBC o_index         ; X - o_index - 1
+    CMP best : BCS port_next
+    STA best
+.port_next
+    DEX : BPL portable
+.port_done
+    LDY rb_things
+.fixed
+    CPY rb_fend : BCS chosen
+    LDA (rb),Y : CLC : SBC o_index
+    CMP best : BCS fix_next         ; (no nearer)
+    STA near
+    LDA (rb),Y : SEC : SBC #NPORT
+    JSR bit_at : AND t_out,X : BNE fix_next    ; out of the world
+    LDA near : STA best : STY entry
+.fix_next
+    TYA : CLC : ADC #FIX_LEN : TAY
+    BNE fixed                       ; (always: the body's offsets are bytes)
+.chosen
+    LDA best : BMI none
+    SEC : ADC o_index : STA o_index : TAX
+    LDY entry                       ; (a fixed thing's: thing_load)
     JMP thing_load
+.none
+    \ 128 on, nothing selected.
+    LDA o_index : EOR #128 : STA o_index
+    LDA #0 : STA o_sel
+    RTS
 }
 
 \ PowerOn (&9606): the generator on; and the restart point is moved.
@@ -336,14 +371,34 @@ ENDIF
     TYA : TAX
     JSR thing_off : INX
     \ Fall into thing_off.
-\ Thing X out of the world (its room's bit 7 set), or into it. A, X, Y
-\ kept.
+\ Thing X out of the world (its room's bit 7 set, or its bit in t_out),
+\ or into it. X and Y kept.
 .thing_off
+    CPX #NPORT : BCS fixed_out      ; (C set: out)
     ASL t_room,X : SEC : ROR t_room,X
     RTS
 .thing_on
+    CPX #NPORT : BCS fixed_in
     ASL t_room,X : LSR t_room,X
     RTS
+.fixed_in
+    CLC
+\ Fixed thing X's bit in t_out to C (1: out of the world). X and Y kept.
+.fixed_out
+{
+    TXA : PHA
+    PHP
+    SEC : SBC #NPORT : JSR bit_at   ; (X its byte)
+    PLP : BCS out
+    EOR #&FF : AND t_out,X
+    BCC store                       ; (always)
+.out
+    ORA t_out,X
+.store
+    STA t_out,X
+    PLA : TAX
+    RTS
+}
 
 
 \ The girder back to its start, the gap open (&9934; and a death, &8A29).
@@ -529,19 +584,21 @@ GIRDER_COL = 10
 
 \ ToyBasket (&9883): every part in the basket's light comes on, and they
 \ are counted; PartDelivered (&9872): its light comes on, and one more.
+\ (Part n's light is thing &29 + n.)
 .toy_basket
 {
-    LDX #7
+    LDX #&29 + 7
 .loop
-    LDA t_room,X : BPL next
-    ASL t_room+&29,X : LSR t_room+&29,X
+    LDA t_room - &29,X : BPL next       ; (the part out of the world)
+    JSR thing_on
 .next
-    DEX : BPL loop
+    DEX : CPX #&29 : BCS loop
     CLC : LDA in_basket
     BCC add                             ; (always)
 .part_delivered
-    ASL t_room+&29,X : LSR t_room+&29,X ; (X the part, from deliver)
-    LDA #1                              ; (C clear: the LSR's bit 0 was the ASL's 0)
+    TXA : CLC : ADC #&29 : TAX          ; (X the part, from deliver)
+    JSR thing_on
+    CLC : LDA #1
 .add
     ADC delivered : STA delivered
     \ Fall into toy_check.
@@ -610,37 +667,31 @@ GIRDER_COL = 10
 \ EggInit (&9A80): every new egg, the factory back as it was.
 .egg_init
 {
-    \ The portable things back where they start: their rooms, and their
-    \ rows and columns (thing_init's, as t_row's and t_col's, one after
-    \ the other).
-    ASSERT t_col = t_row + NPORT
-    LDX #2 * NPORT - 1
+    \ The portable things back where they start: their rooms, rows and
+    \ columns (thing_init's, as things has them).
+    LDX #3 * NPORT - 1
 .init
-    LDA thing_init + NPORT,X : STA t_row,X
-    CPX #NPORT : BCS no_room
-    LDA thing_init,X : STA t_room,X
-.no_room
+    LDA thing_init,X : STA things,X
     DEX : BPL init
-    \ In the world: 0-&26 and &37-&FF; out: &27-&36. (X from &FF down to
-    \ 1: thing 0's room is thing_init's, in the world.)
-.world
-    ASL t_room,X
-    TXA : SEC : SBC #&37 : CMP #&F0 ; C set: &27-&36, out
-    ROR t_room,X
-    DEX : BNE world
     LDA #&FF : STA carried : STA f_thing
-    \ Every room's visit bonus again; factory, take_latch, delivered and
-    \ in_basket zeroed.
-    ASSERT in_basket + 3 - factory < 16
-    LDX #15 : LDA #0
+    \ Every fixed thing in the world, every room's visit bonus again;
+    \ factory, take_latch, delivered and in_basket zeroed.
+    ASSERT visited = t_out + T_OUT_LEN
+    ASSERT in_basket + 3 - factory < T_OUT_LEN + 16
+    LDX #T_OUT_LEN + 15 : LDA #0
 .zero
-    STA visited,X
+    STA t_out,X
     CPX #in_basket + 4 - factory : BCS visit_only
     STA factory,X
 .visit_only
     DEX : BPL zero
     STA dog_sat                 ; the running dog, not the sitting one
     JSR set_carrying            ; NOTHING
+    \ In the world: 0-&26 and &37-&FF; out: &27-&36.
+    LDX #&36
+.out
+    JSR thing_off
+    DEX : CPX #&27 : BCS out
     \ More monsters each egg: entries 1 .. min(130 + 25 * egg, 255).
     LDX egg : LDA #&82 : CLC    ; (egg is at least 1)
 .add

@@ -378,7 +378,10 @@ Everything else in the factory that isn't scenery or a monster is one of
 256 **things** (`things`, the original's `&6600`): four arrays of 256
 bytes holding each thing's room, row, column and type. A thing that isn't
 in the world (carried, used up, or not made yet) has bit 7 of its room set,
-which matches no room.
+which matches no room. (The port keeps those arrays only for the things
+that move. The others never leave their rooms, so each room's record
+lists its own with their rows and columns, and main RAM keeps one bit
+for each, whether it is still in the world: decision 44.)
 
 - Things 0-`&28` are the 41 that move about: 8 toy parts, 8 each of
   milk, cocoa and sugar, 4 baskets, a bone, a girder, a ladder, the toy

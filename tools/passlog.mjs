@@ -36,6 +36,10 @@ const inputs = (args[0] ?? "").split(",").filter(Boolean).map((part) => {
 });
 const passes = parseInt(args[1] ?? "100");
 
+// The fixed things &29-&FF, 1 if out of the world: a bit each in t_out
+// from thing NPORT (objects.6502).
+const fixedOut = (bits) => Array.from({ length: 0x100 - 0x29 }, (_, i) => (bits[i >> 3] >> (i & 7)) & 1).join("");
+
 // The tests' disc (make build/test.ssd): straight into a game, no front end.
 const b = await startBeeb({ disc: "build/test.ssd", symbols: "build/test.json" });
 const held = new Set();
@@ -102,6 +106,7 @@ try {
             sel: (await b.peek("o_sel")) ? 1 : 0, falling: await b.peek("f_thing"),
             train: [await b.peek("train_room"), await b.peek("train_pos")],
             things: (await b.read("t_room", 0x29)).map((x) => x.toString(16).padStart(2, "0")).join(""),
+            out: fixedOut(await b.read("t_out", b.syms.T_OUT_LEN)),
         });
         if (peeks.length) {
             const extra = {};

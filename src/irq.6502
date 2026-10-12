@@ -45,8 +45,11 @@ FUNCTION ula_entry(l, n, phys) = ((l AND 2) * 4 + (n AND 2) * 2 + (l AND 1) * 2 
         LDA room_ula + i : STA ula_pal
     NEXT
     LDA band_t1+2 : STA usrvia_t1ll
-    LDA band_t1+3               ; (never 0: &FF, or band 2 a row or more on)
-    BNE latch                   ; (always)
+    \ Once a room has set band_t1, its top byte is never 0 (&FF, or band 2
+    \ a row or more on) and this always branches. Before the first room,
+    \ init_system's zeros fall into .band, which leaves the latch &FFFF.
+    LDA band_t1+3
+    BNE latch
 .band
     \ A band's split (decision 15): logical 2's four entries for band X.
     FOR i = 0..3

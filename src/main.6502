@@ -103,11 +103,10 @@ SECTION MailboxRAM, org = MB_STREAM, guard = screen, virtual = TRUE
     EQUS DATA_MAGIC, build_stamp
     INCLUDE "state.6502"
 ENDSECTION
-\ Its rooms, each one record, read from the disc as they're wanted
-\ (disc.6502: MENU finds where CE2ROOM starts). Never loaded whole.
-SECTION Rooms, org = &0000, load = &FFFF0000, filename = "CE2ROOM"
-    INCBIN "data/roomrecs.bin"
-ENDSECTION
+\ Its rooms, each one record, are read from the disc as they're wanted
+\ (disc.6502: MENU finds where CE2ROOM starts), never loaded whole. The
+\ file is data/roomrecs.bin as it is, which tools/ssdmerge.py puts on the
+\ disc (the Makefile).
 ENDIF
 \ What CE2S keeps of CE2DATA's start at MB_STREAM.
 MB_RAM_LEN = mb_ram_end - data_magic
@@ -222,8 +221,14 @@ ENDMACRO
 .things                         ; (objects.6502; tools/mkrecords.py)
     INCBIN "data/thingsres.bin"
 .visited    SKIP 16             ; a bit a room, its visit bonus taken (status.6502)
-.thing_types                    ; (objects.6502; tools/mkobjects.py)
-    INCBIN "data/thingtypes.bin"
+\ The thing types' inks, kinds and graphics (objects.6502; tools/mkobjects.py).
+.thing_types
+    EQUB TY_INK, TY_KIND
+IF DEFINED(STREAM)                  ; (the fixed things' own: in their rooms' records)
+    EQUB TY_GFX[0..PORT_TYPES - TOY_TYPES - 1]
+ELSE
+    EQUB TY_GFX
+ENDIF
 IF NOT(DEFINED(STREAM))             ; (the streaming edition's are in its bodies)
 .mon_types
     INCBIN "data/montypes.bin"
@@ -248,6 +253,9 @@ ENDMACRO
 .band_off   SKIP 32             ; for each screen row (and a little beyond), 8 * its band
 .objgfx
     INCBIN "data/objgfx.bin"
+IF NOT(DEFINED(STREAM))             ; (the streaming edition's are in its records)
+    INCBIN "data/fixgfx.bin"        ; what only fixed things show
+ENDIF
 
     .code_end
     PRINT "code &", ~code_start, "-&", ~code_end, " (", CODE_TOP - code_end, " bytes free)"
@@ -275,6 +283,7 @@ ENDIF
     SECTION LowSpare, org = low_state_end, guard = &0D9F, virtual = TRUE
 .rg_first   SKIP GROUPS_MAX     ; (rooms.6502's room_load; rg_end and the rest: above)
 IF DEFINED(STREAM)
+.fx_gfx     SKIP 2              ; (room_load: the graphics only the room's fixed things show)
 .nr_rooms   SKIP 4              ; (disc.6502's prefetch: the room's neighbours' ids)
 ENDIF
     ENDSECTION

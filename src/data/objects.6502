@@ -2,27 +2,42 @@
 
 \ The object graphics (&8A98, renumbered: tools/mkobjects.py): a type's
 \ graphic indexes these. Each one's header's offset in objgfx, which go
-\ up with the graphics' numbers; their low bytes; and how many start
-\ below each of the next five pages (objects.6502's thing_load counts
-\ the ones at or below a graphic for its high byte).
+\ up with the graphics' numbers (fixgfx's, from PORT_GFX, follow
+\ objgfx's: the ones only fixed things show, which the streaming
+\ edition keeps in its rooms' records instead); their low bytes; and
+\ how many start below each of the next five pages (objects.6502's
+\ thing_load counts the ones at or below a graphic for its high byte).
+PORT_GFX = 44
 OBJ_OFFS = {
     &0000, &0004, &000C, &0016, &001F, &0026, &0030, &003A,
     &0044, &004E, &0055, &005E, &0066, &0070, &0078, &007F,
     &0086, &008A, &0094, &009E, &00A7, &00AE, &00B4, &00BC,
     &00C6, &00D0, &00D6, &00DF, &00E9, &00F3, &00FD, &0107,
     &0110, &0152, &0194, &01D6, &0218, &022A, &0239, &0246,
-    &0254, &027E, &02A8, &030A, &0314, &031E, &0322, &033C,
-    &039E, &03AA, &03B4, &03C6, &03D8, &03E2, &03F4, &0406,
-    &0418, &042A, &0437, &0449, &0457, &045F, &0471, &047B
+    &0254, &027E, &02A8, &030A, &0314, &031E, &0328, &032C,
+    &0346, &03A8, &03B4, &03BE, &03D0, &03E2, &03EC, &03FE,
+    &0410, &0422, &0434, &0441, &0453, &0461, &0469, &047B
 }
+IF DEFINED(STREAM)
+    OBJ_KEPT = OBJ_OFFS[0..PORT_GFX - 1]
+ELSE
+    OBJ_KEPT = OBJ_OFFS
+ENDIF
 .object_lo
-    EQUB LO(objgfx + OBJ_OFFS)
-OBJ_PAGES = {SUM(objgfx + OBJ_OFFS < (HI(objgfx) + 1) * 256), SUM(objgfx + OBJ_OFFS < (HI(objgfx) + 2) * 256), SUM(objgfx + OBJ_OFFS < (HI(objgfx) + 3) * 256), SUM(objgfx + OBJ_OFFS < (HI(objgfx) + 4) * 256), SUM(objgfx + OBJ_OFFS < (HI(objgfx) + 5) * 256)}
-    ASSERT HI(objgfx + OBJ_OFFS[LEN(OBJ_OFFS) - 1]) <= HI(objgfx) + 5
+    EQUB LO(objgfx + OBJ_KEPT)
+OBJ_PAGES = {SUM(objgfx + OBJ_KEPT < (HI(objgfx) + 1) * 256), SUM(objgfx + OBJ_KEPT < (HI(objgfx) + 2) * 256), SUM(objgfx + OBJ_KEPT < (HI(objgfx) + 3) * 256), SUM(objgfx + OBJ_KEPT < (HI(objgfx) + 4) * 256), SUM(objgfx + OBJ_KEPT < (HI(objgfx) + 5) * 256)}
+    ASSERT HI(objgfx + OBJ_KEPT[LEN(OBJ_KEPT) - 1]) <= HI(objgfx) + 5
 
-\ The types (renumbered: tools/mkobjects.py): how many, and the
-\ portable things' from &24, the bone, the girder, the ladder, the toy
-\ and the egg (thing_load works out the others').
+\ The types (renumbered: tools/mkobjects.py): how many, the portable
+\ things' first (PORT_TYPES of them); their inks, kinds, and graphics
+\ from type TOY_TYPES (the toy's are worked out); and the portable
+\ things' from &24, the bone, the girder, the ladder, the toy and the
+\ egg (thing_load works out the others').
 NTYPES = 62
+PORT_TYPES = 17
+TOY_TYPES = 9
+TY_INK = {&05, &05, &05, &05, &05, &05, &05, &05, &06, &07, &02, &07, &06, &07, &04, &04, &06, &04, &07, &02, &07, &00, &00, &06, &07, &06, &04, &07, &02, &06, &07, &06, &02, &07, &02, &05, &06, &07, &02, &06, &02, &04, &04, &02, &06, &07, &05, &00, &02, &06, &07, &05, &02, &04, &02, &06, &05, &04, &05, &07, &06, &01}
+TY_KIND = {&80, &80, &80, &80, &80, &80, &80, &80, &87, &81, &82, &83, &89, &84, &85, &86, &88, &C0, &C1, &C0, &C1, &C2, &C0, &0A, &05, &02, &01, &05, &07, &0A, &01, &02, &03, &05, &0A, &0F, &14, &05, &07, &0F, &03, &02, &03, &05, &04, &02, &03, &04, &05, &02, &02, &03, &05, &02, &03, &04, &05, &01, &03, &05, &0A, &C0}
+TY_GFX = {36, 37, 38, 43, 39, 40, 41, 42, 44, 46, 44, 45, 47, 48, 55, 55, 52, 52, 56, 56, 56, 61, 61, 61, 57, 57, 57, 57, 58, 58, 58, 49, 49, 50, 50, 50, 59, 59, 59, 59, 53, 60, 60, 60, 54, 54, 54, 54, 51, 51, 63, 63, 62}
 .port_types
     EQUB 13, 14, 15, 8, 16

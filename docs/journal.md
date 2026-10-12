@@ -1548,3 +1548,25 @@ table's bytes (decision 50 has the figures).
   high score after another game and the abort key. With the reload taken
   out of CE2S's MENU the second check fails on the streaming edition's
   disc, so it does test the disc.
+
+### The fixed things' graphics into CE2S's records (issue #5)
+
+Twenty of the object graphics are shown only by things that never leave
+their rooms, the machine parts and the bonus items, so CE2S needn't keep
+them in main RAM. `mkobjects.py` now numbers them last and writes them
+to a file of their own (`fixgfx.bin`), and `mkrecords.py` puts the ones a
+room's fixed things show after that room's body in `roomrecs.bin`, each
+once; a fixed thing's entry gains the offset of its graphic there, and
+`thing_load` adds it to where `room_load` found them. The types'
+graphic column for those types went with them (decision 42).
+
+- One of the twenty is a mirror image, a stub pointing at its twin's
+  pixels: the record brings the twin along and re-points the stub, as
+  the graphics groups already did for monsters.
+- Room 120's record, the dinosaur's group and all, grew past what
+  `room_len4` could describe. It now counts from the shortest record
+  instead of from 3 fours.
+- `roomrecs.bin` passed 64K, and baron stops at `&FFFF` whatever the
+  section's `org`. The disc gets it from `ssdmerge.py`, as it is.
+- The sideways edition keeps them resident: its bank hadn't the room,
+  and its main RAM has plenty.

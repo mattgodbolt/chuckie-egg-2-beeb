@@ -9,12 +9,14 @@ Reads the original's rooms as its own code draws them (build/rooms, from
 tools/zxrooms.py: make rooms) and what the other generators wrote
 (src/data/: packed.bin and
 packlens.txt from packrooms.py, roombands.txt from mkrooms.py, sprites.bin,
-gfx.6502, monsters.bin and montypes.bin from mkgfx.py) and writes,
+gfx.6502, monsters.bin and montypes.bin from mkgfx.py; things.bin,
+objgfx.bin, fixgfx.bin and objects.6502 from mkobjects.py) and writes,
 committed (the build never runs this):
     src/data/records.bin    the bodies, rooms 1-120, then the groups (the
                             sideways edition's bank)
     src/data/roomrecs.bin   the streaming edition's: for each room its
-                            body, then its groups, each from a multiple
+                            body, then the graphics only its fixed things
+                            show, then its groups, each from a multiple
                             of 4 bytes, the room's record from a sector
                             (256 bytes), so a room is one run of sectors
                             read straight into place (disc.6502). No
@@ -41,13 +43,19 @@ where each starts):
             number, row, column, type. The entry's number decides whether
             it is on (monsters.6502: the egg's limit, the dog's swap).
     bands:  two bytes a split, first row * 8 + logical 2's BBC colour, the
-            map's number in band_maps; 0 ends
+            map's number in band_maps; 0 ends. (The streaming edition's:
+            first row * 8 + colour, then the map itself, two bytes.) The
+            streaming edition's then has where its fixed things' graphics
+            start, in fours from the body's start (rooms.6502's room_load).
     fixed things: three bytes for each thing from &29 (the machine parts
             and bonus items, which never move) whose room this is, in order:
             type (renumbered: tools/mkobjects.py), row, column.
             objects.6502's thing_load finds a thing's by its place among
             them; things.bin's other rows and columns (the portable
-            things', 0-&28) stay in main RAM.
+            things', 0-&28) stay in main RAM. The streaming edition's
+            have four bytes: type, its graphic's offset among the room's
+            fixed things' graphics (if it is one only fixed things show,
+            from fixgfx.bin; 0 if not), row, column.
     packed room: the bit stream (unpack.6502)
 
 A group is the frames of one monster graphic (every frame its types can
@@ -62,6 +70,10 @@ or the sitting dog's:
             a mirror image's stub re-pointed at its twin in the group
 Entering a room notes its groups' frames, at most FRAMES_MAX of them
 from at most GROUPS_MAX groups, for sprite_frame (rooms.6502, sprite.6502).
+
+The graphics only a room's fixed things show (the streaming edition's,
+decision 42) are packed one after another as objgfx.bin has them, each
+once, a mirror image's stub re-pointed at its twin, brought along.
 """
 import re
 import sys
@@ -76,7 +88,6 @@ LIFTS = {26: 0x96, 55: 0x96, 34: 0x97, 104: 0x97}  # pages.6502's lift_table; fr
 DOG_SITS, DINOSAUR_STOPS = 0x0C, 0x37 + 2           # monsters.6502's respawn
 NPORT = 0x29                # things 0-&28 are portable (objects.6502)
 FIXED_MAX = 9               # the most fixed things in a room (rooms.6502's room_fixed)
-LEN4_BIAS = 3               # room_len4 is a record's length in fours, less this
 GROUPS_MAX, FRAMES_MAX = 4, 24  # the most groups, and frames, a room has (main.6502)
 
 
@@ -127,6 +138,27 @@ def type_frames(types, t):
     return {base + d * n + i for d in dirs for i in range(n)}
 
 
+def fixed_graphics(blob, offs):
+    """The graphics whose headers are at offs in blob, one after another,
+    a mirror image's twin brought along if it isn't one of them: the
+    block, and where each header went."""
+    offs = sorted(set(offs))
+    for o in list(offs):
+        if blob[o + 1] & MIRROR and twin_of(blob, o) not in offs:
+            offs.append(twin_of(blob, o))
+    offs.sort()
+    where, out = {}, bytearray()
+    for o in offs:
+        where[o] = len(out)
+        out += blob[o:o + frame_size(blob, o)]
+    for o in offs:
+        if blob[o + 1] & MIRROR:
+            rel = (where[twin_of(blob, o)] + 2 - where[o]) & 0xFFFF
+            out[where[o] + 2:where[o] + 4] = rel.to_bytes(2, "little")
+    assert len(out) <= 256
+    return bytes(out), where
+
+
 def main():
     packed = read("packed.bin")
     lens = [int(x) for x in open(f"{DATA}/packlens.txt").read().split()]
@@ -147,7 +179,17 @@ def main():
     t_room, t_row, t_col, t_type = (things[k * 256:(k + 1) * 256] for k in range(4))
     sys.path.insert(0, "tools")
     from mkobjects import type_numbers  # noqa: E402
+    from mkgfx import unpack  # noqa: E402
     type_number = type_numbers(t_type)
+    # The object graphics and the types' (tools/mkobjects.py): the
+    # streaming edition's fixed things show theirs from their rooms'
+    # records.
+    objs = open(f"{DATA}/objects.6502").read()
+    const = lambda name: int(re.search(rf"^{name} = (\d+)", objs, re.M).group(1))
+    PORT_GFX, PORT_TYPES, TOY_TYPES = const("PORT_GFX"), const("PORT_TYPES"), const("TOY_TYPES")
+    obj_offs = [int(x, 16) for x in re.findall(r"&([0-9A-F]{4})", objs.split("OBJ_OFFS = {")[1].split("}")[0])]
+    ty_gfx = [int(x) for x in re.findall(r"\d+", objs.split("TY_GFX = {")[1].split("}")[0])]
+    objgfx = read("objgfx.bin") + read("fixgfx.bin")
     gfx = open(f"{DATA}/gfx.6502").read()
     harry_offs = [int(x, 16) for x in re.findall(r"EQUW sprites \+ &([0-9A-F]+)", gfx.split(".sprite_frames")[0])]
     frame_offs = [int(x, 16) for x in re.findall(r"EQUW sprites \+ &([0-9A-F]+)", gfx.split(".sprite_frames")[1])]
@@ -201,10 +243,21 @@ def main():
         fixed = [x for x in range(NPORT, 256) if t_room[x] & 0x7F == r]
         assert len(fixed) <= FIXED_MAX
         fixd = bytes([b for x in fixed for b in (type_number[t_type[x]], t_row[x], t_col[x])])
+        # The streaming edition's: the graphics only fixed things show, the
+        # room's once each, follow the body; a thing's offset among them
+        # after its type (0 if it shows another).
+        shown = sorted({ty_gfx[t - TOY_TYPES] for t in (type_number[t_type[x]] for x in fixed) if t >= PORT_TYPES})
+        assert all(g >= PORT_GFX for g in shown)
+        chunk, at = fixed_graphics(objgfx, [obj_offs[g] for g in shown])
+        place = lambda t: at[obj_offs[ty_gfx[t - TOY_TYPES]]] if t >= PORT_TYPES else 0
+        fixd_s = bytes([b for x in fixed for t in [type_number[t_type[x]]] for b in (t, place(t), t_row[x], t_col[x])])
+        for g in shown:
+            assert unpack(chunk, at[obj_offs[g]]) == unpack(objgfx, obj_offs[g])
         stream = packed[start:start + lens[r - 1]]
         palette = bytes(palettes[4 * (stream[0] >> 3):4 * (stream[0] >> 3) + 4])
         start += lens[r - 1]
-        bodies.append((bytes([exits(r) | visits[r] << 4]), mons + bnds + fixd + stream, mons_s + bnds_s + fixd + palette + stream))
+        bodies.append((bytes([exits(r) | visits[r] << 4]), mons + bnds + fixd + stream,
+                       (mons_s + bnds_s, fixd_s + palette + stream), chunk))
 
     # The groups' frames, each frame once (some are pointed at twice), in
     # sprites.bin's order, a mirror's twin brought along if the group lacks
@@ -233,8 +286,15 @@ def main():
         group_blobs.append(blob)
 
     def body(r, refs, streaming=False):
-        first, rest, rest_s = bodies[r - 1]
-        b = first + bytes([len(refs)] + refs) + (rest_s if streaming else rest)
+        """Room r's body, refs its groups; the streaming edition's has
+        where its fixed graphics start (after it, in fours) after its
+        bands."""
+        first, rest, (before, after), _ = bodies[r - 1]
+        b = first + bytes([len(refs)] + refs)
+        if streaming:
+            b += before + bytes([(len(b) + len(before) + 1 + len(after) + 3) // 4]) + after
+        else:
+            b += rest
         assert len(b) < 256
         return b
     body_len = [len(body(r, room_groups[r])) for r in range(1, 121)]
@@ -246,12 +306,12 @@ def main():
     pad4 = lambda b: b + bytes(-len(b) % 4)
     roomrecs, room_at, room_len = b"", [], []
     for r in range(1, 121):
-        fours, at = [], (len(body(r, room_groups[r], True)) + 3) // 4
+        chunk = bodies[r - 1][3]
+        fours, at = [], (len(body(r, room_groups[r], True)) + 3) // 4 + (len(chunk) + 3) // 4
         for g in room_groups[r]:
             fours.append(at)
             at += (len(group_blobs[g]) + 3) // 4
-        assert LEN4_BIAS <= at <= 255 + LEN4_BIAS   # (room_len4, below)
-        rec = pad4(body(r, fours, True)) + b"".join(pad4(group_blobs[g]) for g in room_groups[r])
+        rec = pad4(body(r, fours, True)) + pad4(chunk) + b"".join(pad4(group_blobs[g]) for g in room_groups[r])
         sectors = (len(rec) + 255) // 256
         if len(roomrecs) // 256 % 10 + sectors > 10:
             roomrecs += bytes(-len(roomrecs) % 2560)
@@ -261,7 +321,6 @@ def main():
 
     # Check: every room's frames, installed from its groups, are the frames
     # sprites.bin has at the original's pointers.
-    from mkgfx import unpack  # noqa: E402
     # (Both files, each room's group list read as room_load reads it.)
     body_at = [sum(body_len[:r - 1]) for r in range(1, 122)]
     for blob, start in ((records, body_at), (roomrecs, room_at + [len(roomrecs)])):
@@ -278,9 +337,14 @@ def main():
             need = set().union(*(groups[names[g]] for g in room_groups[r])) if room_groups[r] else set()
             assert set(ptr) == need, r
             for i, p in ptr.items():
-                assert unpack(blob, p) == unpack(sprites, frame_offs[i]), (r, i)
+                assert unpack(blob[b:], p - b) == unpack(sprites, frame_offs[i]), (r, i)
 
     room_max = max(room_len)
+    # room_len4 is a record's length in fours less the shortest's, so a
+    # byte reaches 255 fours past it (disc.6502 adds it back, a ninth bit
+    # in the carry).
+    LEN4_BIAS = min(room_len) // 4
+    assert room_max // 4 - LEN4_BIAS <= 255 and room_max <= 8 * 256
     with open(f"{DATA}/records.bin", "wb") as f:
         f.write(records)
     with open(f"{DATA}/roomrecs.bin", "wb") as f:

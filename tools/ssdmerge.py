@@ -1,15 +1,17 @@
 #!/usr/bin/env python3
 """Add the files of one Acorn DFS disc image to another's.
 
-    python3 tools/ssdmerge.py out.ssd base.ssd extra.ssd
+    python3 tools/ssdmerge.py out.ssd base.ssd extra.ssd [NAME=file ...]
 
 The two editions are two assemblies of src/main.6502 (docs/streaming.md):
 the release disc's (MENU, CE2, CE2DATA, !BOOT) and the streaming
-edition's (CE2S, CE2ROOM). This puts the second disc's files on the first,
-after its last file, and writes the result. CE2ROOM starts a track (ten
-sectors): the game reads it by track and sector, and none of its rooms'
-records crosses a track (tools/mkrecords.py). A name on both discs is an
-error.
+edition's (CE2S). This puts the second disc's files on the first, after
+its last file, then each NAME=file, a file as it is (CE2ROOM, the
+streaming edition's rooms, src/data/roomrecs.bin: past 64K, more than an
+assembly can hold), loaded at &0000 in the I/O processor, and writes the
+result. CE2ROOM starts a track (ten sectors): the game reads it by track
+and sector, and none of its rooms' records crosses a track
+(tools/mkrecords.py). A name on both discs is an error.
 
 The catalogue (Acorn DFS): sector 0 has the title's first 8 bytes, then
 eight bytes a file, its name (7) and directory (bit 7: locked); sector 1
@@ -38,16 +40,38 @@ def catalogue(img):
     return files
 
 
+def raw_files(specs):
+    """NAME=file arguments as an image of their own, catalogue and data,
+    for main's loop: each in directory $, loaded at &FFFF0000."""
+    img, files = bytearray(), []
+    for spec in specs:
+        name, path = spec.split("=", 1)
+        data = open(path, "rb").read()
+        start = len(img) // SECTOR
+        assert len(name) <= 7 and len(data) < 1 << 18
+        info = bytes([0, 0, 0, 0, len(data) & 0xFF, len(data) >> 8 & 0xFF,
+                      0xCC | (len(data) >> 16 & 3) << 4, 0])
+        files.append((name.encode().ljust(7) + b"$", info, len(data), start))
+        img += data + bytes(-len(data) % SECTOR)
+    return bytes(img), files
+
+
 def main():
     out, base_path, extra_path = sys.argv[1:4]
     base = bytearray(open(base_path, "rb").read())
-    extra = open(extra_path, "rb").read()
     have = catalogue(base)
+    extra = open(extra_path, "rb").read()
+    raw, raw_cat = raw_files(sys.argv[4:])
+    # (The raw files after the extra disc's, as if on it: their sectors
+    # after its last.)
+    shift = len(extra) // SECTOR + 1
+    extra += bytes(shift * SECTOR - len(extra)) + raw
+    extra_cat = list(reversed(catalogue(extra))) + [(n, i, length, start + shift) for n, i, length, start in raw_cat]
     sectors = base[SECTOR + 7] | (base[SECTOR + 6] & 3) << 8
     names = {name for name, *_ in have}
     end = max([start + (length + SECTOR - 1) // SECTOR for _, _, length, start in have] + [2])
     added = []
-    for name, info, length, start in reversed(catalogue(extra)):
+    for name, info, length, start in extra_cat:
         if name in names:
             raise SystemExit(f"{bytes(name).decode().strip()}: on both discs")
         size = (length + SECTOR - 1) // SECTOR

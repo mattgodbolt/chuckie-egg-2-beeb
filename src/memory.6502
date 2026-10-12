@@ -191,6 +191,9 @@ SECTION Scratch, org = &90, guard = &FC, virtual = TRUE
 .box_b         SKIP 1
 \ (objects.6502)
 .tl_t          SKIP 1
+IF DEFINED(STREAM)
+.tl_g          SKIP 1
+ENDIF
 .drop_x        SKIP 1
 \ (sound.6502)
 .dt_i          SKIP 1

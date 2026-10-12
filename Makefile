@@ -61,14 +61,15 @@ FORCE:
 
 # Every disc holds both editions (docs/streaming.md): two assemblies of
 # src/main.6502 with the same stamp, the release files' (MENU, CE2,
-# CE2DATA) and the streaming edition's CE2S, joined by tools/ssdmerge.py.
+# CE2DATA) and the streaming edition's CE2S, joined by tools/ssdmerge.py,
+# which adds CE2ROOM (src/data/roomrecs.bin as it is).
 # $(call editions,disc,flags,stamp,more for the first): the symbols go
 # beside the disc (.json), the first assembly's, or with STREAM=1 both,
 # CE2S's game last, as the tools want the edition they run.
 define editions
 	$(ASM) $(2) $(PLAY) -D 'BUILD="$(3)"' -o $(1:.ssd=.r.ssd) --title CHUCKIE2 --opt 3 --warn 2 --symbols $(1:.ssd=.r.json) $(4) src/main.6502
 	$(ASM) $(2) -D STREAM=1 -D 'BUILD="$(3)"' -o $(1:.ssd=.s.ssd) --title CHUCKIE2 --opt 3 --warn 2 --symbols $(1:.ssd=.s.json) src/main.6502
-	python3 tools/ssdmerge.py $(1) $(1:.ssd=.r.ssd) $(1:.ssd=.s.ssd)
+	python3 tools/ssdmerge.py $(1) $(1:.ssd=.r.ssd) $(1:.ssd=.s.ssd) CE2ROOM=src/data/roomrecs.bin
 	$(if $(STREAM),python3 tools/symmerge.py $(1:.ssd=.json) $(1:.ssd=.r.json) $(1:.ssd=.s.json),cp $(1:.ssd=.r.json) $(1:.ssd=.json))
 endef
 

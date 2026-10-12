@@ -1735,3 +1735,13 @@ for him to try before anything is released (decision 46).
   its place, and carry on. A copy that counted one frame too many failed
   it. `make sound` now switches the music off first: its log was the
   game's sounds alone.
+
+### The bass off periodic noise
+
+Matt's machine didn't play the bass. Periodic noise's pitch depends on
+the length of the chip's shift register, and that isn't the same on
+every chip and emulator. The bass is now an ordinary tone on channel 2.
+Its notes below B2 go up an octave, as the other voices' already did.
+That is mostly the A2s and B♭2s, a fifth of the bass's notes. The
+train's noise is still clocked by channel 2, so starting it now silences
+channel 2 too (`noise_setup`).

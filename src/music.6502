@@ -4,15 +4,13 @@
 \ tools/mkmusic.py turns into music (events) and music_latch/music_data
 \ (the dividers the events index; data/music.6502).
 \
-\ The VSync interrupt plays it (music_tick): the tune on tone channel 0, an
-\ inner voice on channel 1, the bass on the noise channel as periodic noise
-\ clocked by channel 2 (a fifteenth of its pitch), channel 2 itself
-\ silent. Each note starts loud and loses a step every MU_DECAY frames, as
+\ The VSync interrupt plays it (music_tick): the tune on channel 0, an inner
+\ voice on channel 1, the bass on channel 2. Each note starts loud and loses a step every MU_DECAY frames, as
 \ a harpsichord's dies away.
 \
 \ The game's own sounds come first: the death tune holds the music, the
-\ movement tick borrows channel 1, and the train's noise takes the noise
-\ channel and channel 2 back while it's on. A channel they used is marked
+\ movement tick borrows channel 1, and the train's noise, clocked by
+\ channel 2, takes that while it's on. A channel they used is marked
 \ in mu_dirty, and the next VSync writes its note again. M switches it off
 \ and on (read_keys).
 \
@@ -29,9 +27,8 @@ MU_DECAY = 4                        ; frames a step of attenuation, a power of 2
 MU_ON = &80                         ; mu_on: M has it on
 MU_HELD = &40                       ; ... and the death tune holds it
 
-\ The SN76489's volume register for each voice: channels 0 and 1, then the
-\ noise channel (the bass).
-.mu_volreg  EQUB &90, &B0, &F0
+\ The SN76489's volume register for each voice's channel.
+.mu_volreg  EQUB &90, &B0, &D0
 \ Each voice's first attenuation (0 the loudest).
 .mu_attack  EQUB 1, 4, 2
 .mu_bits    EQUB 1, 2, 4
@@ -136,13 +133,12 @@ MU_HELD = &40                       ; ... and the death tune holds it
 }
 
 \ Voice X's note and volume to the chip (and its mu_dirty bit cleared),
-\ but the bass's not while the train's noise has the noise channel.
+\ but the bass's not while the train's noise is clocked by channel 2.
 \ Keeps X.
 .mu_voice
 {
     CPX #2 : BNE tone
     LDA noise_on : BNE done
-    LDA #&E3 : JSR sound_write      ; periodic noise, clocked by channel 2
 .tone
     LDA mu_bits,X : EOR #&FF : AND mu_dirty : STA mu_dirty
     LDY mu_note,X : BMI volume      ; (none yet)
@@ -156,15 +152,12 @@ MU_HELD = &40                       ; ... and the death tune holds it
 }
 
 \ Silence the music's voices: the death tune holds it, or M switched it
-\ off. (The noise channel is the train's while its noise is on.)
+\ off. (Channel 2 is silent while it clocks the train's noise, too.)
 .music_quiet
 {
     LDA #&9F : JSR sound_write
     LDA #&BF : JSR sound_write
-    LDA noise_on : BNE done
-    LDA #&FF : JMP sound_write
-.done
-    RTS
+    LDA #&DF : JMP sound_write
 }
 
 \ M: the music off, or on again where it was.
@@ -187,7 +180,7 @@ MU_HELD = &40                       ; ... and the death tune holds it
     LDA #&FF : STA mu_note,X
     LDA #15 : STA mu_att,X
     DEX : BPL voice
-    LDA #7 : STA mu_dirty           ; the noise channel to periodic
+    LDA #7 : STA mu_dirty
     LDA #0 : STA mu_wait : STA mu_key : STA mu_owed
     LDA #MU_ON : STA mu_on
 .from_start

@@ -38,8 +38,9 @@
 .noise_setup                        ; (sound.6502's noise_sound writes these too)
     EQUB &E7                        ; white, clocked by channel 2
     EQUB &34, &C1                   ; channel 2: N = 833, about 150Hz
+    EQUB &DF                        ; ... silent
 .noise_setup_end
-    EQUB &DF, &BF, &9F              ; channels 0-2 silent
+    EQUB &BF, &9F                   ; channels 0 and 1 silent
 .sound_init_end
 \ (handoff.6502's handoff) The parts of memory that make up a game in
 \ progress, copied to STATE on the way out and back on a resume

@@ -19,15 +19,14 @@ there, so that bars played alike (the repeats) come out alike.
 
 Three voices from up to six notes at once: at each note's start, the notes
 sounding (or struck within ROLL frames: a chord is spread) are ranked by
-pitch. The highest goes to tone channel 0, the lowest to the bass, any
-other to channel 1, the newest note replacing what a channel had. A note
-alone is the tune's from BASS_TOP up, the bass's below. The bass is the
-noise channel's periodic noise clocked by channel 2, a fifteenth of
-channel 2's pitch, which reaches the piece's lowest notes; the tone
-channels can't go under B2, so a tone channel's note below that is played
-an octave up. A bass note above BASS_TOP goes to channel 1 instead, where
-its divider is finer. There are no note-offs: the player lets each note
-decay, as a harpsichord's does.
+pitch. The highest goes to channel 0, the lowest to channel 2 (the bass),
+any other to channel 1, the newest note replacing what a channel had. A
+note alone is the tune's from BASS_TOP up, the bass's below. A bass note
+above BASS_TOP goes to channel 1 instead. The channels can't go under B2,
+so a note below that is played an octave up. (Not periodic noise for the
+bass, which would reach the lowest notes: its pitch depends on the length
+of the chip's shift register, which isn't the same everywhere.) There are
+no note-offs: the player lets each note decay, as a harpsichord's does.
 
 The events:
     00-BF   a note: the pitch table's entry
@@ -41,7 +40,7 @@ import struct
 
 ROLL = 3            # frames over which a spread chord's notes still count as one
 BASS_TOP = 59       # B3: the bass's highest note, the tune's lowest alone
-TONE_LOW = 47       # B2: the lowest note the tone channels' dividers reach
+TONE_LOW = 47       # B2: the lowest note the dividers reach
 FPS = 50
 GAP = 100           # frames of silence before it starts again
 MIN_REPEAT = 6      # a repeat (4 bytes) must save at least this many
@@ -146,9 +145,8 @@ def voices(notes):
             ch = 1
         if ch == 2 and p > BASS_TOP:
             ch = 1
-        if ch < 2:
-            while p < TONE_LOW:
-                p += 12
+        while p < TONE_LOW:
+            p += 12
         # The newest note on a channel wins; in a frame, the one ranked first.
         key = (s, ch)
         if key not in out or (ch == 0 and p > out[key]) or (ch == 2 and p < out[key]) or ch == 1:
@@ -157,8 +155,7 @@ def voices(notes):
 
 
 def divider(ch, p):
-    f = 440 * 2 ** ((p - 69) / 12)
-    n = round(125000 / f / (15 if ch == 2 else 1))
+    n = round(125000 / (440 * 2 ** ((p - 69) / 12)))
     assert 1 <= n <= 1023, (ch, p, n)
     return n
 

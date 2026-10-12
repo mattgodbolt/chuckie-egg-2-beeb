@@ -112,8 +112,7 @@ try {
     const off = await state(b);
     const sc = (await b.call("read_sound_state", { session_id: b.session_id })).content[0].text;
     if ((await b.peek("mu_on")) !== 0) fail("M didn't switch it off");
-    // (Attenuations: 15 is silent. Channel 2 always is; the noise channel
-    // is the bass's.)
+    // (Attenuations: 15 is silent.)
     for (const ch of ["CH0", "CH1", "CH2", "CH3"])
         if (!new RegExp(`${ch}:.*vol=15\\b`).test(sc)) fail(`${ch} isn't silent with the music off: ${sc}`);
     await b.run(1);

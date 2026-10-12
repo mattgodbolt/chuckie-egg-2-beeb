@@ -14,9 +14,9 @@
     STA noise_on
     LSR A                           ; (the flag is 0 or 1)
 IF MUSIC
-    \ The music's bass (music.6502) has the noise channel and channel 2
-    \ otherwise: when the noise stops, the bass comes back, and when it
-    \ starts, the noise and channel 2 are set up as sound_init has them.
+    \ The music's bass (music.6502) has channel 2 otherwise: when the
+    \ noise stops, the bass comes back, and when it starts, the noise and
+    \ channel 2 are set up as sound_init has them, channel 2 silent.
     BCS on
     LDA #&FF : JSR sound_write
     LDA #4 : ORA mu_dirty : STA mu_dirty

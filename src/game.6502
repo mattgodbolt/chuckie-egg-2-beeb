@@ -143,6 +143,7 @@ ENDIF
     CMP #81 : BNE not81
     DEX : BNE set                   ; (X = 1: right)
     LDA #71 : BNE set               ; (always)
+    ZA_UNREACHABLE
 .not81
     CMP #70 : BNE set
     INX : BNE set                   ; (X = -1: left)
@@ -234,6 +235,7 @@ CHECKPOINT_VARS = h_frame + 2 - h_cell    ; h_cell .. h_frame
     STX ed_n
     JSR yellow_char
     LDX ed_n : INX : BNE text       ; (always)
+    ZA_UNREACHABLE
 .number
     \ The egg number, at column 24 (two digits if it needs them).
     LDA #LO(11 * 32 + 24) : STA cell
@@ -257,6 +259,7 @@ CHECKPOINT_VARS = h_frame + 2 - h_cell    ; h_cell .. h_frame
     JSR any_key : BNE down
     LDA #1 : STA ed_n               ; up: the next frame with a key down ends it
     BNE frame                       ; (always)
+    ZA_UNREACHABLE
 .down
     DEC ed_n : BNE frame
     RTS
@@ -348,6 +351,7 @@ IF DEFINED(STREAM)
     DEX : BMI monsters_done
     JSR choose_frame
     BPL monster                     ; (always: choose_frame leaves N clear)
+    ZA_UNREACHABLE
 .monsters_done
     \ (The lift's l_oframe isn't read before run_lift sets it.)
     LDA l_type : BEQ no_lift

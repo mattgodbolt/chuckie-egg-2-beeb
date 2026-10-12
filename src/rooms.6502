@@ -93,6 +93,7 @@ ENDIF
     DEC frames : BNE frame
     STX fi
     BEQ group                   ; (always)
+    ZA_UNREACHABLE
 .done
     RTS
 }
@@ -109,6 +110,7 @@ IF NOT(DEFINED(STREAM))     ; (the streaming edition's: disc.6502)
     LDA body_len-1,X : CLC : ADC rb : STA rb
     BCC skip
     INC rb+1 : BNE skip         ; (always)
+    ZA_UNREACHABLE
 .found
     RTS
 }
@@ -208,6 +210,7 @@ ENDIF
     LDA #4 : STA four
     LDA joint
     BNE cloop                   ; (always)
+    ZA_UNREACHABLE
 .last
     LDA joint : JSR put_step
     LDA ends : AND #15 : ORA #&20
@@ -230,8 +233,10 @@ ENDIF
 \ as every caller has just loaded or computed it.
 .next_row
     LDA #31 : BPL cell_add.forward
+    ZA_UNREACHABLE
 .up_row
     LDA #-33 AND &FF : BMI cell_add.back
+    ZA_UNREACHABLE
 \ Put tile A, then the type pointer left, and the cell back the count in
 \ bits 3-4 of run_down (cmd_bend's BEND_BACK).
 .put_left
@@ -259,6 +264,7 @@ ENDIF
 .put_right
     JSR put
     LDX #1 : BNE type_step      ; (always)
+    ZA_UNREACHABLE
 .type_left
     LDX #&FF
     EQUB &2C                    ; (BIT abs over the next LDX, whose two bytes make an
@@ -364,6 +370,7 @@ ZA_AUTO1 block_w
     EOR #&80 : BEQ cmd_block.return   ; &80 ends it; the rest gain bit 7, text
     JSR put
     BNE loop                    ; (always: put returns Z clear)
+    ZA_UNREACHABLE
 }
 
 \ &03-&06, 5 bytes: cmd attr row col type. Pipe bends, each a fixed shape
@@ -406,6 +413,7 @@ BEND_BACK3 = 3 * 8          ; ... three
     JSR fetch : STA n
     JSR fetch_type
     BNE loop                    ; (always: fetch leaves Z clear)
+    ZA_UNREACHABLE
 .up
     LDA #&39 : JSR put
     JSR type_up : JSR up_row

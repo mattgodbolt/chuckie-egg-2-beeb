@@ -97,6 +97,7 @@ ENDIF
     CMP #&24 : BCS port_table
     LSR A : LSR A : LSR A : ORA #8
     BNE port_type                           ; (always)
+    ZA_UNREACHABLE
 .port_table
     LDA port_types - &24,X
 .port_type
@@ -115,6 +116,7 @@ ENDIF
     TYA : ASL A : ASL A : STA tl_t
     LDA egg : AND #3 : ORA tl_t : TAY
     BPL graphic                             ; (always: 35 at most)
+    ZA_UNREACHABLE
 .table
     LDA ty_gfx,Y : TAY                      ; its graphic
 .graphic
@@ -149,6 +151,7 @@ IF DEFINED(STREAM)
     LDY tl_g
     BIT o_kind : BPL in_record : BVS in_record
     BMI type_gfx                            ; (always: the BIT's N)
+    ZA_UNREACHABLE
 .in_record
     \ In the room's record, tl_g on from where room_load found the room's
     \ fixed things' graphics (fx_gfx).
@@ -210,6 +213,7 @@ ENDIF
     CMP t_room,X : BEQ port_here
     DEX : BPL port_scan
     BMI port_done                   ; (always)
+    ZA_UNREACHABLE
 .port_here
     TXA : CLC : SBC o_index         ; X - o_index - 1
     CMP best : BCS port_next
@@ -229,6 +233,7 @@ ENDIF
 .fix_next
     TYA : CLC : ADC #FIX_LEN : TAY
     BNE fixed                       ; (always: the body's offsets are bytes)
+    ZA_UNREACHABLE
 .chosen
     LDA best : BMI none
     SEC : ADC o_index : STA o_index : TAX
@@ -302,6 +307,7 @@ ENDIF
     ORA #&20 : CMP carried : BNE done       ; ... of the thing's group
     INC in_basket,X
     BNE out_of_world                        ; (always: at most 8)
+    ZA_UNREACHABLE
 .hands_empty
     STX carried
     CPX #&27 : BNE not_toy
@@ -392,6 +398,7 @@ ENDIF
     PLP : BCS out
     EOR #&FF : AND t_out,X
     BCC store                       ; (always)
+    ZA_UNREACHABLE
 .out
     ORA t_out,X
 .store
@@ -566,6 +573,7 @@ GIRDER_COL = 10
     AND #3 : TAY
     LDA in_basket,Y
     BCS count                           ; (always: C from the compare)
+    ZA_UNREACHABLE
 .single
     LSR A : LSR A : LSR A : TAY         ; 0 a toy part, 1-3 an ingredient
     BEQ toy_basket.part_delivered
@@ -595,6 +603,7 @@ GIRDER_COL = 10
     DEX : CPX #&29 : BCS loop
     CLC : LDA in_basket
     BCC add                             ; (always)
+    ZA_UNREACHABLE
 .part_delivered
     TXA : CLC : ADC #&29 : TAX          ; (X the part, from deliver)
     JSR thing_on
@@ -698,6 +707,7 @@ GIRDER_COL = 10
     ADC #&19 : BCS max          ; (from egg 6)
     DEX : BNE add
     BEQ limit                   ; (always)
+    ZA_UNREACHABLE
 .max
     LDA #255
 .limit

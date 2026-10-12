@@ -169,6 +169,7 @@ ELSE
     DEY : BMI done
     LDA nr_rooms,Y
     BPL try                     ; (always)
+    ZA_UNREACHABLE
 .done
     RTS
 \ A less 8 (not below 0) if Z is set: he faces that way.
@@ -221,6 +222,7 @@ ENDIF
     CPY id : BEQ found
     STA fe_pos
     INY : BNE each              ; (always)
+    ZA_UNREACHABLE
 .found
     JSR item_len                ; (Y = id)
     \ Nothing changes until it fits: X is where in the table it would go,
@@ -251,6 +253,7 @@ ENDIF
     LDA it_lo,X : STA fe_dst
     LDA it_hi,X : STA fe_dst+1
     BNE try                     ; (always)
+    ZA_UNREACHABLE
 }
 
 \ fe_len = item Y's length: room Y + 1's record, room_len4 + LEN4_BIAS
@@ -296,6 +299,7 @@ ARR_BUF = screen + LO(arena)
     CMP latest : BEQ scan : BCC scan
     STA latest : STX best
     BCS scan                    ; (always)
+    ZA_UNREACHABLE
 .scanned
     \ Items j and best swap places in the table (it_id to it_use, NI apart).
     LDX j : LDY best
@@ -319,6 +323,7 @@ ARR_BUF = screen + LO(arena)
     LDA fe_len+1 : ADC item_top+1 : STA item_top+1
     JSR mem_copy
     INX : BNE sort              ; (always: X < NI)
+    ZA_UNREACHABLE
 .sorted
     LDA #LO(arena) : STA fe_pos : STA fe_dst
     LDA #HI(ARR_BUF) : STA fe_pos+1
@@ -344,6 +349,7 @@ ARR_BUF = screen + LO(arena)
     CPY fe_len : BEQ done
     LDA (fe_pos),Y : STA (fe_dst),Y
     INY : BNE part              ; (always)
+    ZA_UNREACHABLE
 .done
     RTS
 }
@@ -365,6 +371,7 @@ ARR_BUF = screen + LO(arena)
     LDA it_use,X : CMP epoch : BNE age
     INC it_use,X
     BCS age                     ; (always: the CMP was equal)
+    ZA_UNREACHABLE
 .aged
     LDA pf_cur : JSR item_find : BMI miss
     \ This visit's, at the bottom, where reading ahead won't move it.

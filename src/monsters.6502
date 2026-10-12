@@ -79,6 +79,7 @@ ELSE
     LDY m_entry : INY : INY : INY
 ENDIF
     BNE scan                    ; (always: the entry's type is in the body)
+    ZA_UNREACHABLE
 .done
     RTS
 }
@@ -116,6 +117,7 @@ ENDIF
     LDA m_flags,X : ASL A : BPL across      ; MF_VERT, shifted into bit 7
     TYA : ASL A : STA m_dy,X
     BNE choose_frame                        ; (always)
+    ZA_UNREACHABLE
 .across
     TYA : STA m_dx,X
     \ Fall into choose_frame.
@@ -161,6 +163,7 @@ ENDIF
     JSR tick                                ; (which returns X = m_cur)
     INX
     BNE loop                                ; (always)
+    ZA_UNREACHABLE
 .done
     RTS
 }
@@ -184,17 +187,20 @@ ENDIF
     LDA #0 : STA m_sub,X : STA m_dy,X
     JSR next_state                          ; 01
     BNE ten                                 ; (always: the speed's bit 7)
+    ZA_UNREACHABLE
 .forming
     LDA m_sub,X : CMP #3 : BEQ advance      ; 10
     INC m_sub,X
 .ten
     LDA #10 : STA m_tick,X
     BNE go                                  ; (always)
+    ZA_UNREACHABLE
 .formed
     \ Falls (up if NEG, at 10 in 256 a tick; down at once).
     LDA m_flags,X : AND #MF_NEG : BEQ rise
     JSR rng : CMP #10 : BCS wait
     LDA #&FE : BNE set_dy                   ; (always)
+    ZA_UNREACHABLE
 .rise
     LDA #2
 .set_dy
@@ -221,6 +227,7 @@ ENDIF
     LDA m_flags,X : LSR A : BCC moves       ; MF_STATIC
     LDA #0 : STA m_dx,X : STA m_dy,X
     BEQ to_move                             ; (always)
+    ZA_UNREACHABLE
 .moves
     AND #MF_VERT DIV 2 : BNE vertical       ; (the flags, shifted down one)
 \ Horizontal movers (4.3): tested only on a character boundary.
@@ -233,6 +240,7 @@ ENDIF
     TAY : BEQ blocked
     DEC mon_p
     LDY #0 : BEQ column                     ; (always)
+    ZA_UNREACHABLE
 .right
     \ Right: the column just past the monster, blocked if that is 32 or
     \ more (at most 31 + 15: bit 5). (m_size leaves C clear; so does the
@@ -255,6 +263,7 @@ ENDIF
     \ (C is clear every way here, which m_blocked relies on.)
     TXA : TAY                               ; (m_blocked's m_dx,Y: the step across)
     BPL m_blocked                           ; (always)
+    ZA_UNREACHABLE
 .to_move
     JMP m_move
 
@@ -279,6 +288,7 @@ ENDIF
     BCS test
     DEC mon_p+1
     BCC test                                ; (always)
+    ZA_UNREACHABLE
 .down
     \ Down: the row h below (h < 8: h * 32 is a byte, and the shifts
     \ leave C clear); blocked if that is row 24 or more, past the end of
@@ -332,6 +342,7 @@ ENDIF
     INC m_cell_lo,X : BNE vertical
     INC m_cell_hi,X
     BNE vertical                            ; (always)
+    ZA_UNREACHABLE
 .left
     LDA m_cell_lo,X : BNE no_borrow
     DEC m_cell_hi,X
@@ -346,6 +357,7 @@ ENDIF
     BCC framed
     INC m_cell_hi,X
     BNE framed                              ; (always)
+    ZA_UNREACHABLE
 .up
     \ (C clear: yf - dy is negative only by a borrow, as |dy| <= 4 and
     \ yf < 8; so - 32.)
@@ -380,6 +392,7 @@ ZA_AUTO2 mframe
     \ The dinosaur on its scooter stops.
     INC m_base,X : INC m_base,X
     BNE static                          ; (always: the bases are under &FE)
+    ZA_UNREACHABLE
 .not120
     CMP #2 : BNE general
     \ The dog sits, for good: entry 0 (sitting) replaces entry 1.
@@ -408,6 +421,7 @@ ZA_AUTO2 mframe
 .back
     JSR m_to_start
     BEQ nosave                          ; and step from the start at once (always)
+    ZA_UNREACHABLE
 }
 
 \ The old position := the current one (&884D).
@@ -448,6 +462,7 @@ ZA_AUTO2 mframe
     JSR draw_sprite
     LDY dl_i : INY
     BNE loop                                ; (always)
+    ZA_UNREACHABLE
 .done
     RTS
 }

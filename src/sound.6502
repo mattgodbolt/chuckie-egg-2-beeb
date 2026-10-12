@@ -78,6 +78,7 @@
     LDA h_cnt : ASL A : ADC #42             ; (cnt < 128: carry clear)
     LDX h_cnt : CPX #10 : BCS l0
     BCC negate                              ; (always) 1 - that for the first 9 steps
+    ZA_UNREACHABLE
 .other
     LSR A : ADC #0 : CMP #2 : BNE n_ok      ; (state + 1) / 2
     LDA #6
@@ -86,6 +87,7 @@
 .negate
     EOR #&FF : ADC #2                       ; 1 - A (carry clear)
     BNE store                               ; (always: odd)
+    ZA_UNREACHABLE
 .fall_tick
     LDA h_fall : ASL A : ADC #50 : SEC
 .l0

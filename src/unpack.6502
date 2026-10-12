@@ -43,8 +43,8 @@ MTF_TYPE = 6
     LDX #8 : STA mtf,X
     ZA_INDEXEDBY 8
     BNE getbits                 ; (always: X) the background
+    ZA_UNREACHABLE
 }
-    \ (The allocator also follows the BNE on, into emit_tiered: harmless.)
 
 \ A value in the tier code at X (TIER_ROW, _ENDS, _LEN0 or _LEN1: tools/
 \ packrooms.py's Tiers), emitted. '0', '10' or '11' picks one of the code's
@@ -62,9 +62,8 @@ MTF_TYPE = 6
     LDY tier : ADC tier_base,Y : TAY    ; (carry clear: getbits)
     LDA tier_syms,Y
     BCC emit                    ; (always: the ADC is within tier_syms)
+    ZA_UNREACHABLE
 }
-    \ (Here, not before unpack_room: the allocator follows the branch both
-    \ ways, and falling into getbit is harmless.)
 
 \ Read X bits (1-8) as a number in A and Y (Z set if it's 0), X left 0.
 \ Fewer than 8 leave the carry clear (the last ROL shifts out a 0), which
@@ -147,6 +146,7 @@ MTF_TYPE = 6
     JSR getbit : BEQ counted
     INC kind : LDA kind : CMP #5 : BNE count
     TXA : BEQ emit              ; 11111: the end, 0 (X = 0: getbits)
+    ZA_UNREACHABLE
 .counted
     LDA kind : BEQ runs         ; 0: a run
     LDX #1 : JSR getbits_on : STA kind
@@ -174,6 +174,7 @@ MTF_TYPE = 6
     DEC kind : BMI type_last
     LDX #5 : JSR emit_bits
     BPL fives                   ; (always: emit leaves N clear)
+    ZA_UNREACHABLE
 .hopper
     LDX #5 : JSR emit_bits      ; rows(5) width(6)
     LDX #6 : JMP emit_bits
@@ -188,10 +189,13 @@ MTF_TYPE = 6
 .char
     JSR emit
     BPL text                            ; (always: emit leaves N clear)
+    ZA_UNREACHABLE
 .punct
     LDA text_punct,Y : BCC char         ; (always)
+    ZA_UNREACHABLE
 .text_end
     LDA #&80 : BMI emit_mtf.emit_it     ; (always)
+    ZA_UNREACHABLE
 
 \ run: tile attr row col vert len type; capped adds ends before type.
 .runs
@@ -228,6 +232,7 @@ MTF_TYPE = 6
     LDA vocab,Y
     LDX n : DEX                 ; base + 2
     BNE test                    ; (always)
+    ZA_UNREACHABLE
 .hit
     \ Entry n comes to the front; the ones before it shift down.
     LDX n : LDA mtf,X
@@ -240,6 +245,7 @@ MTF_TYPE = 6
     STY mtf+1,X
     ZA_INDEXEDBY 0..7
     BCS test                    ; (always: the CPX found X above base)
+    ZA_UNREACHABLE
 .front
     STA mtf,X                   ; X = base here
     ZA_INDEXEDBY 0..6

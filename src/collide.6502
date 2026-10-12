@@ -170,6 +170,7 @@ ZA_AUTO 4, hbox             ; Harry's box, as box_l-box_b (who_was_hit's)
     LDA m_frame_hi,Y : STA cimg+1
     LDA m_cell_lo,Y : LDX m_cell_hi,Y : JSR frame_box : BCC contact
     LDY c_m : INY : BNE monster             ; (always)
+    ZA_UNREACHABLE
 .no_monster
     \ Rooms 71-80: the train kills in rows 0-7.
     LDA room : CMP #71 : BCC dispatch

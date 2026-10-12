@@ -130,6 +130,7 @@ ENDIF
     CMP #&80 : BNE not_f0
     LDA M_CHEAT : BEQ on
     LDA #0 : BEQ set_cheat          ; (always)
+    ZA_UNREACHABLE
 .on
     LDA #CHEATS
 .set_cheat
@@ -148,6 +149,7 @@ CHEATS = %10111000
 .play
     LDA #0 : STA M_START
     BEQ run_game                ; (always)
+    ZA_UNREACHABLE
 \ After a save from play, or giving up on one: back into the game.
 .carry_on
     LDA #1 : STA M_START
@@ -370,6 +372,7 @@ CAT_BUF = MB_XFER               ; (free until run_game)
     DEY
 .no_borrow
     INX : BNE tens              ; (always)
+    ZA_UNREACHABLE
 .tracked
     CMP #0 : BNE misplaced
     STX M_DISC

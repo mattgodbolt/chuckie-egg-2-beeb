@@ -26,6 +26,7 @@
     LDA status_labels,X : BEQ done
     JSR status_char
     INC status_i : BNE labels   ; (always)
+    ZA_UNREACHABLE
 .done
     JSR draw_score
     JSR draw_carrying
@@ -113,6 +114,7 @@
     LDA #1
     DEX : BPL digit                 ; (none to the left of digit 0: lost)
     BMI done                        ; (always)
+    ZA_UNREACHABLE
 .last
     STA score,X : JSR draw_digit
 .done
@@ -192,6 +194,7 @@
     DEC status_x : BMI blank
     LDA #&56 : JSR status_tile
     BNE icon                    ; (always: tile_glyph leaves cell non-zero)
+    ZA_UNREACHABLE
 .blank
     \ (The original's tile &37, which is blank: as a space is.)
     LDA #' '
@@ -219,6 +222,7 @@
     ORA #&80
     LDX #cbyte(3) EOR cbyte(0)
     BNE tile_glyph              ; (always)
+    ZA_UNREACHABLE
 
 \ The objects' names, 8 characters each (the original's, at &999E).
 .object_names

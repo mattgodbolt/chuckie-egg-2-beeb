@@ -168,6 +168,7 @@ I_LOAD   = &E8
     LDA #&53 : LDX fdc_track : JSR i_command    ; Read Data, drive 0
     LDX fdc_sect : JSR i_param
     LDX #&21 : BNE i_param                      ; (always) one 256-byte sector
+    ZA_UNREACHABLE
 }
 \ An 8271 command A and its first parameter X.
 .i_command
@@ -188,6 +189,7 @@ I_LOAD   = &E8
 .i_error
     LDA #&69 : LDX #0 : JSR i_command           ; Seek, drive 0
     LDA #4 : BNE i_busy
+    ZA_UNREACHABLE
 \ fdc_poll.
 .i_poll
 {
@@ -198,6 +200,7 @@ I_LOAD   = &E8
     \ read again.
     LDA I_RESULT
     BCS i_start                                 ; (always: 4)
+    ZA_UNREACHABLE
 .waiting
     \ 3: waiting for the drive (below): half a second on, the read again.
     LDA vsyncs : SBC i_since : CMP #25 : BCS i_start    ; (carry set: 3)
@@ -246,6 +249,7 @@ I_LOAD   = &E8
     LDX #&10 + W_RATE                           ; Seek
 .w_go
     TXA : BPL w_command                         ; (always)
+    ZA_UNREACHABLE
 .w_start
     ARM
     LDA fdc_sect : STA W_SECTOR
@@ -276,6 +280,7 @@ I_LOAD   = &E8
 .sought
     STA fdc_cur
     BCS w_start                                 ; (always)
+    ZA_UNREACHABLE
 .read
     LDX #0 : STX fdc_state
     LDA W_STATUS : AND #&1C                     ; record not found, CRC, lost data
@@ -312,6 +317,7 @@ I_LOAD   = &E8
 .nmi_last
     LDA #BIT_ABS : STA nmi_dst
     BNE nmi_restore             ; (always)
+    ZA_UNREACHABLE
 .nmi_end
     ENDSECTION
 ENDIF

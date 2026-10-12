@@ -90,6 +90,7 @@ ENDIF
     LDX band_count : STA band_rows-1,X : TAY
     TXA : ASL A : ASL A : ASL A                 ; 8(k + 1)
     BNE rows                                    ; (always)
+    ZA_UNREACHABLE
 .done
     INY : STY rb_things                         ; (after the bands' end)
     \ T1's periods (N + 2 microseconds, free-running): 512 a character row.

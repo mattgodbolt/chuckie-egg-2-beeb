@@ -123,6 +123,7 @@ key_dy = key_dx + 1
     LDX h_cnt : DEX : BNE top_of_cell
     STX h_dy                        ; a ceiling right on the head: no jump
     BEQ descend                     ; (always)
+    ZA_UNREACHABLE
 .top_of_cell
     LDA h_yf : STA h_dy             ; rise to the top of this cell only
     INX : CPX #11 : BCS lg          ; (X: h_cnt)
@@ -148,6 +149,7 @@ key_dy = key_dx + 1
     BNE slope_snap
     LDX vD : CPX #4 : BCS slope_snap    ; the last column: if he reaches in
     BCC across                      ; (always)
+    ZA_UNREACHABLE
 .left_end
     LDX vD : CPX #3 : BCC slope_snap    ; the column left of it: the same
 .across
@@ -169,6 +171,7 @@ key_dy = key_dx + 1
     LDA h_fall : CMP #20 : BCS die
     LDY #0 : LDA (hptr_up),Y : LSR A : BCS die
     BCC to_move                     ; (always)
+    ZA_UNREACHABLE
 
 \ SlopeSnap (&8489): a slope tile under the feet snaps Harry onto it.
 .slope_snap
@@ -192,6 +195,7 @@ key_dy = key_dx + 1
     TXA : JSR add_cell
     LDA #4 : STA h_yf
     BNE snap_done                   ; (always)
+    ZA_UNREACHABLE
 .snap38_39
     LDA #&38 : BCC snap_row         ; &38 (sic: xf &38, which apply_delta
                                     ;  turns into xf 0 and a column right)
@@ -220,6 +224,7 @@ key_dy = key_dx + 1
     \ '\'
     BMI climb
     LDA #1 : BNE slide              ; slide right
+    ZA_UNREACHABLE
 .fwd                                ; '/'
     BMI slide_left
     BNE climb
@@ -228,6 +233,7 @@ key_dy = key_dx + 1
 .slide
     STA h_mom
     LDA #6 : BNE set_state          ; (always)
+    ZA_UNREACHABLE
 .climb
     LDA #5
 .set_state
@@ -293,6 +299,7 @@ key_dy = key_dx + 1
     LDA #16 : STA h_cnt
     LDA #0 : STA h_dx : STA h_mom
     BEQ move                        ; (always)
+    ZA_UNREACHABLE
 .side_walls
     LDX #2                          ; rows the sprite will cover
     LDA h_yf : SEC : SBC h_dy : TAY ; his top line after the move
@@ -307,6 +314,7 @@ key_dy = key_dx + 1
     BCC got_p
     ADC #31 : BCC got_p             ; (C set: + 32)
     INX : BCS got_p                 ; (always)
+    ZA_UNREACHABLE
 .up
     LDA hptr_up : LDX hptr_up+1
 .got_p                              ; (X:A)
@@ -323,6 +331,7 @@ key_dy = key_dx + 1
 .left_p
     JSR column_blocked : BEQ move
     LDA #1 : BNE bounce             ; (always)
+    ZA_UNREACHABLE
 .right
     CLC : ADC #1 : BCC right_p      ; a column right
     INX
@@ -351,6 +360,7 @@ key_dy = key_dx + 1
     CMP #4 : BCC vertical
     INC h_cell
     BCS vertical                ; (always: C from the CMP)
+    ZA_UNREACHABLE
 .left
     DEC h_cell
 .vertical
@@ -359,6 +369,7 @@ key_dy = key_dx + 1
     TXA : BMI up
     CMP #8 : BCC frame
     LDA #32 : BNE add           ; down a row
+    ZA_UNREACHABLE
 .up
     LDA #-32 AND &FF            ; up a row
 .add
@@ -530,6 +541,7 @@ die = column_blocked.die
 .walk
     STY h_state
     BPL st_walk                     ; (always: LSR and INY leave N clear)
+    ZA_UNREACHABLE
 .on
     LDA #0 : STA h_dx               ; (for rope_tail too)
     CPX #4 : BEQ rope_tail          ; (X = h_state, from the dispatch)
@@ -538,6 +550,7 @@ die = column_blocked.die
     BPL up
     LDY #&40 : LDA (hptr),Y : AND #2 : BNE go       ; ladder below
     BEQ stop                                        ; (always)
+    ZA_UNREACHABLE
 .up
     LDY h_yf : BNE go
     LDA (hptr),Y : AND #2 : BEQ stop                ; head cell not ladder
@@ -547,6 +560,7 @@ die = column_blocked.die
 .stop
     STA h_dy                        ; (A = 0)
     BEQ go                          ; (always)
+    ZA_UNREACHABLE
 go = st_walk.go
 }
 
@@ -559,6 +573,7 @@ go = st_walk.go
     INC h_fall                      ; 1 (it was 0: harry_update), then
     LDA #0 : STA h_state : STA h_xf ;  FallCount's INC; dx is 0 (st_ladder),
     BEQ fall_count                  ;  so on to vcollide (always)
+    ZA_UNREACHABLE
 }
 
 \ StPipe (&81B0): state 2, a slippery pipe holds Harry only while he walks.
@@ -594,6 +609,7 @@ go = st_walk.go
     LDA #8 : STA h_face
     LDA #0 : STA h_dx
     BEQ go                          ; (always)
+    ZA_UNREACHABLE
 }
 
 \ WalkMid (&8172): walking, between cells.
@@ -609,6 +625,7 @@ go = st_walk.go
     LDA h_dx : STA h_mom
     LDA #2 : STA h_dy
     BNE go                          ; (always)
+    ZA_UNREACHABLE
 .no_slope
     TYA : ADC #&20 : TAY            ; (C clear) a row down
     LDA (hptr),Y : AND #&21 : BNE go        ; a floor ahead
@@ -653,6 +670,7 @@ go = st_walk.go
     JSR wall_check                  ; (it keeps X = h_state)
     CPX #5 : BEQ st_slope_up.go
     BNE slope_end                   ; (always)
+    ZA_UNREACHABLE
 }
 \ StSlide (&873A): state 6.
 .st_slide
@@ -670,6 +688,7 @@ go = st_walk.go
     JSR set_standing
     LDA #0 : STA h_dy
     BEQ go                          ; (always)
+    ZA_UNREACHABLE
 go = st_slope_up.go
 }
 

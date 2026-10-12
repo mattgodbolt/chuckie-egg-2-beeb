@@ -1624,3 +1624,19 @@ number, and `t_out` keeps a bit for each, so a saved game shrinks too
   nearest yet, brought it to about the walk's cost: faster in room 95,
   slower in room 115, its worst call quicker (decision 44 has the
   figures).
+
+### Always-taken branches marked for the allocator
+
+- Every branch the code always takes now has baron's `ZA_UNREACHABLE`
+  after it: the ones commented "(always ...)", and a few that weren't
+  (an immediate load, or `X = 0` from `getbits`, just before), each read
+  again to be sure, as a wrong one would let the allocator share a byte
+  that is live. It documents the branch and prunes the path that never
+  runs, which freed a byte of baron's pool; the code is the same but for
+  the zero-page addresses that moved. `unpack.6502`'s notes on the
+  allocator's harmless fall-throughs went with it.
+- One "(always)" stays unmarked: the interrupt handler's `BNE latch`.
+  `band_t1` is zero from `init_system` until the first room sets it, and
+  T1 is running by then, so in those first frames it falls through.
+- No call to a routine that never returns was found: those routines are
+  all reached by `JMP`.

@@ -86,6 +86,7 @@
     LDA #7 : STA ds_b
     LDA #&7C : STA ds_c
     BNE truck_strips                ; (always)
+    ZA_UNREACHABLE
 
 \ The machines, once a pass (&8EE8): the train moves with the power on, and
 \ is drawn in its room, the front poking into the next; or the truck
@@ -191,6 +192,7 @@ ASSERT LO(attr_map) = 0 AND (HI(attr_map) AND 3) = 0  ; (the ORA adds)
     SBC ds_b : STA ds_c
     LDA #0 : STA ds_d
     BEQ draw_train                  ; (always)
+    ZA_UNREACHABLE
 .here
     LDA train_pos : LSR A : STA ds_d
     LDA #&47 : BCC aligned
@@ -277,6 +279,7 @@ done = draw_strips.done             ; (its RTS)
     LDA l_cell : BMI go             ; rows 4-7 go on; rows 0-3 is the top
     LDA l_srow : JSR lift_at
     BEQ step                        ; (always)
+    ZA_UNREACHABLE
 .type2
     LDA h_state : CMP #8 : BNE not_ridden
     \ Ridden: down 2, until row 23 or anything but bit 5 below it.
@@ -293,6 +296,7 @@ done = draw_strips.done             ; (its RTS)
     LDA (lp),Y : AND #&DF : BNE stop
     DEY : BPL cells
     BMI go                          ; (always)
+    ZA_UNREACHABLE
 .not_ridden
     \ Not ridden: up 2 until its top is in row 4.
     LDA l_cell+1 : BNE go
@@ -310,6 +314,7 @@ done = draw_strips.done             ; (its RTS)
     BCC moved
     INC l_cell+1
     BCS moved                       ; (always)
+    ZA_UNREACHABLE
 .up
     LDA l_cell : SBC #31 : STA l_cell              ; (carry clear: a borrow) - 32
     BCS moved

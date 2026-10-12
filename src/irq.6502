@@ -57,6 +57,7 @@ FUNCTION ula_entry(l, n, phys) = ((l AND 2) * 4 + (n AND 2) * 2 + (l AND 1) * 2 
     STA usrvia_t1lh
     INC irq_split
     BNE done                    ; (always: 1-3)
+    ZA_UNREACHABLE
 .not_t1
     LDA sysvia_ifr : AND #2 : BEQ done
     STA sysvia_ifr              ; acknowledge

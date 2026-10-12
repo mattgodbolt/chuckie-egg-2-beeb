@@ -121,6 +121,7 @@ ZA_AUTO1 sp_yl              ; (erase_image's Y, kept through a look-up)
 .clear_next
     DEY : BPL clear_line
     BMI column_done                 ; (always)
+    ZA_UNREACHABLE
 .found
     \ The cell: the row's first plus the column (past column 31 the next
     \ row's, as the maps have it).
@@ -186,6 +187,7 @@ ZA_AUTO1 sp_yl              ; (erase_image's Y, kept through a look-up)
     \ objects' with no empty lines): the quick way.
     ASL A : ASL A : ASL A : STA sp_h8 : STA sp_lines
     BCC own                         ; (always: height < 8)
+    ZA_UNREACHABLE
 .packed
     LSR A : LSR A : LSR A : STA top                             ; the lines left out above
     TXA : AND #&70 : LSR A : LSR A : LSR A : LSR A              ; ... and below
@@ -228,6 +230,7 @@ ZA_AUTO1 sp_yl              ; (erase_image's Y, kept through a look-up)
     \ Drawn as it is.
     LDA #LO(spread_lo) : LDY #erase_image.tiled - erase_image.to_tiled - 2
     BCC pixels                      ; (always: 0 - sp_h8 borrows)
+    ZA_UNREACHABLE
 .mirror
     \ A mirror image: its twin's pixels, which its next two bytes say
     \ where, from the header. Each column is the twin's from the other
@@ -350,6 +353,7 @@ ENDIF
     LDX #0
 IF DEFINED(DIRECT)
     BEQ got                         ; (always)
+    ZA_UNREACHABLE
 ELSE
     RTS
 ENDIF

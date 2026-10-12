@@ -260,8 +260,7 @@ ELSE
 .mu_dirty      SKIP 1          ; a bit a voice the game's sounds used
 .mu_key        SKIP 1          ; M is down (one switch a press)
 .mu_owed       SKIP 1          ; frames the interrupt missed (mu_busy)
-.mu_note       SKIP 3          ; each voice's note (music_latch's entry), &FF none
-.mu_att        SKIP 3          ; ... and attenuation
+.mu_note       SKIP 3          ; each tone voice's note (music_latch's entry), &FF none
 ENDIF
 ENDSECTION
 \ &FD-&FF too: neither MOS's IRQ entry touches them, and a soft BREAK

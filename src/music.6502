@@ -5,14 +5,16 @@
 \ music_latch/music_data (the dividers the events index; data/music.6502).
 \
 \ The VSync interrupt plays it (music_tick): the tune on channel 0, an inner
-\ voice on channel 1, the bass on channel 2. Each note starts loud and loses a step every MU_DECAY frames, as
-\ a plucked string's dies away.
+\ voice on channel 1, the bass on channel 2, and with each bass note a
+\ pluck of noise. Each voice is an instrument: its loudness follows an
+\ envelope (mu_envs) from each note's start, and the tune's sounds an
+\ octave up for its first frame, a chime's strike.
 \
 \ The game's own sounds come first: the death tune holds the music, the
 \ movement tick borrows channel 1, and the train's noise, clocked by
-\ channel 2, takes that while it's on. A channel they used is marked
-\ in mu_dirty, and the next VSync writes its note again. M switches it off
-\ and on (read_keys).
+\ channel 2, takes that and the noise channel while it's on. A voice they
+\ used is marked in mu_dirty, and the next VSync writes its note again. M
+\ switches it off and on (read_keys).
 \
 \ The interrupt's writes to the sound chip go through the System VIA, as
 \ the game's do. The chip takes a register's number in one byte and its
@@ -23,18 +25,55 @@
 \ included).
 \ ***************************************************************************
 
-MU_DECAY = 4                        ; frames a step of attenuation, a power of 2
 MU_ON = &80                         ; mu_on: M has it on
 MU_HELD = &40                       ; ... and the death tune holds it
+MU_ALL = %1111                      ; mu_dirty: every voice
+MU_TRAIN = %1100                    ; ... the bass and the pluck (channel 2, noise)
+MU_BLIPS = %0001                    ; the voices whose notes start an octave up
+MU_NOISE = &E4                      ; the pluck's noise: white, the fastest shift
 
-\ The SN76489's volume register for each voice's channel.
-.mu_volreg  EQUB &90, &B0, &D0
-\ Each voice's first attenuation (0 the loudest).
-.mu_attack  EQUB 1, 4, 2
-.mu_bits    EQUB 1, 2, 4
+\ Each voice: its bit (mu_dirty, mu_blip), its volume register, and where
+\ its envelope starts in mu_envs. Voice 3, the pluck, has no note: it
+\ starts with the bass's.
+.mu_bits    EQUB 1, 2, 4, 8
+.mu_volreg  EQUB &90, &B0, &D0, &F0
+.mu_instr   EQUB mu_chime - mu_envs, mu_flute - mu_envs
+            EQUB mu_pizz - mu_envs, mu_pluck - mu_envs
+
+\ The envelopes: each byte an attenuation (0 the loudest, 15 silent) in
+\ the low four bits, for the top four bits + 1 frames. Each ends silent,
+\ and stays there.
+MACRO MU_ENV att, frames
+    ASSERT att < 16 AND frames >= 1 AND frames <= 16
+    EQUB (frames - 1) * 16 + att
+ENDMACRO
+.mu_envs
+    MU_ENV 15, 1                    ; (silent: before a voice's first note)
+.mu_chime
+    MU_ENV 0, 2 : MU_ENV 2, 1 : MU_ENV 3, 2 : MU_ENV 4, 3 : MU_ENV 5, 4
+    MU_ENV 6, 6 : MU_ENV 7, 8 : MU_ENV 8, 10 : MU_ENV 9, 12 : MU_ENV 10, 14
+    MU_ENV 11, 16 : MU_ENV 12, 16 : MU_ENV 13, 16 : MU_ENV 14, 16 : MU_ENV 15, 1
+.mu_flute
+    MU_ENV 9, 1 : MU_ENV 7, 1 : MU_ENV 6, 1 : MU_ENV 5, 16 : MU_ENV 5, 8
+    MU_ENV 6, 12 : MU_ENV 7, 12 : MU_ENV 8, 12 : MU_ENV 9, 12 : MU_ENV 10, 12
+    MU_ENV 12, 12 : MU_ENV 15, 1
+.mu_pizz
+    MU_ENV 1, 2 : MU_ENV 3, 2 : MU_ENV 5, 2 : MU_ENV 7, 2 : MU_ENV 9, 3
+    MU_ENV 11, 3 : MU_ENV 13, 3 : MU_ENV 15, 1
+.mu_pluck
+    MU_ENV 9, 1 : MU_ENV 12, 1 : MU_ENV 15, 1
+.mu_envs_end
+ASSERT mu_envs_end - mu_envs <= 256
+
+\ The instruments' state (music_init sets it; zero page and LowState are
+\ full, and a saved game needn't keep it).
+.mu_pos     SKIP 4                  ; each voice's place in mu_envs
+.mu_cnt     SKIP 4                  ; ... and frames more there
+.mu_blip    SKIP 1                  ; a bit a voice whose note is an octave up its first frame
+.mu_tmp     SKIP 1                  ; (mu_strike's)
 
 \ The VSync interrupt's (irq.6502, which keeps X): the frame's events,
-\ then the decay.
+\ then the envelopes.
 .music_tick
 {
     LDA mu_on : CMP #MU_ON : BNE out
@@ -47,18 +86,27 @@ MU_HELD = &40                       ; ... and the death tune holds it
     LDA sysvia_ddra : PHA
     LDA sysvia_ora_nh : PHA
     \ The voices the game's sounds used.
-    LDX #2
+    LDX #3
 .dirty
     LDA mu_dirty : AND mu_bits,X : BEQ clean
     JSR mu_voice
 .clean
     DEX : BPL dirty
-    \ The events due, this frame's and any missed.
+    \ The events due, this frame's and any missed. Each frame first puts
+    \ a note that started an octave up the frame before at its own pitch.
 .frame
+    LDA mu_blip : BEQ blips_done
+    LDX #2
+.blip
+    LDA mu_blip : AND mu_bits,X : BEQ blip_next
+    JSR mu_voice
+.blip_next
+    DEX : BPL blip
+.blips_done
     LDA mu_wait : BEQ read
     DEC mu_wait
 .frame_done
-    LDA mu_owed : BEQ decay
+    LDA mu_owed : BEQ envelopes
     DEC mu_owed
     JMP frame
 .read
@@ -69,8 +117,9 @@ MU_HELD = &40                       ; ... and the death tune holds it
     LDA music_latch,Y
     LSR A : LSR A : LSR A : LSR A : LSR A : AND #3 : TAX
     TYA : STA mu_note,X
-    LDA mu_attack,X : STA mu_att,X
-    JSR mu_voice
+    JSR mu_strike
+    CPX #2 : BNE read
+    LDX #3 : JSR mu_strike          ; the bass's pluck
     JMP read
 .not_note
     CMP #&FE : BCC wait : BEQ repeat
@@ -92,19 +141,24 @@ MU_HELD = &40                       ; ... and the death tune holds it
     PLA : STA mu_ptr+1
     PLA : STA mu_ptr
     JMP read
-.decay
-    LDA vsyncs : AND #MU_DECAY - 1 : BNE done
-    LDX #2
+.envelopes
+    \ Each voice a frame on in its envelope, and its volume when that
+    \ moves to the next step, until it's silent.
+    LDX #3
 .voice
-    LDA mu_att,X : CMP #15 : BCS next
-    INC mu_att,X
-    CPX #2 : BNE write
+    LDA mu_cnt,X : BEQ step
+    DEC mu_cnt,X
+    JMP next
+.step
+    LDY mu_pos,X : LDA mu_envs,Y : AND #15 : CMP #15 : BEQ next
+    INY : TYA : STA mu_pos,X
+    LDA mu_envs,Y : LSR A : LSR A : LSR A : LSR A : STA mu_cnt,X
+    CPX #2 : BCC write
     LDA noise_on : BNE next         ; (the train's)
 .write
-    LDA mu_att,X : ORA mu_volreg,X : JSR sound_write
+    LDA mu_envs,Y : AND #15 : ORA mu_volreg,X : JSR sound_write
 .next
     DEX : BPL voice
-.done
     \ The port as it was. key_down's (bit 7 an input) wants the keyboard
     \ back on the bus; sound_write's leaves it off.
     PLA : STA sysvia_ora_nh
@@ -132,32 +186,66 @@ MU_HELD = &40                       ; ... and the death tune holds it
     RTS
 }
 
-\ Voice X's note and volume to the chip (and its mu_dirty bit cleared),
-\ but the bass's not while the train's noise is clocked by channel 2.
-\ Keeps X.
+\ Voice X's note (the pluck's noise) and volume to the chip, and its
+\ mu_dirty and mu_blip bits cleared; but not the bass's or the pluck's
+\ while the train's noise is clocked by channel 2. Keeps X.
 .mu_voice
 {
-    CPX #2 : BNE tone
+    CPX #2 : BCC voice
     LDA noise_on : BNE done
-.tone
-    LDA mu_bits,X : EOR #&FF : AND mu_dirty : STA mu_dirty
+.voice
+    LDA mu_bits,X : EOR #&FF : PHA
+    AND mu_dirty : STA mu_dirty
+    PLA : AND mu_blip : STA mu_blip
+    CPX #3 : BEQ pluck
     LDY mu_note,X : BMI volume      ; (none yet)
     LDA music_latch,Y : JSR sound_write
     LDY mu_note,X
     LDA music_data,Y : JSR sound_write
+    JMP volume
+.pluck
+    LDA #MU_NOISE : JSR sound_write
 .volume
-    LDA mu_att,X : ORA mu_volreg,X : JMP sound_write
+    LDY mu_pos,X : LDA mu_envs,Y : AND #15 : ORA mu_volreg,X : JMP sound_write
 .done
     RTS
 }
 
+\ Voice X's note starts: its envelope from the top, and the note to the
+\ chip, an octave up for its first frame if the voice's notes start so.
+\ Keeps X.
+.mu_strike
+{
+    LDA mu_instr,X : STA mu_pos,X : TAY
+    LDA mu_envs,Y : LSR A : LSR A : LSR A : LSR A : STA mu_cnt,X
+    INC mu_cnt,X                    ; (this frame's envelopes step it once)
+    LDA mu_bits,X : AND #MU_BLIPS : BEQ plain
+    ORA mu_blip : STA mu_blip
+    \ Half the divider: its low bit drops out of the latch byte, and the
+    \ data byte's low bit moves into it.
+    LDY mu_note,X
+    LDA music_data,Y : AND #1 : ASL A : ASL A : ASL A : ASL A : STA mu_tmp
+    LDA music_latch,Y : AND #15 : ORA mu_tmp : LSR A : STA mu_tmp
+    LDA music_latch,Y : AND #&F0 : ORA mu_tmp : JSR sound_write
+    LDY mu_note,X
+    LDA music_data,Y : LSR A : JSR sound_write
+    JMP mu_voice.volume
+.plain
+    JMP mu_voice
+}
+
 \ Silence the music's voices: the death tune holds it, or M switched it
-\ off. (Channel 2 is silent while it clocks the train's noise, too.)
+\ off. (Channel 2 is silent while it clocks the train's noise, too, and
+\ the noise channel is the train's.)
 .music_quiet
 {
     LDA #&9F : JSR sound_write
     LDA #&BF : JSR sound_write
-    LDA #&DF : JMP sound_write
+    LDA #&DF : JSR sound_write
+    LDA noise_on : BNE done
+    LDA #&FF : JMP sound_write
+.done
+    RTS
 }
 
 \ M: the music off, or on again where it was.
@@ -167,7 +255,7 @@ MU_HELD = &40                       ; ... and the death tune holds it
     BMI on
     JMP music_quiet
 .on
-    LDA #7 : STA mu_dirty
+    LDA #MU_ALL : STA mu_dirty
     RTS
 }
 
@@ -175,13 +263,13 @@ MU_HELD = &40                       ; ... and the death tune holds it
 \ game is loaded, after the chip is set up for the game's sounds).
 .music_init
 {
-    LDX #2
+    LDX #3
 .voice
-    LDA #&FF : STA mu_note,X
-    LDA #15 : STA mu_att,X
+    LDA #0 : STA mu_pos,X : STA mu_cnt,X    ; mu_envs's silence
     DEX : BPL voice
-    LDA #7 : STA mu_dirty
-    LDA #0 : STA mu_wait : STA mu_key : STA mu_owed
+    LDA #&FF : STA mu_note : STA mu_note+1 : STA mu_note+2
+    LDA #MU_ALL : STA mu_dirty
+    LDA #0 : STA mu_wait : STA mu_key : STA mu_owed : STA mu_blip
     LDA #MU_ON : STA mu_on
 .from_start
     LDA #LO(music) : STA mu_ptr

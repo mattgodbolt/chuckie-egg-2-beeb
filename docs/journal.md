@@ -1763,3 +1763,19 @@ it, so the pizzicato bass, on the alto flute around E4, played on the
 tune's channel; `--bass-top` now sets that line for each piece. La Poule
 converts as before with `--bass-top 59`, except that its high bass notes
 now stay on channel 2.
+
+### Instruments (on the nutcracker branch)
+
+Matt asked whether the voices could be rudimentary instruments
+(decision 48). Each voice now has an envelope instead of one decay for
+all: a chime for the tune, which also starts each note an octave up for
+a frame, a flute for the inner voice and a pizzicato for the bass. A
+short pluck of noise comes with each bass note. `make music` models the
+octave-up frame: a chime's note reaches the chip at half its divider,
+then at its own a frame later.
+
+The first build lost M: the game stopped in `frame_missing` (the test
+build's stop for a sprite frame that no group gave). The instruments'
+counters had gone at the end of `LowState`, where `LowSpare` (main.6502)
+already keeps `rg_first`. Baron doesn't object to virtual sections that
+overlap. They are in main RAM now.

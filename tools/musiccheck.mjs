@@ -4,7 +4,8 @@
 // check that the player is where src/data/music.bin says it should be
 // after that many frames, and that the tune's and the bass's notes reached
 // the sound chip in its order (channel 1's are left out: the movement tick
-// borrows it). Then M: the music off (silent, and it stays where it was)
+// borrows it), a voice in MU_BLIPS an octave up for a note's first frame
+// and then at its pitch. Then M: the music off (silent, and it stays where it was)
 // and on again.
 //
 //   node tools/musiccheck.mjs [seconds]
@@ -23,14 +24,15 @@ const data = readFileSync("src/data/music.bin");
 // The player's position, from the machine.
 async function state(b) {
     const [ptrLo, ptrHi, retLo, retHi, left, wait] = await b.read("mu_ptr", 6);
-    const owed = await b.peek("mu_owed");
-    return { ptr: ptrLo | (ptrHi << 8), ret: retLo | (retHi << 8), left, wait, owed };
+    const owed = await b.peek("mu_owed"), blip = await b.peek("mu_blip");
+    const note = [...(await b.read("mu_note", 3))];
+    return { ptr: ptrLo | (ptrHi << 8), ret: retLo | (retHi << 8), left, wait, owed, blip, note };
 }
 
-// music_tick's events, frames times, as data says; the notes played go to
-// `notes` (the pitch table's entries).
-function play(s, frames, base, notes) {
-    s = { ...s };
+// music_tick's events, frames times, as data says; the dividers written go
+// to `out` ([channel, divider]), from `divider(entry, half)`.
+function play(s, frames, base, out, divider, blips) {
+    s = { ...s, note: [...s.note] };
     const byte = () => {
         const v = data[s.ptr - base];
         s.ptr++;
@@ -38,10 +40,20 @@ function play(s, frames, base, notes) {
         return v;
     };
     for (let f = 0; f < frames; f++) {
+        for (let ch = 2; ch >= 0; ch--) {
+            if (s.blip & (1 << ch)) out.push(divider(s.note[ch], false));
+        }
+        s.blip = 0;
         if (s.wait) { s.wait--; continue; }
         for (;;) {
             const v = byte();
-            if (v < 0xc0) notes.push(v);
+            if (v < 0xc0) {
+                const [ch] = divider(v, false);
+                s.note[ch] = v;
+                const half = (blips >> ch) & 1;
+                out.push(divider(v, half));
+                if (half) s.blip |= 1 << ch;
+            }
             else if (v < 0xfe) { s.wait = v - 0xc0; break; }
             else if (v === 0xfe) {
                 const at = byte() | (byte() << 8);
@@ -77,9 +89,14 @@ try {
     if ((await b.peek("mu_on")) !== 0x80) fail("mu_on isn't on");
 
     // Where it should be: the frames less those still owed, from where it was.
+    // A divider is the latch byte's low four bits and the data byte's six.
+    const divider = (n, half) => {
+        const d = ((dataTab[n] & 0x3f) << 4) | (latch[n] & 15);
+        return [(latch[n] >> 5) & 3, half ? d >> 1 : d];
+    };
     const notes = [];
-    const want = play({ ...s0, wait: s0.wait }, frames + s0.owed - s1.owed, base, notes);
-    for (const k of ["ptr", "left", "wait"])
+    const want = play(s0, frames + s0.owed - s1.owed, base, notes, divider, b.addr("MU_BLIPS"));
+    for (const k of ["ptr", "left", "wait", "blip"])
         if (want[k] !== s1[k]) fail(`after ${frames} frames ${k} is ${s1[k]}, the data says ${want[k]}`);
 
     // The chip's writes: channel 0's and channel 2's dividers, in order.
@@ -92,17 +109,14 @@ try {
     }
     // (Channel 2's at N = 833 are the train's noise set-up: not in room 1.)
     const expect = { 0: [], 2: [] };
-    for (const n of notes) {
-        const ch = (latch[n] >> 5) & 3;
-        if (ch !== 1) expect[ch].push(((dataTab[n] & 0x3f) << 4) | (latch[n] & 15));
-    }
+    for (const [ch, d] of notes) if (ch !== 1) expect[ch].push(d);
     for (const ch of [0, 2]) {
         // The capture starts mid-frame: allow the first frame's notes either way.
         const a = seen[ch].join(","), e = expect[ch].join(",");
         if (!(a.endsWith(e) || e.endsWith(a)) || Math.abs(seen[ch].length - expect[ch].length) > 3)
-            fail(`channel ${ch}: ${seen[ch].length} dividers written, the data has ${expect[ch].length}`);
+            fail(`channel ${ch}: ${seen[ch].length} dividers written, the data has ${expect[ch].length}\n  seen ${a.slice(0, 120)}\n  want ${e.slice(0, 120)}`);
     }
-    console.log(`music: ${frames} frames, ${notes.length} notes (channel 0 ${seen[0].length}, bass ${seen[2].length})${failed ? "" : " as the data says"}`);
+    console.log(`music: ${frames} frames, ${notes.length} dividers (channel 0 ${seen[0].length}, bass ${seen[2].length})${failed ? "" : " as the data says"}`);
 
     // M off: silent, the position kept; M on again: it carries on.
     await b.keyDown("M");

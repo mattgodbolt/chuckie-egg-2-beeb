@@ -19,7 +19,7 @@ IF MUSIC
     \ channel 2 are set up as sound_init has them, channel 2 silent.
     BCS on
     LDA #&FF : JSR sound_write
-    LDA #4 : ORA mu_dirty : STA mu_dirty
+    LDA #MU_TRAIN : ORA mu_dirty : STA mu_dirty
     RTS
 .on
     INC mu_busy
@@ -95,7 +95,7 @@ ENDIF
 IF MUSIC
     LDA #&9F : JSR sound_write
     LDA mu_on : AND #&FF EOR MU_HELD : STA mu_on
-    LDA #7 : STA mu_dirty           ; every voice back at the next VSync
+    LDA #MU_ALL : STA mu_dirty      ; every voice back at the next VSync
     RTS
 ELSE
     LDA #&9F : JMP sound_write

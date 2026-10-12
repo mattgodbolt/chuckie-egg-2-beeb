@@ -188,6 +188,10 @@ handoff, the front end or anything paged.
   label instead of the code (baron #19), and `ZA_CANJUMP`/`ZA_CANCALL`
   targets in another section were lost (#18, which could give wrong code).
 - `ASSERT` is built in (0.4.2): don't define the port kit's macro.
+- Virtual sections may overlap without a word: `LowSpare` (main.6502)
+  starts at `low_state_end`, so a variable added at the end of `LowState`
+  lands on `rg_first` and a room loses a sprite group. Add to the section
+  that owns the space, and let its guard say when it's full.
 - `FOR n = 0..15` (inclusive), not BeebASM's `FOR n, 0, 15`.
 - A zero-page array is `ZA_AUTO 8, name`, indexed with `ZA_INDEXEDBY` after
   the access; eight `ZA_AUTO1`s aren't contiguous.

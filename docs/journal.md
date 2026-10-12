@@ -1745,3 +1745,21 @@ Its notes below B2 go up an octave, as the other voices' already did.
 That is mostly the A2s and B♭2s, a fifth of the bass's notes. The
 train's noise is still clocked by channel 2, so starting it now silences
 channel 2 too (`noise_setup`).
+
+### The Sugar Plum Fairy (on the nutcracker branch)
+
+Matt wondered whether the hens had been overplayed, and asked for a
+branch from `music` with something from *The Nutcracker*: toys, sweets
+and wonder, closer to a chocolate egg factory. IMSLP has one Nutcracker
+MIDI file with a clear licence: Charles A Johnson's Sugar Plum Fairy for
+four flutes and alto flute (decision 47). It is listed under the
+Synthesized/MIDI sub-tab of the Recordings tab, with the arrangements
+for other instruments, and not with the sheet music.
+
+`tools/mkmusic.py` had La Poule built into it in two places. It assumed
+3/4 bars, so it now reads the time signatures from the file. It also
+treated any note above B3 as the tune's unless another note sounded with
+it, so the pizzicato bass, on the alto flute around E4, played on the
+tune's channel; `--bass-top` now sets that line for each piece. La Poule
+converts as before with `--bass-top 59`, except that its high bass notes
+now stay on channel 2.

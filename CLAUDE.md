@@ -149,7 +149,7 @@ handoff, the front end or anything paged.
   body, then the graphics groups they share; and `roomrecs.bin`, CE2S's
   CE2ROOM: the four toys' blocks, then each room's body and groups
   together, each from a sector, none crossing a track). `tools/mkmusic.py`
-  makes the music from `music/la-poule.mid`. The build never runs them;
+  makes the music from a MIDI file in `music/` (its README has the command). The build never runs them;
   their output is committed.
 - Loading takes 4.6s: tools run to a symbol after booting
   (`startBeeb({bootUntil})`, `play.mjs --until`), never a guessed wait.

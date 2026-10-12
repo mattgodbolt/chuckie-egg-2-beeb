@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
-"""Turn Rameau's La Poule (music/la-poule.mid, Pierre Gouin's MIDI, CC BY-SA
-4.0) into the in-game music's data (src/music.6502 plays it; decision 46).
+"""Turn a MIDI file (music/README.md: the pieces, their licences and the
+options each was made with) into the in-game music's data (src/music.6502
+plays it; decisions 46 and 47).
 
-    python3 tools/mkmusic.py [--midi music/la-poule.mid]
+    python3 tools/mkmusic.py [--midi music/sugar-plum.mid] [--bass-top N]
 
 Writes, committed (the build never runs this):
     src/data/music.bin      the tune: one byte an event (below)
@@ -11,9 +12,8 @@ Writes, committed (the build never runs this):
                             and the divider's low four bits) and its data
                             byte (the top six)
 
-The MIDI is a performance of the score, chords spread and with the
-ritardandos at the ends of sections, all kept: times go to 50Hz frames
-through its tempo map. Each bar starts at a whole frame, the sum of the
+The MIDI's timing is kept, a performance's rolled chords and ritardandos
+included: times go to 50Hz frames through its tempo map. Each bar starts at a whole frame, the sum of the
 rounded lengths of the bars before, and the notes in it are placed from
 there, so that bars played alike (the repeats) come out alike.
 
@@ -21,12 +21,13 @@ Three voices from up to six notes at once: at each note's start, the notes
 sounding (or struck within ROLL frames: a chord is spread) are ranked by
 pitch. The highest goes to channel 0, the lowest to channel 2 (the bass),
 any other to channel 1, the newest note replacing what a channel had. A
-note alone is the tune's from BASS_TOP up, the bass's below. A bass note
-above BASS_TOP goes to channel 1 instead. The channels can't go under B2,
-so a note below that is played an octave up. (Not periodic noise for the
+note alone is the tune's above BASS_TOP (the piece's: --bass-top), the
+bass's at or below. The channels can't go under B2, so a note below that
+is played an octave up. (Not periodic noise for the
 bass, which would reach the lowest notes: its pitch depends on the length
 of the chip's shift register, which isn't the same everywhere.) There are
-no note-offs: the player lets each note decay, as a harpsichord's does.
+no note-offs: the player lets each note decay, as a plucked or struck
+string's does.
 
 The events:
     00-BF   a note: the pitch table's entry
@@ -36,10 +37,11 @@ The events:
     FF      back to the start
 """
 import argparse
+import bisect
 import struct
 
 ROLL = 3            # frames over which a spread chord's notes still count as one
-BASS_TOP = 59       # B3: the bass's highest note, the tune's lowest alone
+BASS_TOP = 67       # G4: a lone note's highest for the bass (--bass-top)
 TONE_LOW = 47       # B2: the lowest note the dividers reach
 FPS = 50
 GAP = 100           # frames of silence before it starts again
@@ -61,7 +63,7 @@ def parse(path):
     assert d[:4] == b"MThd"
     _fmt, ntr, div = struct.unpack(">HHH", d[8:14])
     i = 14
-    tempos, notes = [], []
+    tempos, metres, notes = [], [], []
     for _ in range(ntr):
         assert d[i:i + 4] == b"MTrk"
         end = i + 8 + struct.unpack(">I", d[i + 4:i + 8])[0]
@@ -76,6 +78,8 @@ def parse(path):
                 ln, k = vlq(d, j + 2)
                 if ty == 0x51:
                     tempos.append((tick, int.from_bytes(d[k:k + ln], "big")))
+                elif ty == 0x58:        # a time signature: its bar in ticks
+                    metres.append((tick, d[k] * div * 4 >> d[k + 1]))
                 j = k + ln
                 continue
             if s in (0xF0, 0xF7):
@@ -94,7 +98,8 @@ def parse(path):
             elif st in (0x80, 0x90) and on.get(a[0]):
                 notes.append((on[a[0]].pop(0), tick, a[0]))
     tempos.sort()
-    return div, tempos, sorted(notes)
+    metres = sorted(set(metres)) or [(0, 4 * div)]
+    return div, tempos, metres, sorted(notes)
 
 
 def seconds(tempos, div):
@@ -115,35 +120,40 @@ def seconds(tempos, div):
     return at
 
 
-def to_frames(notes, div, tempos):
+def to_frames(notes, div, tempos, metres):
     at = seconds(tempos, div)
-    bar = 3 * div       # 3/4 throughout (the last bar is shorter)
+    # The bars' ticks, through the time signatures, to past the last note.
     last = max(e for s, e, p in notes)
+    bars, tick, m = [], 0, 0
+    while tick <= last:
+        while m + 1 < len(metres) and metres[m + 1][0] <= tick:
+            m += 1
+        bars.append(tick)
+        tick += metres[m][1]
+    bars.append(tick)
     starts = [0]
-    for b in range(last // bar + 1):
-        starts.append(starts[-1] + round((at((b + 1) * bar) - at(b * bar)) * FPS))
+    for b in range(len(bars) - 1):
+        starts.append(starts[-1] + round((at(bars[b + 1]) - at(bars[b])) * FPS))
 
     def frame(tick):
-        b = tick // bar
-        return starts[b] + round((at(tick) - at(b * bar)) * FPS)
+        b = bisect.bisect_right(bars, tick) - 1
+        return starts[b] + round((at(tick) - at(bars[b])) * FPS)
     return [(frame(s), max(frame(e), frame(s) + 1), p) for s, e, p in notes]
 
 
-def voices(notes):
+def voices(notes, bass_top):
     """(frame, channel, pitch) for each note kept: channel 0, 1 or 2 (the bass)."""
     out = {}
     for s, e, p in notes:
         near = [q for s2, e2, q in notes if s2 <= s + ROLL and e2 > s]
         hi, lo = max(near), min(near)
         if len(near) == 1:
-            ch = 0 if p > BASS_TOP else 2
+            ch = 0 if p > bass_top else 2
         elif p == hi:
             ch = 0
         elif p == lo:
             ch = 2
         else:
-            ch = 1
-        if ch == 2 and p > BASS_TOP:
             ch = 1
         while p < TONE_LOW:
             p += 12
@@ -221,17 +231,18 @@ def expand(data):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--midi", default="music/la-poule.mid")
+    ap.add_argument("--midi", default="music/sugar-plum.mid")
+    ap.add_argument("--bass-top", type=int, default=BASS_TOP)
     args = ap.parse_args()
-    div, tempos, notes = parse(args.midi)
-    events = voices(to_frames(notes, div, tempos))
+    div, tempos, metres, notes = parse(args.midi)
+    events = voices(to_frames(notes, div, tempos, metres), args.bass_top)
     table, raw = encode(events)
     data = compress(raw)
     assert expand(data) == raw
     assert all(b < 0xFE for b in raw)
     open("src/data/music.bin", "wb").write(data)
     with open("src/data/music.6502", "w") as f:
-        f.write("\\ Made by tools/mkmusic.py from music/la-poule.mid: don't edit.\n")
+        f.write(f"\\ Made by tools/mkmusic.py from {args.midi}: don't edit.\n")
         f.write("\\ The pitch table: each entry's SN76489 latch byte, then its data byte.\n")
         f.write(".music_latch\n")
         for i in range(0, len(table), 8):

@@ -1,12 +1,12 @@
 \ ***************************************************************************
-\ Music (decision 46; the sideways RAM edition only): Rameau's La Poule
-\ (1728), from Pierre Gouin's MIDI (music/README.md), which
-\ tools/mkmusic.py turns into music (events) and music_latch/music_data
-\ (the dividers the events index; data/music.6502).
+\ Music (decisions 46 and 47; the sideways RAM edition only): the Dance of
+\ the Sugar Plum Fairy from Tchaikovsky's The Nutcracker (music/README.md),
+\ which tools/mkmusic.py turns into music (events) and
+\ music_latch/music_data (the dividers the events index; data/music.6502).
 \
 \ The VSync interrupt plays it (music_tick): the tune on channel 0, an inner
 \ voice on channel 1, the bass on channel 2. Each note starts loud and loses a step every MU_DECAY frames, as
-\ a harpsichord's dies away.
+\ a plucked string's dies away.
 \
 \ The game's own sounds come first: the death tune holds the music, the
 \ movement tick borrows channel 1, and the train's noise, clocked by

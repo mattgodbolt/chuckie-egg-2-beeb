@@ -129,10 +129,14 @@ The port's own work, its source code, tools and documentation, is under the
 game's design, rooms, graphics, text and sounds, which `src/data/` and the
 disc image carry, are theirs and not covered by that licence.
 
-The in-game music is Rameau's *La Poule* from Pierre Gouin's MIDI file,
-under [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/):
-`music/la-poule.mid` and the arrangement made from it,
-`src/data/music.bin` and `src/data/music.6502` (`music/README.md`).
+The in-game music is the Dance of the Sugar Plum Fairy from Tchaikovsky's
+*The Nutcracker*, from Charles A Johnson's MIDI file for flutes, under
+[CC BY 4.0](https://creativecommons.org/licenses/by/4.0/):
+`music/sugar-plum.mid` and the arrangement made from it,
+`src/data/music.bin` and `src/data/music.6502`. `music/la-poule.mid`,
+Rameau's *La Poule* from Pierre Gouin's MIDI file, is under
+[CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/)
+(`music/README.md`).
 
 ## Credits
 

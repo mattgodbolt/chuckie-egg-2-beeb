@@ -3,7 +3,7 @@
 options each was made with) into the in-game music's data (src/music.6502
 plays it; decisions 46 and 47).
 
-    python3 tools/mkmusic.py [--midi music/sugar-plum.mid] [--bass-top N]
+    python3 tools/mkmusic.py [--midi music/sugar-plum.mid] [--bass-top N] [--tempo X]
 
 Writes, committed (the build never runs this):
     src/data/music.bin      the tune: one byte an event (below)
@@ -13,7 +13,7 @@ Writes, committed (the build never runs this):
                             byte (the top six)
 
 The MIDI's timing is kept, a performance's rolled chords and ritardandos
-included: times go to 50Hz frames through its tempo map. Each bar starts at a whole frame, the sum of the
+included: times go to 50Hz frames through its tempo map, sped up by --tempo. Each bar starts at a whole frame, the sum of the
 rounded lengths of the bars before, and the notes in it are placed from
 there, so that bars played alike (the repeats) come out alike.
 
@@ -120,8 +120,11 @@ def seconds(tempos, div):
     return at
 
 
-def to_frames(notes, div, tempos, metres):
-    at = seconds(tempos, div)
+def to_frames(notes, div, tempos, metres, tempo):
+    played = seconds(tempos, div)
+
+    def at(tick):
+        return played(tick) / tempo
     # The bars' ticks, through the time signatures, to past the last note.
     last = max(e for s, e, p in notes)
     bars, tick, m = [], 0, 0
@@ -233,9 +236,10 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--midi", default="music/sugar-plum.mid")
     ap.add_argument("--bass-top", type=int, default=BASS_TOP)
+    ap.add_argument("--tempo", type=float, default=1.0, help="faster by this factor")
     args = ap.parse_args()
     div, tempos, metres, notes = parse(args.midi)
-    events = voices(to_frames(notes, div, tempos, metres), args.bass_top)
+    events = voices(to_frames(notes, div, tempos, metres, args.tempo), args.bass_top)
     table, raw = encode(events)
     data = compress(raw)
     assert expand(data) == raw

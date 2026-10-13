@@ -15,7 +15,7 @@ It is from IMSLP (file #870701, `PMLP3607-Sugarplum.mid`, uploaded by
 Clsmaestro) and is licensed under
 [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/).
 
-    python3 tools/mkmusic.py --midi music/sugar-plum.mid --bass-top 67
+    python3 tools/mkmusic.py --midi music/sugar-plum.mid --bass-top 67 --tempo 1.05
 
 ## Not in the game: La Poule
 

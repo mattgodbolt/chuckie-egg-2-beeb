@@ -30,7 +30,15 @@ MU_HELD = &40                       ; ... and the death tune holds it
 MU_ALL = %1111                      ; mu_dirty: every voice
 MU_TRAIN = %1100                    ; ... the bass and the pluck (channel 2, noise)
 MU_BLIPS = %0001                    ; the voices whose notes start an octave up
+MU_VIBS = %0010                     ; ... and those with vibrato
+MU_VIB_DELAY = 10                   ; frames into a note before its vibrato
+MU_QUIET = 2                        ; every envelope this much quieter (2dB a step)
+ASSERT (MU_VIBS AND (MU_BLIPS OR MU_TRAIN)) = 0
 MU_NOISE = &E4                      ; the pluck's noise: white, the fastest shift
+
+\ Vibrato: the pitch's wobble a frame, in steps of a 128th of the divider,
+\ round from MU_VIB_DELAY on (eight frames: about 6Hz).
+.mu_vib     EQUB 0, 1, 1, 1, 0, -1, -1, -1
 
 \ Each voice: its bit (mu_dirty, mu_blip), its volume register, and where
 \ its envelope starts in mu_envs. Voice 3, the pluck, has no note: it
@@ -41,11 +49,15 @@ MU_NOISE = &E4                      ; the pluck's noise: white, the fastest shif
             EQUB mu_pizz - mu_envs, mu_pluck - mu_envs
 
 \ The envelopes: each byte an attenuation (0 the loudest, 15 silent) in
-\ the low four bits, for the top four bits + 1 frames. Each ends silent,
-\ and stays there.
+\ the low four bits, MU_QUIET added, for the top four bits + 1 frames.
+\ Each ends silent, and stays there.
 MACRO MU_ENV att, frames
     ASSERT att < 16 AND frames >= 1 AND frames <= 16
-    EQUB (frames - 1) * 16 + att
+    IF att + MU_QUIET < 15
+        EQUB (frames - 1) * 16 + att + MU_QUIET
+    ELSE
+        EQUB (frames - 1) * 16 + 15
+    ENDIF
 ENDMACRO
 .mu_envs
     MU_ENV 15, 1                    ; (silent: before a voice's first note)
@@ -70,6 +82,7 @@ ASSERT mu_envs_end - mu_envs <= 256
 .mu_pos     SKIP 4                  ; each voice's place in mu_envs
 .mu_cnt     SKIP 4                  ; ... and frames more there
 .mu_blip    SKIP 1                  ; a bit a voice whose note is an octave up its first frame
+.mu_age     SKIP 4                  ; frames into each voice's note, for its vibrato
 .mu_tmp     SKIP 1                  ; (mu_strike's)
 
 \ The VSync interrupt's (irq.6502, which keeps X): the frame's events,
@@ -159,6 +172,35 @@ ASSERT mu_envs_end - mu_envs <= 256
     LDA mu_envs,Y : AND #15 : ORA mu_volreg,X : JSR sound_write
 .next
     DEX : BPL voice
+    \ The vibrato.
+    LDX #2
+.vibrato
+    LDA mu_bits,X : AND #MU_VIBS : BEQ vib_next
+    LDY mu_note,X : BMI vib_next
+    LDA mu_age,X : CMP #MU_VIB_DELAY : BCS wobble
+    INC mu_age,X
+    JMP vib_next
+.wobble
+    AND #7 : TAY
+    INC mu_age,X : BNE aged
+    LDA #MU_VIB_DELAY : STA mu_age,X        ; (round again)
+.aged
+    LDA mu_vib,Y : PHA
+    LDY mu_note,X
+    LDA music_data,Y : LSR A : LSR A : LSR A    ; a 128th of the divider
+    BNE depth
+    LDA #1
+.depth
+    STA mu_tmp
+    PLA : BEQ set                   ; (A = 0: at its pitch)
+    BPL up
+    LDA #0 : SEC : SBC mu_tmp : JMP set
+.up
+    LDA mu_tmp
+.set
+    JSR mu_bend
+.vib_next
+    DEX : BPL vibrato
     \ The port as it was. key_down's (bit 7 an input) wants the keyboard
     \ back on the bus; sound_write's leaves it off.
     PLA : STA sysvia_ora_nh
@@ -211,6 +253,28 @@ ASSERT mu_envs_end - mu_envs <= 256
     RTS
 }
 
+\ Voice X's note to the chip bent by A (signed, a few steps of its
+\ divider). Keeps X.
+.mu_bend
+{
+    STA mu_tmp
+    LDY mu_note,X
+    LDA music_latch,Y : AND #15 : CLC : ADC mu_tmp : PHA
+    AND #15 : STA mu_tmp
+    LDA music_latch,Y : AND #&F0 : ORA mu_tmp : JSR sound_write
+    LDY mu_note,X
+    LDA music_data,Y : STA mu_tmp
+    \ The low four bits' carry or borrow into the data byte's.
+    PLA : CMP #16 : BCC write
+    CMP #&80 : BCS down
+    INC mu_tmp
+    JMP write
+.down
+    DEC mu_tmp
+.write
+    LDA mu_tmp : JMP sound_write
+}
+
 \ Voice X's note starts: its envelope from the top, and the note to the
 \ chip, an octave up for its first frame if the voice's notes start so.
 \ Keeps X.
@@ -219,6 +283,7 @@ ASSERT mu_envs_end - mu_envs <= 256
     LDA mu_instr,X : STA mu_pos,X : TAY
     LDA mu_envs,Y : LSR A : LSR A : LSR A : LSR A : STA mu_cnt,X
     INC mu_cnt,X                    ; (this frame's envelopes step it once)
+    LDA #0 : STA mu_age,X
     LDA mu_bits,X : AND #MU_BLIPS : BEQ plain
     ORA mu_blip : STA mu_blip
     \ Half the divider: its low bit drops out of the latch byte, and the

@@ -1779,3 +1779,15 @@ build's stop for a sprite frame that no group gave). The instruments'
 counters had gone at the end of `LowState`, where `LowSpare` (main.6502)
 already keeps `rg_first`. Baron doesn't object to virtual sections that
 overlap. They are in main RAM now.
+
+Then three things Matt asked for after listening. A little vibrato on the
+flute voice: from `MU_VIB_DELAY` frames into a note, its divider goes up
+and down by a 128th of itself, eight frames a round. Everything
+`MU_QUIET` steps quieter, because the music was a bit overwhelming. And
+the piece 5% faster (`mkmusic.py --tempo`).
+
+That build made `make front` lose a key on the B, and only there. Of the
+four DELETEs typed after "NONE", three took effect, so the next name was
+"NCE2". When one key is pressed several times, the OS counts a new press
+only after it has seen the key released. frontcheck's `type` left
+0.05s between presses, enough until the timing moved. It leaves 0.1s now.

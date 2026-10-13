@@ -118,7 +118,7 @@ try {
     const type = async (...keys) => {
         for (const k of keys) {
             await hold(k, 0.08);
-            await b.run(0.05);
+            await b.run(0.1);
         }
     };
     const rows = async () => (await screen()).match(/.{1,40}/g);

@@ -9,7 +9,7 @@
 // and on again. Then the life-lost tune, with the music on: the music
 // plays it (music + MU_DEATH, harmonised), its last chord ringing on
 // after the game's frozen time, and then after MU_GAP frames' silence
-// carries on from where it was.
+// carries on from where it was, even in the middle of a repeat.
 //
 //   node tools/musiccheck.mjs [seconds]
 //
@@ -153,6 +153,11 @@ try {
     let r = await b.runUntil("music_death", 30);
     await b.keyUp("X");
     if (r.stopped_reason !== "breakpoint") fail("walking into the dog: no life lost");
+    // As if in the middle of the music's first repeat, a byte into it: the
+    // place put back must keep the repeat's count.
+    const fe = data.indexOf(0xfe);
+    const at = data[fe + 1] | (data[fe + 2] << 8), len = data[fe + 3], ret = base + fe + 4;
+    await b.write("mu_ptr", [(base + at + 1) & 255, (base + at + 1) >> 8, ret & 255, ret >> 8, len - 1, 0]);
     const before = await state(b);
     await b.call("start_sound_capture", { session_id: b.session_id });
     const v0 = await b.peek("vsyncs");

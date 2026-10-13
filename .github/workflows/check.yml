@@ -10,7 +10,7 @@ on:
   workflow_dispatch:
 
 env:
-  BARON_VERSION: v0.5.1
+  BARON_VERSION: v0.5.3
 
 jobs:
   check:

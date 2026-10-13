@@ -1828,3 +1828,9 @@ lost while the chord rings plays the tune again and keeps the music's
 place, not the tune's. `make music` checks the place comes back, the
 repeat count with it, `MU_GAP` frames on; a build without the gap failed
 it.
+
+### Baron 0.5.3
+
+Baron moved to 0.5.3 (0.5.2's fixes from Rich's fuzzing, and
+`TO_STRING`/`TO_NUMBER`), in CI too. Every disc is byte for byte what
+0.5.2 made, its build stamp aside.

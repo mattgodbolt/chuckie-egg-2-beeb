@@ -139,7 +139,8 @@ handoff, the front end or anything paged.
   toy is in memory (decision 45), so a wrong one shows only past egg 1.
 - `make music` (`tools/musiccheck.mjs`, CE2 only) plays a stretch and
   checks the music player's place and the notes the chip gets against
-  `src/data/music.bin`, then M. The player runs in the VSync interrupt and
+  `src/data/music.bin`, then M, then the life-lost tune, which the music
+  plays when it's on (decision 49). The player runs in the VSync interrupt and
   writes the chip too: a sound the game writes (a register byte, then its
   value) must hold `mu_busy` throughout (decision 46). `make sound`
   switches the music off first.

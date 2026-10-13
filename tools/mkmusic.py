@@ -6,7 +6,8 @@ plays it; decisions 46 and 47).
     python3 tools/mkmusic.py [--midi music/sugar-plum.mid] [--bass-top N] [--tempo X]
 
 Writes, committed (the build never runs this):
-    src/data/music.bin      the tune: one byte an event (below)
+    src/data/music.bin      the tune: one byte an event (below), then the
+                            life-lost tune's (DEATH, below) at MU_DEATH
     src/data/music.6502     the pitch table the events index: for each
                             entry, the SN76489's latch byte (its channel
                             and the divider's low four bits) and its data
@@ -29,6 +30,12 @@ of the chip's shift register, which isn't the same everywhere.) There are
 no note-offs: the player lets each note decay, as a plucked or struck
 string's does.
 
+The life-lost tune (sound.6502's death_tune; decision 49) is the
+original's 16 notes, with their lengths, for the tune's voice an octave
+up (no room for a bass under them otherwise), over a harmony and a bass
+written for it. Its events follow the music's and end in waits: the game
+plays it for the original's time and then puts the music back.
+
 The events:
     00-BF   a note: the pitch table's entry
     C0-FD   the next events are (byte - &BF) frames on
@@ -46,6 +53,32 @@ TONE_LOW = 47       # B2: the lowest note the dividers reach
 FPS = 50
 GAP = 100           # frames of silence before it starts again
 MIN_REPEAT = 6      # a repeat (4 bytes) must save at least this many
+
+
+# The life-lost tune: (ms from its start, channel, MIDI note). The tune's
+# notes and lengths are the original's (docs/research/frontend.md, 7.3:
+# G3 A3 G3 F3 E3 C3 D3 B2 C3, then G3 D3 E3 F3 G3 B3 C4), an octave up.
+DEATH_TUNE = [(55, 202), (57, 102), (55, 202), (53, 100), (52, 203), (48, 103),
+              (50, 200), (47, 101), (48, 598), (55, 33), (50, 51), (52, 52),
+              (53, 54), (55, 54), (59, 51), (60, 52)]
+# Under it, struck with the tune's note of that number, in 6/8 (a crotchet
+# and a quaver a beat): C, G7, C, G7, C for the long note, and G7 to C
+# under the run up, the seventh falling to E: (tune's note, harmony, bass).
+DEATH_UNDER = [(0, 64, 48), (2, 62, 47), (4, 55, 48), (6, 53, 50), (8, 55, 48),
+               (9, 53, 47), (15, 52, 48)]
+
+
+def death_events():
+    """(frame, channel, pitch) for the life-lost tune."""
+    out, t, at = [], 0, []
+    for p, ms in DEATH_TUNE:
+        at.append(round(t / 1000 * FPS))
+        out.append((at[-1], 0, p + 12))
+        t += ms
+    for k, harmony, bass in DEATH_UNDER:
+        out += [(at[k], 1, harmony), (at[k], 2, bass)]
+    assert len({(s, ch) for s, ch, p in out}) == len(out), "two notes a frame on a channel"
+    return sorted(out)
 
 
 def vlq(d, i):
@@ -173,9 +206,7 @@ def divider(ch, p):
     return n
 
 
-def encode(events):
-    table = sorted({(ch, divider(ch, p)) for _, ch, p in events})
-    assert len(table) <= 0xC0
+def encode(events, table, gap=GAP):
     index = {k: i for i, k in enumerate(table)}
     raw, now = [], 0
     for s, ch, p in events:
@@ -184,12 +215,17 @@ def encode(events):
             raw.append(0xBF + n)
             now += n
         raw.append(index[(ch, divider(ch, p))])
-    gap = GAP
     while gap:
         n = min(gap, 0xFE - 0xC0)
         raw.append(0xBF + n)
         gap -= n
-    return table, raw
+    return raw
+
+
+def pitches(*streams):
+    table = sorted({(ch, divider(ch, p)) for events in streams for _, ch, p in events})
+    assert len(table) <= 0xC0
+    return table
 
 
 def compress(raw):
@@ -240,14 +276,20 @@ def main():
     args = ap.parse_args()
     div, tempos, metres, notes = parse(args.midi)
     events = voices(to_frames(notes, div, tempos, metres, args.tempo), args.bass_top)
-    table, raw = encode(events)
+    death = death_events()
+    table = pitches(events, death)
+    raw = encode(events, table)
     data = compress(raw)
     assert expand(data) == raw
     assert all(b < 0xFE for b in raw)
-    open("src/data/music.bin", "wb").write(data)
+    # The life-lost tune, after the music: no repeats (they're the music's),
+    # and waits enough after it that the player never reads past them.
+    death_raw = encode(death, table, gap=2 * (0xFE - 0xC0))
+    open("src/data/music.bin", "wb").write(data + bytes(death_raw))
     with open("src/data/music.6502", "w") as f:
         f.write(f"\\ Made by tools/mkmusic.py from {args.midi}: don't edit.\n")
         f.write("\\ The pitch table: each entry's SN76489 latch byte, then its data byte.\n")
+        f.write(f"MU_DEATH = {len(data)}       ; the life-lost tune's events, from music\n")
         f.write(".music_latch\n")
         for i in range(0, len(table), 8):
             f.write("    EQUB " + ", ".join(f"&{0x80 | ch << 5 | n & 15:02X}" for ch, n in table[i:i + 8]) + "\n")

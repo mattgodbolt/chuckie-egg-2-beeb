@@ -251,7 +251,7 @@ i_since = fdc_cur               ; (8271: when the wait for the drive began)
 ELSE
 \ (music.6502: the interrupt reads them from install_irq on, so
 \ init_system clears mu_on and mu_busy)
-.mu_on         SKIP 1          ; MU_ON: playing, MU_HELD: held for the death tune
+.mu_on         SKIP 1          ; MU_ON: playing
 .mu_busy       SKIP 1          ; non-zero: sound_write is part-way through a byte
 .mu_ptr        SKIP 2          ; the next event
 .mu_ret        SKIP 2          ; ... after a repeat's

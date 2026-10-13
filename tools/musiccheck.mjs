@@ -6,7 +6,9 @@
 // the sound chip in its order (channel 1's are left out: the movement tick
 // borrows it), a voice in MU_BLIPS an octave up for a note's first frame
 // and then at its pitch. Then M: the music off (silent, and it stays where it was)
-// and on again.
+// and on again. Then the life-lost tune, with the music on: the music
+// plays it (music + MU_DEATH, harmonised), and then carries on from where
+// it was.
 //
 //   node tools/musiccheck.mjs [seconds]
 //
@@ -140,6 +142,43 @@ try {
     const on = await state(b);
     if (on.ptr === off.ptr && on.wait === off.wait) fail("it didn't carry on");
     console.log(`M: off and on again${failed ? "" : ", as it should"}`);
+
+    // Into the dog, the music on: the life-lost tune is the music's.
+    const was = failed;
+    await b.keyDown("X");
+    let r = await b.runUntil("music_death", 30);
+    await b.keyUp("X");
+    if (r.stopped_reason !== "breakpoint") fail("walking into the dog: no life lost");
+    const before = await state(b);
+    await b.call("start_sound_capture", { session_id: b.session_id });
+    const v0 = await b.peek("vsyncs");
+    r = await b.runUntil("music_death_end", 5);
+    if (r.stopped_reason !== "breakpoint") fail("the life-lost tune didn't end");
+    const dframes = ((await b.peek("vsyncs")) - v0 + 256) & 255;
+    const dlog = (await b.call("stop_sound_capture", { session_id: b.session_id, max_entries: 1e6 })).content[0].text;
+    const dwrites = [...dlog.matchAll(/: 0x([0-9a-f]{2}) /g)].map((m) => parseInt(m[1], 16));
+    const dseen = { 0: [], 2: [] };
+    for (let i = 0; i < dwrites.length; i++) {
+        const w = dwrites[i], ch = (w >> 5) & 3;
+        if (w & 0x80 && !(w & 0x10) && (ch === 0 || ch === 2)) dseen[ch].push(((dwrites[i + 1] & 0x3f) << 4) | (w & 15));
+    }
+    const dnotes = [];
+    const silent = { ptr: base + b.addr("MU_DEATH"), ret: 0, left: 0, wait: 0, blip: 0, note: [255, 255, 255] };
+    play(silent, dframes, base, dnotes, divider, b.addr("MU_BLIPS"));
+    for (const ch of [0, 2]) {
+        const a = dseen[ch].join(","), e = dnotes.filter(([c]) => c === ch).map(([, d]) => d).join(",");
+        if (a !== e) fail(`life-lost tune, channel ${ch}:\n  seen ${a}\n  want ${e}`);
+    }
+    // Then the music from where it was: some frames on from there.
+    await b.runUntil("game_loop", 10);
+    const after = await state(b);
+    let k = 0;
+    for (; k < 200; k++) {
+        const s = play(before, k, base, [], divider, b.addr("MU_BLIPS"));
+        if (s.ptr === after.ptr && s.left === after.left && s.wait === after.wait) break;
+    }
+    if (k === 200) fail("after the life-lost tune the music isn't where it was");
+    console.log(`life-lost tune: ${dframes} frames, ${dnotes.length} dividers${failed === was ? ", the music's, then the music again" : ""}`);
 } finally {
     await b.close();
 }

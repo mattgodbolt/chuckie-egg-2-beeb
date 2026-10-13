@@ -10,8 +10,9 @@
 \ envelope (mu_envs) from each note's start, and the tune's sounds an
 \ octave up for its first frame, a chime's strike.
 \
-\ The game's own sounds come first: the death tune holds the music, the
-\ movement tick borrows channel 1, and the train's noise, clocked by
+\ The game's own sounds come first: the life-lost tune takes the voices
+\ (music_death: the music plays it, harmonised), the movement tick
+\ borrows channel 1, and the train's noise, clocked by
 \ channel 2, takes that and the noise channel while it's on. A voice they
 \ used is marked in mu_dirty, and the next VSync writes its note again. M
 \ switches it off and on (read_keys).
@@ -26,7 +27,6 @@
 \ ***************************************************************************
 
 MU_ON = &80                         ; mu_on: M has it on
-MU_HELD = &40                       ; ... and the death tune holds it
 MU_ALL = %1111                      ; mu_dirty: every voice
 MU_TRAIN = %1100                    ; ... the bass and the pluck (channel 2, noise)
 MU_BLIPS = %0001                    ; the voices whose notes start an octave up
@@ -78,12 +78,17 @@ ENDMACRO
 ASSERT mu_envs_end - mu_envs <= 256
 
 \ The instruments' state (music_init sets it; zero page and LowState are
-\ full, and a saved game needn't keep it).
+\ full, and a saved game needn't keep it), and where the music was while
+\ the life-lost tune plays.
 .mu_pos     SKIP 4                  ; each voice's place in mu_envs
 .mu_cnt     SKIP 4                  ; ... and frames more there
 .mu_blip    SKIP 1                  ; a bit a voice whose note is an octave up its first frame
 .mu_age     SKIP 4                  ; frames into each voice's note, for its vibrato
 .mu_tmp     SKIP 1                  ; (mu_strike's)
+MU_PLACE = 6                        ; mu_ptr, mu_ret, mu_left, mu_wait
+ASSERT mu_wait = mu_ptr + MU_PLACE - 1
+.mu_place   SKIP MU_PLACE
+.mu_notes   SKIP 3                  ; ... and mu_note
 
 \ The VSync interrupt's (irq.6502, which keeps X): the frame's events,
 \ then the envelopes.
@@ -299,8 +304,52 @@ ASSERT mu_envs_end - mu_envs <= 256
     JMP mu_voice
 }
 
-\ Silence the music's voices: the death tune holds it, or M switched it
-\ off. (Channel 2 is silent while it clocks the train's noise, too, and
+\ The life-lost tune (sound.6502's death_tune): the music's place kept,
+\ every voice silent, and the player on to the tune's events (music +
+\ MU_DEATH: tools/mkmusic.py), which it plays from the next VSync.
+.music_death
+{
+    INC mu_busy                     ; (the interrupt out until it's set up)
+    LDX #MU_PLACE - 1
+.keep
+    LDA mu_ptr,X : STA mu_place,X
+    DEX : BPL keep
+    LDX #2
+.keep_notes
+    LDA mu_note,X : STA mu_notes,X
+    DEX : BPL keep_notes
+    LDA #LO(music + MU_DEATH) : STA mu_ptr
+    LDA #HI(music + MU_DEATH) : STA mu_ptr+1
+.silence
+    \ (and music_death_end's)
+    JSR music_quiet
+    LDX #3
+.voice
+    LDA #0 : STA mu_pos,X : STA mu_cnt,X    ; mu_envs's silence
+    DEX : BPL voice
+    LDA #0 : STA mu_left : STA mu_wait : STA mu_owed : STA mu_blip : STA mu_dirty
+    DEC mu_busy
+    RTS
+}
+
+\ ... and after it: the music where it was, its voices silent until their
+\ next notes.
+.music_death_end
+{
+    INC mu_busy
+    LDX #MU_PLACE - 1
+.back
+    LDA mu_place,X : STA mu_ptr,X
+    DEX : BPL back
+    LDX #2
+.back_notes
+    LDA mu_notes,X : STA mu_note,X
+    DEX : BPL back_notes
+    JMP music_death.silence         ; (which lets the interrupt back)
+}
+
+\ Silence the music's voices: the life-lost tune takes them, or M
+\ switched it off. (Channel 2 is silent while it clocks the train's noise, too, and
 \ the noise channel is the train's.)
 .music_quiet
 {

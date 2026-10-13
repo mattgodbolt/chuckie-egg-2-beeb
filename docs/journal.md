@@ -1797,3 +1797,19 @@ the original's layout. Matt asked for it so that nobody is surprised by
 music the original never had. The line only appears when the sideways
 RAM edition is the one P plays, and `make front` checks that it isn't
 there for CE2S.
+
+### The life-lost tune, harmonised (on the nutcracker branch)
+
+Next to the music, the original's tune sounded out of place: one square
+wave at full volume. Matt wanted it to stay the original's tune, played
+on the instruments over a quiet harmony and a bass, and only with the
+music on (decision 49). `tools/mkmusic.py` writes it after the music, in
+the same events and pitch table. `death_tune` points the player at it,
+keeps the original's time with the same 4ms waits as before, and then
+puts the music back where it was. With the music off, nothing has
+changed.
+
+`make music` now dies with the music on. It checks that channel 0's and
+the bass's dividers are the tune's events, and that the music carries on
+from where it stopped. A build that didn't put the music's place back
+failed it.

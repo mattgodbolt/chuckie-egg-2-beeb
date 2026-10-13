@@ -69,37 +69,46 @@ ENDIF
     RTS
 
 \ The life-lost tune (&A2EB): 16 notes, 2.16s, everything else frozen.
+\ With the music on, the music plays it, harmonised (music_death,
+\ decision 49), and this keeps only its time.
 .death_tune
 {
     \ X counts up to 0 through the notes, from 256 less their length.
     DT_FROM = 256 - (death_notes_end - death_notes)
     ASSERT DT_FROM > 0 AND ((death_notes_end - death_notes) MOD 3) = 0
 IF MUSIC
-    \ The music held (and quiet, if M hasn't already made it).
-    LDA mu_on : BPL held
-    ORA #MU_HELD : STA mu_on
-    JSR music_quiet
-.held
+    LDA mu_on : BPL beeper
+    JSR music_death
+    LDX #DT_FROM
+    BNE timing                      ; (always)
+    ZA_UNREACHABLE
+.beeper
 ENDIF
     LDA #&90 : JSR sound_write      ; channel 0 loud
     LDX #DT_FROM
 .note
     LDA death_notes - DT_FROM,X : JSR sound_write
     LDA death_notes + 1 - DT_FROM,X : JSR sound_write
+IF MUSIC
+.timing
+ENDIF
     LDA death_notes + 2 - DT_FROM,X : STA dt_n
     STX dt_i
 .hold
     LDX #LO(4000) : LDY #HI(4000) : JSR wait_us
     DEC dt_n : BNE hold
-    LDX dt_i : INX : INX : INX : BNE note
+    LDX dt_i : INX : INX : INX : BEQ tune_done
 IF MUSIC
-    LDA #&9F : JSR sound_write
-    LDA mu_on : AND #&FF EOR MU_HELD : STA mu_on
-    LDA #MU_ALL : STA mu_dirty      ; every voice back at the next VSync
-    RTS
-ELSE
-    LDA #&9F : JMP sound_write
+    LDA mu_on : BMI timing          ; (the music's playing it)
 ENDIF
+    JMP note
+.tune_done
+IF MUSIC
+    LDA mu_on : BPL quiet
+    JMP music_death_end
+.quiet
+ENDIF
+    LDA #&9F : JMP sound_write
 }
 \ (Its notes, death_notes, are with the data at the code's end: main.6502.)
 

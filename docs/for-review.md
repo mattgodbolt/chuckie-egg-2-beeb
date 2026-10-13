@@ -10,9 +10,9 @@ Nothing open.
 
 ## Settled
 
-Matt's verdicts after playing, and calls he has made:
+Matt's verdicts after playing, and the calls Matt made:
 
-- **Keys** (decision 25): his BBC layout by default: Z X : /, RETURN
+- **Keys** (decision 25): Matt's BBC layout by default: Z X : /, RETURN
   jump, TAB take/drop, R abort, S save. "Keys are perfect."
 - **Harry's colour** (decisions 6, 18 and 24): yellow, except white in the
   18 rooms where white shows at least 2 points more of the room in its own
@@ -47,11 +47,11 @@ Matt's verdicts after playing, and calls he has made:
 - **The Master** (decision 16): played on Matt's real Master, "works a
   treat ... loading and saving and all". (If a ROM there ever claims
   HAZEL `&D000-&D6FF`, the reset snapshot would need to move.)
-- **What it runs on** (decisions 8 and 16): a Model B with 16K of sideways
-  RAM, or a Master 128. A stock-B edition is parked for the future as
-  [issue #1](https://github.com/mattgodbolt/chuckie-egg-2-beeb/issues/1)
-  ([docs/stock-b.md](stock-b.md), exploratory). Ruled out: a B+ edition, a
-  ROM edition, the Electron.
+- **What it runs on** (decisions 8, 16 and 28 on): a Model B with 16K of
+  sideways RAM, a Master 128, and a stock 32K Model B, where CE2S streams
+  the rooms from the disc ([docs/streaming.md](streaming.md), which was
+  [issue #1](https://github.com/mattgodbolt/chuckie-egg-2-beeb/issues/1)).
+  Ruled out: a B+ edition, a ROM edition and the Electron.
 - **No joystick** (decision 17).
 - **The developers' cheats** (decision 27): f0 for the room skip and
   infinite lives together, f1-f8 the starting egg, a flashing banner;
@@ -63,14 +63,20 @@ Matt's verdicts after playing, and calls he has made:
   the Spectrum ROM's: the status bar, the room signs and the EGGS
   DELIVERED screen. "Definitely beeb font."
 
+- **The music** (decisions 46-49), the one thing the original never had.
+  La Poule came first, for the hen; Matt found the pun thin and asked for
+  something with more chocolate-factory wonder, so it's the Sugar Plum
+  Fairy. Matt then wanted the bass on a tone channel rather than periodic noise,
+  then instruments, then "a tiny bit of vibrato", a little quieter and 5%
+  faster: "that's awesome. spot on." With the music on, the life-lost
+  tune "has to be the original tune, for certain", on the instruments with
+  a quiet harmony and bass. Its last chord now rings out, with a gap
+  before the music comes back: "perfect". The menu says that M switches
+  it, so nobody is surprised by music the original never had.
+
 ## For information
 
-- **Speed**: the original keeps to 3 frames a pass everywhere, and so does
-  the port, idle and moving. The longest stretch between two waits for
-  VSync (`tools/frametime.mjs`) is about 24,400 cycles idle and 27,800
-  moving, of a frame's 40,000 (it was 44,800 and 48,400 before decisions
-  20 and 26). There's more to have if it's ever wanted: the movement tick
-  still waits out its two cycles, as the original's beeper loop did (up to
-  2,900 cycles in each of the first two stretches while Harry moves);
-  ending the tone from the interrupt would free that.
-- **Room**: about 2.8K of main RAM and 1.6K of sideways RAM free.
+- **Speed**: the original keeps to three frames a pass everywhere, and so
+  does the port, idle and moving, with or without the music.
+  `tools/frametime.mjs` measures it; the journal has the figures as they
+  were measured.

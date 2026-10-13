@@ -1,10 +1,10 @@
 # Chuckie Egg 2 (ZX Spectrum) — how the original works
 
-Everything here was found by reading the disassembly and checking it by
+Everything here was found by reading the disassembly and checked by
 running the original (`tools/zx.py`, `tools/zxrooms.py`). Addresses are the
-running game's (the tape loads one block at 16384 and the game starts at
-`&60C2`). This file is the overview, the memory map and the room format;
-the detail is in four write-ups, each made by a research agent working on
+running game's: the tape loads one block at 16384 and the game starts at
+`&60C2`. This file has the overview, the memory map and the room format.
+The detail is in four write-ups, each made by a research agent working on
 the disassembly and checked by experiment:
 
 - [Harry](research/harry.md): movement, physics, cell types, room edges,
@@ -17,7 +17,8 @@ the disassembly and checked by experiment:
 - [Front end, controls, sound, text](research/frontend.md): instructions,
   menu, keys, save/load, high scores, the three sounds, every string.
 
-SkoolKit control files for each are in `disasm/`.
+SkoolKit control files for each are in `disasm/`, and `make disasm`
+builds the labelled disassembly from them.
 
 ## The tape
 
@@ -49,17 +50,18 @@ SkoolKit control files for each are in `disasm/`.
 | `&DFA2-&FDF7` | Harry, monster, truck, train and lift sprites (7,766 bytes) |
 | `&FE00-&FF00` | the IM 2 table, built at start-up |
 
-### Variables found so far
+### Variables
 
 | Address | Meaning |
 |---|---|
 | `&A3FE` | current room, 1-120 (the POK file's "screen" poke is 41982 = `&A3FE`) |
 | `&A3FF` | room drawer: set while drawing text (tile codes go in the tile map with bit 7 set) |
-| `&A3F9`, `&A3FA` | set at game start (`&A3FA` = 5: lives?) |
+| `&A3F9` | the egg number, 1 for the first egg ([objects](research/objects.md)) |
+| `&A3FA` | lives, 5 at a new game |
 | `&A41C` | pointer to Harry's record in play |
 | `&A42C` | control keys: 8 entries of (port high byte, mask, ASCII) — see below |
 | `&A451` | Harry's record, 26 bytes, addressed through IY; initialised from `&89E5`, and copied to `&A46B` on entering a room (the restart point) |
-| `&A487`, `&A485` | set to 7 and 0 at game start |
+| `&A487`, `&A485` | Harry's state and jump count, set to 7 and 0 at game start ([Harry](research/harry.md)) |
 | `&A48A` | the control byte the key reader builds |
 | `&A48B` | room change on leaving: added to `&A3FE` (+-1, +-10), with a special case: 80 + 1 = 71 and 71 - 1 = 80 |
 | `&5C8D` (ATTR_P) | the room drawer's current attribute |
@@ -106,7 +108,7 @@ The room drawer at `&7920`:
    with 0. The status bar (rows 0-1) is printed.
 3. Then commands until `&00`. Every tile placed writes the current
    attribute to the screen and to the attribute map, its code to the tile
-   map, its 8 bytes from the tile font to the screen, and ORs the command's
+   map, its 8 bytes from the tile font to the screen, and ORs the
    command's *type* byte into the type map.
 
 | Command | Bytes | Meaning |

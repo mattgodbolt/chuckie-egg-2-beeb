@@ -1,11 +1,11 @@
 # Memory map
 
 Where things go, and why. The addresses of the port's own regions live in
-the source (`src/memory.6502`, the `SECTION`s in `src/main.6502` and
-`src/pages.6502`) and their live figures in the build's output and
-`build/symbols.json`: this file names them rather than copying their
-numbers, which would go stale. The addresses it does give are the
-constraints the layout has to fit around, set by the OS and the hardware.
+the source (`src/memory.6502` and the `SECTION`s in `src/main.6502` and
+`src/pages.6502`), and their current figures in the build's output and
+`build/symbols.json`. This file names them rather than copying numbers
+that would go stale. The addresses it does give are the constraints the
+layout has to fit around, which the OS and the hardware set.
 
 ## What the layout has to keep out of
 
@@ -13,7 +13,7 @@ constraints the layout has to fit around, set by the OS and the hardware.
 |---|---|
 | `&00D0` | a Master's VDU status, read by its soft BREAK (decision 22) |
 | `&00FC` | the OS's IRQ entry saves A here |
-| `&0236-&03FF` | the OS's workspace beyond the vectors and page 3, which a soft BREAK reads on either machine (decision 22); the vectors below are reset on every BREAK, so tables can go over them |
+| `&0200-&03FF` | page 2 and page 3, which a soft BREAK reads (decision 22). OS 1.20 resets the vectors on BREAK but a Master keeps them, so they hold no tables either (decision 33); the game sets only IRQ1V |
 | `&080C-&083F` | the OS's sound workspace, rewritten by its 100Hz interrupt until `init_system` stops it |
 | `&0D00-&0D1F` | the NMI routine's space (`NMI_AREA`): the streaming edition's disc reader (docs/streaming.md) |
 | `&0D9F-&0DFF` | a Master's extended vectors, read by its soft BREAK (decision 22) |
@@ -23,48 +23,57 @@ constraints the layout has to fit around, set by the OS and the hardware.
 
 ## The port's regions
 
-- **Zero page:** baron's allocator pool (`ZA_POOL`, below `ZP_FIXED`),
-  then `ZeroPage` (the permanent state and LowState's most used variables)
-  up to `DATA_BANK_ZP` (the data bank's number, from `MENU`), then
-  `Scratch` (the OS's until the game owns the interrupts). `MENU` keeps
-  to `mz_*` (`&70` up), which the OS leaves to a program.
-- **Page 1:** `Page1` (`thing_init` and small tables) below the stack;
-  the stack is 64 bytes (decision 19).
-- **Page 2:** small tables over the vectors, and the game's IRQ1V.
-- **`Maps`:** the attribute, tile and cell-type maps, 768 bytes each.
-- **`LowState`:** monsters, the checkpoint, score, lives (the part up to
-  `low_state_end` is the saved state).
-- **`Code`:** code and data, loaded above the DFS's workspace and copied
-  down (`main.6502`); in CE2S the room cache (`Cache`) follows it to `CODE_TOP`.
-  Of the toy's graphics only this egg's are there (decision 45): CE2S
-  reads them into `toy_slot`, and CE2 keeps all four toys' blocks.
-- **The screen** (`screen`): 256 x 192 in MODE 1's pixels (decision 1).
+- **Zero page** starts with baron's allocator pool (`ZA_POOL`, below
+  `ZP_FIXED`). Then comes `ZeroPage`, the permanent state and LowState's
+  most used variables, up to `DATA_BANK_ZP`, where `MENU` leaves the data
+  bank's number. Above that is `Scratch`, which is the OS's until the game
+  owns the interrupts. `MENU` keeps to its `mz_*` variables from `&70`,
+  which the OS leaves to a program.
+- **Page 1** holds `Page1` (`thing_init` and small tables) below
+  `STACK_BASE`, and the stack above it (decisions 19 and 40).
+- **Page 2** stays as the OS left it, except IRQ1V, which points at the
+  game's handler.
+- **`Maps`** holds the attribute, tile and cell-type maps, 768 bytes each.
+- **`LowState`** holds the monsters, the checkpoint, the score and the
+  lives. The part up to `low_state_end` is saved; `main.6502` reopens the
+  section after it for variables that needn't be.
+- **`Code`** is the code and data, loaded above the DFS's workspace and
+  copied down (`main.6502`). In CE2S the room cache (`Cache`) follows it
+  up to `CODE_TOP`. Only this egg's toy is visible to the game (decision
+  45): CE2S reads its block into `toy_slot`, and CE2 keeps all four
+  toys' blocks in main RAM.
+- **The screen** (`screen`) is 256 x 192 in MODE 1's pixels (decision 1).
 
 Between games (decision 13), `MENU` runs from the `Menu` section in
-MODE 7, loading `CE2DATA` to copy into the bank when the bank doesn't hold
-this build's. The game's state block (`SAVE_HDR`, then the regions from
-`STATE`; the high scores are `CE2HI`'s, decision 38) sits above anything
-`CE2` loads over (checked by the build) and below MODE 7's screen, so it
-survives the reset, `MENU` and the game's reload. CE2S keeps its mailbox
-at `MB_STREAM`, under the screen, up to `mb_ram_end` (not the high-score
-table, which its `MENU` reads from `CE2HI` every time: decision 41), and
-`MENU` leaves a copy at `MB_XFER` for its loader to put back
+MODE 7, and loads `CE2DATA` to copy into the bank when the bank doesn't
+hold this build's. The game's state block (`SAVE_HDR`, then the regions
+from `STATE`) sits above anything `CE2` loads over, which the build
+checks, and below MODE 7's screen, so it survives the reset, `MENU` and
+the game's reload. The high scores aren't in it: they are `CE2HI`'s
+(decision 38). CE2S keeps its mailbox at `MB_STREAM`, under the screen, up
+to `mb_ram_end`, which leaves out the high-score table that its `MENU`
+reads from `CE2HI` every time (decision 41). CE2S loads over the mailbox,
+so `MENU` leaves a copy at `MB_XFER` for its loader to put back
 (docs/streaming.md).
 
-Pages 1 and 2 are the OS's until the game owns the interrupts
-(`install_irq`) and reads the keyboard itself (`key_down`, straight from
-the System VIA): from then on the game makes no OS calls. Their tables
-load after the code in the `CE2` file and `copy_os_pages` puts them in
-place (`pages.6502`), only where a soft BREAK doesn't look.
+Page 1 is the OS's until the game owns the interrupts (`install_irq`) and
+reads the keyboard itself (`key_down`, straight from the System VIA).
+From then on the game makes no OS calls. Page 1's tables load after the
+code in the game's file, and `copy_os_pages` puts them in place
+(`pages.6502`), below the stack, where a soft BREAK doesn't look.
 
-The game's start-up (`startup.6502`: the screen, the interrupts, the
-tables, a new game or a resumed one) runs once per load from the loader,
-in screen memory, and is overwritten by the first room's `cls`.
+The game's start-up (`startup.6502`) sets up the screen, the interrupts
+and the tables, and starts a new game or resumes one. It runs once per
+load, from the loader in screen memory, and the first room's `cls`
+overwrites it.
 
 ## The budget against a stock Model B (2026-10-04)
 
-Historical: the reasoning behind decision 8. What the rest of the game needed, at the Spectrum's sizes (6502 code is
-usually no smaller than Z80), from `docs/research/*.md`:
+This is history, the reasoning behind decision 8, and its figures are
+from that date. It is what the rest of the game needed at the Spectrum's
+sizes (6502 code is usually no smaller than Z80), from
+`docs/research/*.md`. CE2S later fitted the game into a stock B by
+streaming the rooms from disc (decision 29, docs/streaming.md).
 
 | Item | Bytes |
 |---|---|
@@ -80,8 +89,8 @@ usually no smaller than Z80), from `docs/research/*.md`:
 | In-play front end (keys, score, lives, eggs delivered) | ~810 |
 | **Total** | **~19,750** |
 
-Free: 4,563 bytes under the screen, perhaps 1-1.5K more from OS pages
-(`&0D00`, the bottom of the stack, `&0200-&03FF` once the OS is finished
-with). Short by about 14K. Hence decision 8: a 16K sideways RAM bank for
-the data (packed rooms 7,770 + monster graphics 7,472 = 15,242), and the
-code and the hottest tables in main RAM.
+There were 4,563 bytes free under the screen, and perhaps 1-1.5K more
+in OS pages (`&0D00`, the bottom of the stack, and `&0200-&03FF` once the
+OS was finished with). That was about 14K short. Hence decision 8: a 16K
+sideways RAM bank for the data (packed rooms 7,770 + monster graphics
+7,472 = 15,242), with the code and the hottest tables in main RAM.

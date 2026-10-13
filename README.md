@@ -33,6 +33,7 @@ unless...; some pipes are more slippery than others.
 | **RETURN** | jump |
 | **TAB** | take or drop |
 | **S** | save the game (to disc) and carry on |
+| **M** | music on or off (with sideways RAM) |
 | **R** | abort, back to the menu |
 | **BREAK** | back to the menu |
 
@@ -64,14 +65,27 @@ on real hardware, write `chuckie-egg-2.ssd` to a disc and SHIFT-BREAK.
   reader for the 8271 (a Master's 1770 too), a cache, and reading ahead in
   the background, so most room changes are as quick as the other
   edition's ([docs/streaming.md](docs/streaming.md)). The disc must stay in
-  the drive. It needs a real disc drive or a Gotek: MMFS has no disc
-  controller for it to drive. **D** on the menu plays it on a machine with
-  sideways RAM too.
+  the drive. It needs a real disc drive or a Gotek, because MMFS has no
+  disc controller for it to drive. **D** on the menu plays it on a machine
+  with sideways RAM too. There's no music in this edition: there isn't the
+  memory for it.
 
 <img src="docs/images/real-master.jpg" alt="The game running on a real BBC Master 128, on a Panasonic CRT: a magenta-brick room with green ladders, hanging chains and Harry, score 04434" width="600">
 
 *On Matt's own Master 128, loading and saving and all.*
 
+## Music
+
+The one thing added that the original never had is music. With sideways
+RAM there was room for it, so the game plays the Dance of the Sugar Plum
+Fairy from Tchaikovsky's *The Nutcracker* on the sound chip's three tone
+channels, with a little noise for a pluck under the bass. It plays from the
+VSync interrupt alongside the game's own sounds, and **M** turns it off
+and on. When Harry loses a life with the music on, the original's tune is
+played on the same instruments, with a quiet harmony and bass under it;
+with the music off you get the original's beeps as they were.
+[music/README.md](music/README.md) has the sources and how the arrangement
+is made.
 
 ## How close is it?
 
@@ -79,23 +93,25 @@ The original is the specification. Every room is drawn by a transcription
 of the original's room drawer from the original's data, and compared pixel
 for pixel with the Spectrum's own drawing of it (all 120 match). Harry's
 movement, the monsters, the objects, the factory, the truck, the train and
-the lifts are the original's code in 6502, and scripted play is compared
-pass by pass with the original running in SkoolKit's Z80 simulator: 22
-scenarios and random walks, identical. The game keeps the original's
+the lifts are the original's code in 6502. Scripted play and random walks
+are compared pass by pass with the original running in SkoolKit's Z80
+simulator, and they come out identical. The game keeps the original's
 three frames a pass everywhere.
 
-What the BBC changes is written down, with the reasons, in
-[docs/decisions.md](docs/decisions.md). The biggest: MODE 1's four colours
-per band, with up to two palette changes down the screen in a room that
-needs more (99.5% of pixels in the original's colour); the sound chip in
-place of the beeper; a MODE 7 front end that saves to disc; and BBC keys.
+Everything the BBC changes is written down, with the reasons, in
+[docs/decisions.md](docs/decisions.md). The biggest changes are the
+colours (MODE 1 has four, so a room that needs more changes palette up to
+twice down the screen, and nearly every pixel still shows in the
+original's colour), the sound chip in place of the beeper, a MODE 7 front
+end that saves to disc, and BBC keys.
 
 [docs/how-it-works.md](docs/how-it-works.md) is a friendly, illustrated
 tour of how the game and the port work: the factory, the map format,
 Harry, the monsters, the puzzle (with a spoiler warning) and the BBC side.
 [docs/journal.md](docs/journal.md) is the story of the port;
 [docs/research.md](docs/research.md) is how the original works; and
-[docs/next-steps.md](docs/next-steps.md) is what's left.
+[docs/next-steps.md](docs/next-steps.md) has ideas, should anyone
+pick it up again.
 
 ## Building
 
@@ -109,9 +125,9 @@ make venv       # SkoolKit and Pillow, for the tools that read the original
 make fetch      # download the original from Spectrum Computing
 make            # build/ce2.ssd
 make run        # boot it headless and screenshot it
-make check      # every room, the play scenarios, the front end and the
-                # sound, against the original (MODEL=Master for the Master,
-                # STREAM=1 for the stock-B edition)
+make check      # every room, the play scenarios, the front end, the
+                # sound and the music, against the original (MODEL=Master
+                # for the Master, STREAM=1 for the stock-B edition)
 ```
 
 `make fetch` downloads the original's tape and checks its hash; the tools

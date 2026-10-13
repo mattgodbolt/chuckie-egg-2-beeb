@@ -1834,3 +1834,13 @@ it.
 Baron moved to 0.5.3 (0.5.2's fixes from Rich's fuzzing, and
 `TO_STRING`/`TO_NUMBER`), in CI too. Every disc is byte for byte what
 0.5.2 made, its build stamp aside.
+
+### Done
+
+With the music merged, Matt called the port finished. A last pass over
+the docs brought them up to date: the README now has the music and the M
+key, next-steps.md is a short list of ideas for anyone picking it up,
+streaming.md describes CE2S as built and not as a plan, and the memory
+map's picture is drawn from the build (`tools/guide/memmap.py`) so it
+can't drift again. The menu's screenshot was retaken, with the M and D
+lines.

@@ -1,8 +1,9 @@
 # The in-game music
 
-`tools/mkmusic.py` arranges a MIDI file for the BBC's sound chip, three
-voices, as `src/data/music.bin` and `src/data/music.6502` (decisions 46
-and 47). Those two files are an adaptation of the MIDI file they were made
+`tools/mkmusic.py` arranges a MIDI file for the BBC's sound chip's three
+tone channels, writing `src/data/music.bin` and `src/data/music.6502`
+(decisions 46 to 48). It also writes the harmonised life-lost tune that
+plays with the music on (decision 49), from the original's notes. Those two files are an adaptation of the MIDI file they were made
 from, under its licence and credited to its author, not under the port's
 MIT licence.
 

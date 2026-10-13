@@ -1,13 +1,13 @@
 # Chuckie Egg 2 on a stock 32K Model B: what it would take
 
-> **Exploratory, not current.** A feasibility study measured on 2026-10-04
-> against build `25a57fd`. The code has moved on since and the figures
-> will drift; nothing here is planned or built. A stock-B edition is
-> tracked as [issue #1](https://github.com/mattgodbolt/chuckie-egg-2-beeb/issues/1),
-> for the future; re-measure before relying on any of it.
->
-> **Superseded** by [`docs/streaming.md`](streaming.md) (2026-10-10): the
-> plan now is our own NMI driver reading in the background, with a cache.
+> **History.** This is a feasibility study measured on 2026-10-04 against
+> build `25a57fd`, kept as it was written; its figures are that build's.
+> The stock-B edition it argued for was built, though not as recommended
+> here: CE2S streams the rooms with its own NMI-driven reader in the
+> background and a cache (decision 29, [`docs/streaming.md`](streaming.md)),
+> which this study ranked as the variant with the most work and the best
+> feel. [Issue #1](https://github.com/mattgodbolt/chuckie-egg-2-beeb/issues/1)
+> is closed.
 
 Research for the "moon shot": the game on a Model B with no sideways RAM.
 An exploratory agent measured it on the build of `25a57fd` and in jsbeeb

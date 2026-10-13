@@ -117,26 +117,28 @@ has only nine records, 61 bytes, but uses most of the kinds.
 
 Reading the bytes:
 
-- `18`: the background. A Spectrum attribute keeps the ink in bits 0-2 and
-  the paper in bits 3-5, so `&18` is paper 3, magenta. Every cell starts
-  as that paper, with the ink the same.
-- `40 21 02 00 20 01`: tile `&40` (the green and blue brick) in attribute
-  `&21` (green paper, blue ink), row 2, column 0, 32 across, type `&01`:
-  the ceiling.
-- `40 21 17 00 20 01`: the same at row 23: the floor.
-- `40 21 03 00 94 01`: `&94` has bit 7 set, so this goes down, 20 cells:
-  the left wall.
-- `40 21 0C 1F 8B 01`: down 11 from row 12 at column 31. The right wall
-  stops at row 12, so the room's top right is open: the way into room 52.
-- `40 21 0C 16 09 01`: a ledge, 9 across at row 12.
-- `0A 1C 55 0B 1F 04`: one tile, `&55`, the top of a `/` slope, at row 11,
-  column 31, with type `&04`. It makes the corner of the ledge a little
-  ramp.
-- `07 1F 0E 08 06 0F`: the hopper: six rows, the first 15 cells wide, each
-  row two narrower than the one above.
-- `02 38 10 0D 43 4F 43 4F 41 80`: "COCOA", in black on white, at row 16.
-- `20 1F 14 0F 84 00 00`: a capped run going down four cells from under
-  the hopper: its outlet pipe.
+- `18` is the background. A Spectrum attribute keeps the ink in bits 0-2
+  and the paper in bits 3-5, so `&18` is paper 3, magenta. Every cell
+  starts as that paper, with the ink the same.
+- `40 21 02 00 20 01` is the ceiling: tile `&40` (the green and blue
+  brick) in attribute `&21` (green paper, blue ink), from row 2, column 0,
+  32 across, with type `&01`.
+- `40 21 17 00 20 01` is the same at row 23, the floor.
+- `40 21 03 00 94 01` has bit 7 set in its length, `&94`, so it goes 20
+  cells down. That's the left wall.
+- `40 21 0C 1F 8B 01` goes down 11 from row 12 at column 31. The right
+  wall stops at row 12, which leaves the top right of the room open as the
+  way into room 52.
+- `40 21 0C 16 09 01` is a ledge, 9 across at row 12.
+- `0A 1C 55 0B 1F 04` puts a single tile, `&55`, the top of a `/` slope,
+  at row 11, column 31, with type `&04`. It turns the corner of the ledge
+  into a little ramp.
+- `07 1F 0E 08 06 0F` is the hopper, six rows deep. The first row is 15
+  cells wide and each one below is two narrower.
+- `02 38 10 0D 43 4F 43 4F 41 80` writes "COCOA" in black on white at row
+  16.
+- `20 1F 14 0F 84 00 00` is a capped run going down four cells from under
+  the hopper, its outlet pipe.
 
 The port draws rooms with a line-by-line transcription of the original's
 drawer (`draw_room` and the `cmd_` handlers in `src/rooms.6502`), quirks
@@ -156,15 +158,14 @@ byte. Two quirks give the flavour:
 ### How the port packs them
 
 The BBC is short of memory (more on that later), so the port stores the
-rooms more tightly: 6,845 bytes instead of 13,633, with 124 bytes of tables
-to unpack them (decisions 5 and 21). General-purpose compression did
-poorly here: a room is mostly short records whose fields repeat, and an LZ
-packer per room only got the rooms down to 10,220 bytes. So
-`tools/packrooms.py` writes each room as a stream of bits shaped to the
-data:
+rooms in about half the space (decisions 5 and 21). General-purpose
+compression did poorly here, because a room is mostly short records whose
+fields repeat, and an LZ packer working a room at a time saved much less
+(decision 5 has the figures). So `tools/packrooms.py` writes each room as
+a stream of bits shaped to the data.
 
-- **What kind of record**: a prefix code, commonest shortest. A run, the
-  great majority, costs one bit, `0`.
+- The kind of record is a prefix code, with the commonest shortest. A run,
+  the great majority, costs one bit, `0`.
 
   | Code | Record | Code | Record |
   |---|---|---|---|
@@ -174,19 +175,19 @@ data:
   | `1100` | diagonal up | `111101` | hopper |
   | `1101` | diagonal down | `11111` | end |
 
-- **Attribute, tile and type**: each is coded against a list of the last
+- The attribute, tile and type are each coded against a list of the last
   three values that field had in this room. The same as last time costs
-  one bit, `0`; the second or third in the list, `10` or `110`; anything
-  else, `111` and then its number in a list of every value that field
-  takes anywhere in the game (38 attributes, 49 tiles and 8 cell types, so
-  6, 6 and 3 bits). Within a room the same few colours, tiles and types
-  come back about 80% of the time.
-- **Rows, run lengths and the ends of capped runs**: tier codes. A field's
+  one bit, `0`, and the second or third in the list costs `10` or `110`.
+  Anything else is `111` followed by its number in a list of every value
+  that field takes anywhere in the game (38 attributes, 49 tiles and 8
+  cell types, so 6, 6 and 3 bits). Within a room the same few colours,
+  tiles and types come back about 80% of the time.
+- Rows, run lengths and the ends of capped runs use tier codes. A field's
   values are sorted commonest first and split into three tiers, coded `0`,
   `10` and `11`, each followed by a few bits to say which value in the
-  tier. The widths are chosen to make the whole game's stream shortest.
-  Columns stay a plain five bits: their values are spread too evenly for
-  a code to help.
+  tier it is. The packer picks the widths that make the whole game's
+  stream shortest. Columns stay a plain five bits, since their values are
+  spread too evenly for a code to help.
 
 The fields come in the bytecode's own order, so the unpacker can emit each
 byte as soon as it has decoded it. Room 51's second record shows the
@@ -199,17 +200,17 @@ packed    0    0     0      0010     00000   0       000        0     17 bits
                (as before)  (third commonest row)  (the commonest length)
 ```
 
-Room 51 as a whole goes from 61 bytes to 37. The room's first byte isn't
-the original's attribute any more: it holds the paper colour (all the
-drawer ever used of it) and the number of the room's BBC palette.
+The room's first byte isn't the original's attribute any more. It holds
+the paper colour, which is all the drawer ever used of it, and the number
+of the room's BBC palette.
 
 The port's drawer doesn't know any of this happened. It asks `fetch` for
-the next byte, as the original's drawer reads the next byte of the room;
-`fetch` hands out bytes from an 18-byte buffer, and when the buffer runs
-dry `unpack_record` decodes the next record into it (`src/unpack.6502`).
-So the transcribed drawer runs unchanged on the original's bytecode, one
-record at a time, and the round trip is checked for every room whenever
-the packer runs.
+the next byte, as the original's drawer reads the next byte of the room.
+`fetch` hands out bytes from a small buffer, and when the buffer runs dry
+`unpack_record` decodes the next record into it (`src/unpack.6502`). So
+the transcribed drawer runs unchanged on the original's bytecode, one
+record at a time, and the packer checks the round trip for every room
+whenever it runs.
 
 One record in the whole game says column 32 (in room 33). The original's
 arithmetic carries that into column 0 of the next row, so the packer
@@ -290,7 +291,7 @@ The peak is 16 pixels, exactly two cells, so a ledge two cells up is just
 reachable, and only while he is level at the top. In the air a ceiling
 ends the rise early, a wall bounces him back the other way, and a ladder
 can be grabbed. Carrying a basket skips the table's first three steps, so
-the jump is only 5 pixels high: hands full, heavy feet.
+the jump is only 5 pixels high.
 
 ### Bumping into things
 
@@ -298,14 +299,14 @@ Scenery is tested by cell type, at the cells the movement code looks at.
 Wherever it looks at a cell (a ceiling, a landing, a wall), a deadly bit
 kills him.
 
-Everything else is tested by pixels, twice a pass, as the original does:
-is there anything on the screen inside Harry's 8-pixel-wide window that is
-neither Harry's own pixels nor the room's (`collide`)? If so, character
-cell boxes decide who it was, in order: the object currently being drawn
-(see "Things", below), then the monsters in turn, then two rules for
-particular rooms: the train in rooms 71-80 and the truck at dispatch. A
-monster either kills, bounces Harry into a jump in a random direction, or
-does nothing.
+Everything else is tested by pixels, twice a pass, as the original does.
+The question is whether there's anything on the screen inside Harry's
+8-pixel-wide window that is neither Harry's own pixels nor the room's
+(`collide`). If there is, boxes of character cells decide who it was. The
+object currently being drawn (see "Things", below) is tried first, then
+each monster in turn, and last come two special cases, the train in rooms
+71-80 and the truck at dispatch. A monster either kills, bounces Harry
+into a jump in a random direction, or does nothing.
 
 ### Death, checkpoints and lives
 
@@ -316,7 +317,7 @@ he was carrying goes back to where he found it (the toy and the egg he
 keeps), and a life is gone (`harry_died`).
 
 Entering a room falling or jumping doesn't take a checkpoint, so a death
-can send him back a room or more. That surprised Matt in his first game,
+can send him back a room or more. That surprised Matt in a first game,
 but it's the original's rule, and both machines agree on it pass for pass
 (the `checkpoint-fall` scenario).
 
@@ -325,11 +326,13 @@ in making an egg. The status bar shows up to nine.
 
 ## The monsters
 
-The monsters aren't in the rooms either. They are in one table of 256
-entries, each a room, a starting row and column, and one of 52 types
-(`monster_table`, the original's `&6B00`). When Harry enters a room, the
-game looks through all 256 for the ones in that room. There are never
-more than four in a room.
+The monsters aren't in the rooms either. The original keeps them in one
+table of 256 entries at `&6B00`, each giving a room, a starting row and
+column, and one of 52 types, and when Harry enters a room it looks
+through all 256 for the ones in that room. There are never more than four
+in a room. The port has no such table: each room's record lists that
+room's entries, in the order the original's scan would find them
+(`setup_monsters`, decision 28).
 
 ![Six screenshots of monsters: room 2's dog running and then sitting; a crocodile and a cloud of steam in room 30; drips forming in room 94; the dinosaur on a scooter in room 120; spiders on their threads in room 4.](images/monsters.png)
 
@@ -378,10 +381,10 @@ Everything else in the factory that isn't scenery or a monster is one of
 256 **things** (`things`, the original's `&6600`): four arrays of 256
 bytes holding each thing's room, row, column and type. A thing that isn't
 in the world (carried, used up, or not made yet) has bit 7 of its room set,
-which matches no room. (The port keeps those arrays only for the things
+which matches no room. The port keeps those arrays only for the things
 that move. The others never leave their rooms, so each room's record
-lists its own with their rows and columns, and main RAM keeps one bit
-for each, whether it is still in the world: decision 44.)
+lists its own, and main RAM keeps just one bit for each to say whether
+it's still in the world (decisions 30 and 44).
 
 - Things 0-`&28` are the 41 that move about: 8 toy parts, 8 each of
   milk, cocoa and sugar, 4 baskets, a bone, a girder, a ladder, the toy
@@ -407,14 +410,14 @@ On entering a room, each portable thing in it marks its cells in the type
 map, which makes things obstacles to monsters, a dropped ladder
 climbable and the girder something to stand on.
 
-**Taking and dropping** share one key. Harry can carry one thing. Pressing
+Taking and dropping share one key. Harry can carry one thing. Pressing
 the key while touching the current thing takes it; pressing it again while
 standing drops what he carries where he stands, its bottom level with his
 feet (unless something is already there). A dropped thing doesn't fall:
 drop it off a ledge and it hangs in the air. The one exception is a vat,
 below.
 
-**Scoring** is ten digits. Points come from the first visit to each room
+The score has ten digits. Points come from the first visit to each room
 in an egg (0 to 1,000 per room, times the egg number), from bonus items,
 and from the six big steps of making an egg.
 
@@ -466,9 +469,9 @@ basket, with no limit. Drop the basket into the right vat and its whole
 load counts. The price: the basket weighs Harry down, so his jumps are
 only 5 pixels high and he can't grab ladders in mid-air.
 
-Two quirks of the original, kept: the vat counts "exactly 8 after adding",
-so an empty basket dropped into a vat that is already full awards the
-10,000 and the life again (once per basket); and with a basket in hand,
+The port keeps two quirks of the original. The vat counts "exactly 8 after
+adding", so an empty basket dropped into a vat that is already full awards
+the 10,000 and the life again, once per basket. And with a basket in hand,
 the TAKE that should collect an item can drop the basket instead, if
 there's room beside Harry.
 
@@ -543,11 +546,12 @@ room 1 with his score and lives. Three things change (`egg_init`):
   in new places, not faster ones. (Entry 0 is the sitting dog, which the
   dog's event switches on.)
 - **A different toy.** The parts and the finished toy are a motorbike for
-  the first egg, then a car, a boat and a jet, then round again. (The
-  original rewrites the toy's types' pictures at each egg. The port keeps
-  each toy's nine pictures as a block and loads only this egg's, as the
-  egg starts or a saved game carries on: the streaming edition reads it
-  from the disc beside room 1's record, decision 45.)
+  the first egg, then a car, a boat and a jet, then round again. The
+  original rewrites the pictures for the toy's types at each egg. The port
+  keeps each toy's nine pictures as a block and loads only this egg's
+  when the egg starts or a saved game carries on. The streaming edition
+  reads it from the disc, where it sits beside room 1's record (decision
+  45).
 - **Bigger scores.** Every reward is multiplied by the egg number.
 
 ## The main loop
@@ -563,12 +567,13 @@ collision test runs twice, each time just after the monsters have been
 redrawn, because it reads the screen.
 
 On the Spectrum the drawing is done by the frame interrupt, and the main
-loop's three HALTs wait for it. On the BBC the interrupt only keeps time
-and changes the palette, and the main loop does the drawing itself after
-each wait for the vertical sync (`draw_frame`), in the same order. The
-port keeps the three frames everywhere: the longest stretch between waits,
-in any room, is about 28,000 cycles of the 40,000 a frame allows
-(`tools/frametime.mjs`, decision 26).
+loop's three HALTs wait for it. On the BBC the interrupt only keeps time,
+changes the palette and (with sideways RAM) plays the music. The main
+loop does the drawing itself after each wait for the vertical sync
+(`draw_frame`), in the same order. The port keeps to three frames everywhere. When last
+measured, on 2026-10-11, the longest stretch between waits in any room was
+about 26,000 cycles of the 40,000 a frame allows (`tools/frametime.mjs`,
+decision 44).
 
 ## How it was made to fit: the BBC side
 
@@ -597,18 +602,18 @@ needs (see the front end, below).
 MODE 1 has four colours on screen at once; the Spectrum shows eight, two
 to a cell. So each room gets four colours of its own, chosen offline by
 `tools/mkrooms.py` from the original's own pixels (decision 2). Logical
-colour 0 is the room's background; logical 3 is Harry's yellow (white in
-18 rooms where that shows more of the room in its right colours, decisions
-6, 18 and 24); every Spectrum colour is mapped to one of the four by brute
-force, under rules: ink and paper must stay different in every cell the
-room draws, and every colour must differ from the background, so that
-nothing can disappear into it.
+colour 0 is the room's background and logical 3 is Harry's yellow, or
+white in the rooms where that shows more of the room in its right colours
+(decisions 6, 18 and 24). Every Spectrum colour is then mapped to one of
+the four by brute force, under two rules. Ink and paper must stay
+different in every cell the room draws, and no colour may match the
+background, so that nothing can disappear into it.
 
 The status bar is white on black, which many rooms' four colours don't
 include, so it has its own palette: a timer on the User VIA interrupts
 just before row 2 and changes the palette in the horizontal blank, every
 frame. Rooms that need more than four colours get up to two more of these
-**splits** (decision 15, an idea of Rich Talbot-Watkins's and Matt's):
+splits (decision 15, an idea of Rich Talbot-Watkins's and Matt's):
 below a split, logical colour 2 shows a different colour, and the drawing
 maps Spectrum colours afresh for those rows.
 
@@ -620,18 +625,19 @@ neighbours, so each logical colour has four entries. Changing one colour
 is four writes, which fit in the 32-microsecond horizontal blank; two
 colours would need eight, too many to fit reliably with the interrupt's
 jitter. A split is also never put where an object would straddle it and
-change colour halfway (decision 24). In all there are 49 splits in 35
-rooms, and 99.48% of the rooms' pixels show in their original colour.
+change colour halfway. With that rule, decision 24 (2026-10-04) counted
+49 splits and 99.48% of the rooms' pixels in their original colour.
 
 ### Owning the machine
 
 Once the game is running it owns the BBC outright (decision 11). Its
 interrupt handler takes over IRQ1V and listens only to the vertical sync
-and the User VIA timer for the splits. It makes no OS calls at all: the
-keyboard is read straight from the System VIA, the sound chip is written
-directly, and parts of the OS's workspace in pages 1 and 2 hold the
-game's tables. The stack keeps only its top 64 bytes; the deepest it was
-ever measured to go is 22 bytes (decision 19).
+and the User VIA timer for the splits. It makes no OS calls at all. The
+keyboard is read straight from the System VIA and the sound chip is
+written directly. The OS's workspace is put to use too: the three maps
+fill the pages from `&0400`, and page 1 below the stack holds tables. The
+stack keeps only the top of its page, with a generous margin over the
+deepest it has been measured to go (decisions 19 and 40).
 
 There is one thing the game leaves alone: the OS memory that a soft
 BREAK reads, so that BREAK in play comes back cleanly to the menu
@@ -656,25 +662,47 @@ the tile's own or Harry's.
 For speed the frames are stored a column at a time, so the drawing just
 steps down a column (decision 20); and to save space, each frame leaves
 out its empty top and bottom lines, and frames that are mirror images of
-others are stored as a 4-byte pointer to their twin, drawn turned over
-(decision 26).
+others are stored as a short stub pointing at their twin, drawn turned
+over (decision 26).
 
 ### Memory
 
-Beside its 12K screen, the port's code and data come to about 32K, and a
-Model B has about 20K beside that screen ([stock-b.md](stock-b.md) has the
-budget). So the port needs a BBC with 16K of sideways RAM, or a Master
-(decisions 3, 8 and 16). The data that doesn't change lives in a
-sideways RAM bank, which the game pages in and leaves paged in, so it
-reads like ordinary memory at `&8000`.
+The game's code and data are far bigger than the room a Model B has left
+beside its 12K screen ([stock-b.md](stock-b.md) has the budget). So there
+are two editions of the port, built from the same source and both on the
+same disc, and `MENU` picks one when you play.
+
+CE2, the first, needs 16K of sideways RAM or a Master (decisions 8 and
+16). The data that doesn't change lives in a sideways RAM bank, which the
+game pages in and leaves paged in, so it reads like ordinary memory at
+`&8000`.
+
+CE2S runs on a stock 32K Model B (decision 29, and
+[streaming.md](streaming.md) tells the story). It keeps only the rooms it
+needs in main RAM and reads each one from the disc as Harry walks in,
+with its own reader for the B's 8271 and the Master's 1770 disc
+controllers, driven by an NMI routine and not the DFS. To make that
+possible each room became a record of its own: its packed room, its
+monsters, its palette bands and the sprite frames its monsters and
+machines use (decision 28), and later the places and pictures of the
+fixed things in it (decisions 30 and 42 to 44). Rooms are kept in a cache,
+and while the game waits for the vertical sync the reader fetches
+the room behind the exit Harry is nearest or heading for (decisions 31,
+34 and 35). If he gets there first, the screen blanks while the room is
+read, which the original never does. The disc has to stay in the drive
+while CE2S plays. A Master can play either edition, D on the menu
+switching between them (decision 32), so a Master can test the stock B's
+edition too.
 
 ![A diagram of memory. Main RAM: zero page, page 1 with the stack, pages 2-3, the three maps at &0400-&0CFF, LowState at &0D00, code and tables, a little free space, and the screen at &5000-&7FFF. The sideways RAM bank at &8000: the mailbox, the palettes and bands, the packed rooms, the sprites, the tile font and some free space. Text uses the OS ROM's font at &C000.](images/memory-map.png)
 
-Getting there took a good deal of measuring and packing: the rooms
-(decisions 5 and 21), the sprite frames (decision 26), reading text
-straight from the OS ROM's font instead of copying the Spectrum's
-(decisions 4 and 14), and moving the most used variables into zero page
-(decision 19).
+The picture shows the sideways RAM edition. Getting both editions to fit
+took a good deal of measuring and packing. The rooms are packed (decisions
+5 and 21) and so are the sprite frames (decision 26). Text is read
+straight from the OS ROM's font instead of a copy of the Spectrum's
+(decisions 4 and 14), the most used variables moved into zero page
+(decision 19), and only the current egg's toy is kept in memory (decision
+45).
 
 ### The front end, and the way back to it
 
@@ -682,22 +710,25 @@ The original's instructions, menu, high-score table, key redefinition and
 tape saving didn't fit beside the game, and saving to disc needs the OS
 and the disc filing system, which the running game has pushed out. So the
 front end is a separate program, `MENU`, in MODE 7, with the original's
-text where the original put it (decision 13). It finds a free sideways RAM
-bank, loads the game's data into it, and runs the game.
+text where the original put it (decision 13). If it finds a free sideways
+RAM bank it loads the game's data into it and runs CE2; if not, it runs
+CE2S. It keeps the high-score table on the disc as well, saving it
+whenever a new score goes in (decisions 38 and 41).
 
 ![The MODE 7 menu: the high-score table, then P to play, R to redefine keys, L to load a saved game, S to save the table and I for the instructions.](images/menu.png)
 
-Getting back is the clever part: the game resets the machine. It copies
-its state (zero page, LowState, the things and the monster table) to a
-block of memory a reset leaves alone, writes why it stopped into a
-mailbox in the sideways bank (game over, abort, or save), puts back the
-OS bytes it borrowed, sets the start-up option that makes BREAK boot the
-disc without SHIFT, and jumps through the reset vector. The disc boots,
-`MENU` runs, reads the mailbox and carries on: it checks a game-over score
-against the table, or saves the game to disc and runs the game again,
-which picks up from the block exactly where it left off, just as the
-original carries on after its tape save. On a Master the loader prepares
-the reset a little differently (decision 16).
+Getting back is the clever part, because the game resets the machine. It
+copies its state (its zero page, LowState and the moving things) to a
+block of memory a reset leaves alone, and writes why it stopped (game
+over, abort or save) into a mailbox, which is in the sideways bank for
+CE2 and at the top of main RAM for CE2S. Then it puts back the OS bytes
+it borrowed, sets the start-up option that makes BREAK boot the disc
+without SHIFT, and jumps through the reset vector. The disc boots and
+`MENU` runs, reads the mailbox and carries on from there. It checks a
+game-over score against the table, or saves the game to disc and runs the
+game again, which picks up from the block exactly where it left off, just
+as the original carries on after its tape save. On a Master the loader
+prepares the reset a little differently (decision 16).
 
 The menu has the original's developers' cheats too, hidden behind f0
 (decision 27).
@@ -706,11 +737,29 @@ The menu has the original's developers' cheats too, hidden behind f0
 
 The original has three sounds, all on the beeper: a tick while Harry
 moves, the train's crackle and the life-lost tune. The port plays them on
-the BBC's SN76489 sound chip (decision 12): the tune on one tone channel,
-each note's pitch and length measured from the original; the tick as two
-cycles of another tone channel at the original's pitch, which changes with
-Harry's state; and white noise for the train. The tune is timed on the
-User VIA's second timer, so the palette splits carry on while it plays.
+the BBC's SN76489 sound chip (decision 12). The tune goes on one tone
+channel, with each note's pitch and length measured from the original.
+The tick is two cycles of another tone channel at the original's pitch,
+which changes with Harry's state, and the train is white noise. The tune
+is timed on the User VIA's second timer, so the palette splits carry on
+while it plays.
+
+CE2 adds something the original never had, music in play (decisions 46 to
+49). It's the Dance of the Sugar Plum Fairy from Tchaikovsky's *The
+Nutcracker*, a ballet with toys that come to life and a Land of Sweets,
+which suits a chocolate egg factory. `tools/mkmusic.py` turns a CC BY 4.0
+MIDI arrangement for flutes ([music/README.md](../music/README.md)) into
+three voices for the chip's tone channels, and the VSync interrupt plays
+them (`src/music.6502`). Each voice is a simple instrument with its own
+volume envelope: a chime for the tune, a flute with a little vibrato
+inside, and a pizzicato bass with a pluck of noise on each note. The
+game's own sounds take priority, borrowing channels and handing them back,
+and M switches the music off and on. With the music on, the life-lost
+tune is played on the same instruments. It's still the original's notes,
+an octave up, with a quiet harmony and a bass added under it, and the
+music picks up where it left off after a short pause. With the music off,
+the tune is the original's on its own, as before. CE2S has no music,
+because its room cache needs the memory more.
 
 ## How the port is kept faithful
 
@@ -736,10 +785,11 @@ port with the same keys held over the same passes, and both log, at the
 top of every pass: Harry's room, cell, `yf`, `xf`, state, facing, jump
 count and fall counter; every monster; the random number generator; the
 score, lives, carried thing, factory flags and the round robin's state;
-the falling thing, the train, and the room of every portable thing.
-`tools/passcmp.py` compares them. `tests/scenarios.txt` holds 22
-scenarios, from the opening jump out of the truck to dying four times at
-the dog, riding lifts, delivering an egg and the cheats. A scenario can
+the falling thing, the train, the room of every portable thing and which
+fixed things are out of the world. `tools/passcmp.py` compares them. The
+scenarios in `tests/scenarios.txt` run from the opening jump out of the
+truck to dying four times at the dog, riding lifts, pulling the
+generator's lever, delivering an egg and the cheats. A scenario can
 start Harry anywhere with the power on, the factory in any state and a
 thing in his hands, set up the same way on both machines.
 
@@ -772,5 +822,7 @@ wait for the vertical sync: not one pixel may change, because the
 collision test reads the screen. `tools/frametime.mjs` measures the cycles
 between waits in every room, to keep every pass inside its three frames.
 
-`make check` runs the lot (the rooms, the scenarios, the front end and the
-sound), and `make check MODEL=Master` runs it all again on a Master 128.
+`make check` runs the lot: the rooms, the scenarios, where Harry first
+appears on entering a room, the front end, the sound, the music and each
+egg's toy. `make check MODEL=Master` runs it all again on a Master 128,
+and `STREAM=1` does the same for CE2S.

@@ -1,69 +1,70 @@
 # Optimising this code: what the fleet learnt
 
-Nine agents went through the source in October 2026 looking for bytes
-and cycles (a byte saved in main RAM is a byte more of CE2S's room cache,
-and room for new things like music). This is what kept coming up, to
-apply anywhere. The findings themselves went in as commits.
+In October 2026 nine agents went through the source looking for bytes
+and cycles, and two smaller rounds followed (the journal has them). A byte
+saved in main RAM is a byte more of CE2S's room cache, and room for new
+things such as the music. This is what kept coming up, and it applies
+anywhere. The findings themselves went in as commits.
 
-## How to look (why this pass found three times the earlier ones)
+## How to look
 
-Earlier squeezes were aimed at a number (the cache past 1,021; claw back
-what a fix cost) and stopped when it was reached: the big structural
-moves, a skim of the rest. This pass found about 1,200 bytes in ~9K of
-resident code, nearly all of it 1-5 bytes at a time, each a proof about
-one instruction. What made the difference:
+Earlier squeezes aimed at a number, such as a cache big enough for a
+pair of rooms or clawing back what a fix cost, and stopped when they
+reached it, with the big structural moves done and the rest skimmed. The
+fleet found several times as much, nearly all of it 1-5 bytes at a time,
+each a proof about one instruction. What made the difference:
 
-1. **Exhaustive, not opportunistic.** Every routine, a dozen instructions
-   at a time, each asked the same questions. Split the code so each
-   reader owns a few hundred lines and can afford to be thorough.
-2. **A checklist to search with** (the sections below): test each line
-   against each pattern, rather than waiting to notice something.
-3. **The measuring loop in the reader's hands**: build, read the arena,
-   run the exact oracles (`screencmp`, `make passes`, `roomcmp`). Proving
-   a carry is known is only worth it if a test catches you when you're
-   wrong; with them, go round again until a round finds little.
-4. **Question the data, not just the code.** The biggest single win came
-   from asking of every resident table who reads it and when: only on
-   room entry (into the records), a run of numbers (a range, not a
-   table), or left behind by a format change (now redundant).
-5. **Shared structures collide.** Tables several passes reshape
+1. **Be exhaustive.** Every routine was read a dozen instructions at a
+   time, with the same questions asked of each. Split the code so that
+   each reader owns a few hundred lines and can afford to be thorough.
+2. **Search with a checklist** (the sections below). Test each line
+   against each pattern instead of waiting to notice something.
+3. **Give the reader the measuring loop**: build, read the arena's size,
+   and run the exact oracles (`screencmp`, `make passes`, `roomcmp`).
+   Proving a carry is known is only worth it if a test catches you when
+   you're wrong. With the tests to hand, go round again until a round
+   finds little.
+4. **Question the data as well as the code.** The biggest single win came
+   from asking who reads each resident table, and when. A table read only
+   on entering a room can go into the records, a run of numbers can be a
+   range, and a format change can leave a table redundant.
+5. **Shared structures collide.** Tables that several readers reshape
    (`band_ula`, the frame table, the scratch zero page, the reader's slot)
-   need one owner, or the passes run one after another.
+   need one owner, or the readers have to take turns.
 
 ## Space first, where it counts
 
 - **Every byte of main-RAM code or data is a byte of CE2S's cache.**
-  Shared code first: it helps both editions. Measure the arena
-  (`make STREAM=1` prints it) with a fixed `BUILD=`, as the stamp's
+  Shared code comes first, as it helps both editions. Measure the arena
+  (`make STREAM=1` prints it) with a fixed `BUILD=`, because the stamp's
   length moves it byte for byte.
-- **Savings are quantised by alignment pads.** `band_ula` mustn't cross
-  a page, so main.6502 pads 0-11 bytes before it: a saving can vanish or
-  double depending on where the code ends. Tables that must stay within a
-  page (`spread_lo`, `spread_rev`, `band_ula`) move when code before them
-  shrinks; put them first, where nothing earlier changes.
-- **Data only room set-up reads belongs in the rooms' records**, not
-  resident (palettes, band maps, monster types). The records are the
+- **Alignment can swallow a saving.** A table that must stay within a
+  page moves when the code before it shrinks, and a pad to keep it there
+  can make a saving vanish or double. `band_ula` once had such a pad; it
+  now starts the `Code` section, where nothing before it changes.
+  `spread_lo` and `spread_rev` keep to one page by an `ASSERT`.
+- **Data only room set-up reads belongs in the rooms' records** rather
+  than resident (palettes, band maps, monster types). The records are the
   overlay system. Data read everywhere stays resident.
-- **After a format change, look for what it left redundant** (group
-  headers kept every frame's number after the lookup stopped using it),
-  and for the limits it can hit (`room_len4`'s 1,024-byte cap).
-- **Recompute rather than store** when it's cheap and rare (item lengths
-  from `room_len4`), and drop flags that duplicate other state (`ld_on`
-  was `fdc_state` not 0).
-
-- **Look for slack in every fixed region**, not just the code: the fixed
-  zero page's tail, LowState's tail, the bytes the MOS's IRQ entry leaves
-  at the top of page 0, page 1 under a stack measured again, and the
+- **After a format change, look for what it left redundant**, as group
+  headers kept every frame's number after the lookup stopped using it.
+  Look too for the limits it can hit: `room_len4`'s byte overflowed when
+  room 120's record grew (decision 42).
+- **Recompute rather than store** when it's cheap and rare, as item
+  lengths are worked out from `room_len4`. Drop flags that duplicate other
+  state: `ld_on` was only ever `fdc_state` not 0.
+- **Look for slack in every fixed region** as well as the code: the tail
+  of the fixed zero page and of LowState, the bytes the MOS's IRQ entry
+  leaves at the top of page 0, page 1 under a stack measured again, and
   variables a round leaves unused. A variable moved into zero page saves
-  its bytes of main RAM and a byte at every access but `abs,Y` (`LDA`/`STA`
-  have no `zp,Y`; `LDX`/`STX` do, and `STX zp,Y` replaces
-  `PHA : TXA : STA abs,Y : PLA`). Swap by use: a test-only variable gave
-  its saved zero-page byte to one used often.
-- **A table's place can make pads go away for good**: `band_ula`, which
-  mustn't cross a page, now starts the `Code` section.
-- **Recursion hides from a measured stack**: a routine that recurses on
-  the data (`add_score`, a level a carried digit) only goes deep when the
-  data does. Bound it from the code, or make it a loop.
+  its bytes of main RAM and a byte at every access except `abs,Y`, since
+  `LDA` and `STA` have no `zp,Y` (`LDX` and `STX` do, and `STX zp,Y`
+  replaces `PHA : TXA : STA abs,Y : PLA`). Swap by use: a test-only
+  variable gave its zero-page byte to one used often.
+- **Recursion hides from a measured stack.** A routine that recurses on
+  its data only goes deep when the data does: the original's `add_score`
+  went a level deeper for each carried digit. Bound it from the code, or
+  make it a loop (decision 40).
 
 ## Flags and registers already known
 
@@ -98,10 +99,11 @@ one instruction. What made the difference:
 - **Branch to a nearby `JMP common`** rather than writing another JMP.
   Baron's scoped labels (`BNE wipe_lights.done`) let routines share an
   RTS.
-- **Always-taken branches confuse baron's allocator**: it follows both
+- **Always-taken branches confuse baron's allocator.** It follows both
   ways, so at the end of a `{ }` scope it thinks control falls into the
   next routine ("No free zero-page byte", "held live across recursion").
-  Use `JMP` there, or put the branch where its fall-through is harmless.
+  Put `ZA_UNREACHABLE` after the branch, which prunes the fall-through for
+  no bytes.
 - **Jump tables**: put the second entry's code right after the first
   JMP.
 
@@ -155,27 +157,28 @@ one instruction. What made the difference:
   saving in main RAM changes CE2S's cache, so check both editions. If
   CE2S fails, pad the arena back with `SKIP n` before `code_end` to tell
   a patch bug from a cache-size one.
-- `tools/screencmp.mjs` old disc against new catches frame differences
-  the passes don't log (it finds nowhere to stand Harry in rooms 1-4 and
-  71, so those compare nothing).
+- `tools/screencmp.mjs`, run on the old disc against the new, catches
+  frame differences the passes don't log. It skips the rooms where it
+  finds nowhere to stand Harry, rooms 1-4 among them.
 - Targeted fuzz against the original (`fuzz.run_case` with a start
   state) for ropes, ladders and lifts, which random walks barely reach.
 - A state dump against the base build (bands, palettes, frame tables)
   when a big edit fails: `roomcmp` doesn't see IRQ or palette state.
 - IRQ changes: time each palette write relative to VSync, not
   screenshots; retune in whole microseconds.
-- Pure logic (the cache) can be run side by side on a 6502 core
-  (`m6502.py`, `cachediff.py` from that pass), with the arenas padded to
-  the same size: jsbeeb's random walks diverge on timing alone.
+- Pure logic such as the cache can be run side by side on a 6502 core,
+  with the arenas padded to the same size, as jsbeeb's random walks
+  diverge on timing alone. (That pass's `m6502.py` and `cachediff.py`
+  weren't committed.)
 - A `;` comment in the middle of a colon-separated line swallows the
   rest of the line, silently.
 - A copy loop ending `DEX : BPL` copies one byte once its count passes
   128: the reader's slot grew past it and CE2S crashed at its first read.
 - Room-change times on the B (`roomwait.mjs`) move with any change to
-  the reader's timing, the cache's logic unchanged: a background read
-  misses a revolution when its next sector's command comes late. Prove
-  the logic on the 6502 core first (`cachediff`, equal arenas, and a
-  small arena to reach the give-up path), then compare the times; the
-  Master's (1770) agree to the millisecond.
+  the reader's timing even when the cache's logic is unchanged, because a
+  background read misses a revolution when its next sector's command
+  comes late. Prove the logic on the 6502 core first (equal arenas, and a
+  small arena to reach the give-up path), then compare the times. The
+  Master's 1770 times agree to the millisecond.
 - Give scratch worktrees unique names, and never `pkill -f` a pattern
   another run might share.

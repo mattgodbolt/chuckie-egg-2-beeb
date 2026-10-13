@@ -1,25 +1,44 @@
 """The BBC's memory as the game uses it (docs/memory-map.md, build/listing.txt)."""
+import json
 import math
+import os
 from PIL import Image, ImageDraw
-from util import font, mono, save
+from util import REPO, font, mono, save
+
+# The boundaries from the sideways RAM edition's build (make first), so the
+# picture is redrawn true by running this again.
+SYMS = {}
+for asm in json.load(open(os.path.join(REPO, "build", "ce2.r.json")))["assemblies"]:
+    for sec in asm["sections"]:
+        for k, v in sec.get("labels", {}).items():
+            if "@" not in k and "." not in k:
+                SYMS[k] = v["value"]
+        for k, v in sec.get("assignments", {}).items():
+            if "@" not in k and "." not in k and isinstance(v.get("value"), (int, float)):
+                SYMS[k] = int(v["value"])
+S = SYMS.__getitem__
+
+
+def free(n):
+    return f"{n:,} bytes"
+
 
 MAIN = [  # (start, end exclusive, label, detail, colour)
     (0x0000, 0x0100, "zero page", "the game's state and scratch", (90, 120, 200)),
-    (0x0100, 0x0200, "page 1", "tables, and the stack in its top 64 bytes", (110, 110, 160)),
-    (0x0200, 0x0400, "pages 2-3", "the interrupt vector, tables; the rest the OS's", (120, 120, 120)),
+    (0x0100, 0x0200, "page 1", "tables, then the stack", (110, 110, 160)),
+    (0x0200, 0x0400, "pages 2-3", "the interrupt vector; the rest the OS's", (120, 120, 120)),
     (0x0400, 0x0D00, "the three maps", "attribute &0400, tile &0700, cell type &0A00", (60, 150, 90)),
-    (0x0D00, 0x0E00, "LowState", "monsters, checkpoint, score, lives", (90, 120, 200)),
-    (0x0E00, 0x44F5, "code and tables", "Harry, monsters, objects, machines, drawing...", (200, 120, 60)),
-    (0x44F5, 0x5000, "free", "about 2.8K", (50, 50, 50)),
-    (0x5000, 0x8000, "screen", "256 x 192, MODE 1 pixels", (170, 60, 60)),
+    (0x0D00, 0x0E00, "LowState", "checkpoint, monsters, score, lives; the room's groups", (90, 120, 200)),
+    (S("code_start"), S("music"), "code and tables", "Harry, monsters, objects, machines, drawing...", (200, 120, 60)),
+    (S("music"), S("code_end"), "the music", "the Sugar Plum Fairy's events and pitches", (170, 90, 150)),
+    (S("code_end"), S("screen"), "free", free(S("screen") - S("code_end")), (50, 50, 50)),
+    (S("screen"), 0x8000, "screen", "256 x 192, MODE 1 pixels", (170, 60, 60)),
 ]
 BANK = [
-    (0x8000, 0x8105, "mailbox", "keys, scores, the RNG: survives the reset", (150, 90, 170)),
-    (0x8105, 0x82FF, "palettes, bands", "their code, 49 splits, 30 palettes", (60, 150, 150)),
-    (0x82FF, 0x9F1D, "packed rooms", "6,845 bytes and their code tables", (60, 150, 90)),
-    (0x9F1D, 0xB7E0, "sprites", "Harry, monsters, truck, train, lifts", (200, 160, 50)),
-    (0xB7E0, 0xB9C0, "tile font", "60 tiles x 8 bytes", (200, 120, 60)),
-    (0xB9C0, 0xC000, "free", "about 1.6K", (50, 50, 50)),
+    (0x8000, S("mailbox"), "mark", "how the front end knows the bank", (120, 120, 120)),
+    (S("mailbox"), S("mailbox_end"), "mailbox", "keys, scores, high scores: kept over a reset", (150, 90, 170)),
+    (S("records"), S("data_end"), "the rooms' records", "each room, its colours and monsters, and sprites", (60, 150, 90)),
+    (S("data_end"), 0xC000, "free", free(0xC000 - S("data_end")), (50, 50, 50)),
 ]
 
 
@@ -37,8 +56,8 @@ img = Image.new("RGB", (x_bank + colw + 330, H), (28, 28, 28))
 d = ImageDraw.Draw(img)
 d.text((x_main, 12), "Main RAM (32K)", font=font(16), fill=(240, 240, 240))
 d.text((x_bank, 12), "Sideways RAM bank, paged in at &8000 (16K)", font=font(16), fill=(240, 240, 240))
-d.text((x_main, H - 34), "Heights are not to scale. Figures from the build at the time of writing; "
-       "the build prints the current ones.", font=fs, fill=(170, 170, 170))
+d.text((x_main, H - 34), "Heights are not to scale. The sideways RAM edition, from the build "
+       "(tools/guide/memmap.py redraws it).", font=fs, fill=(170, 170, 170))
 
 
 def column(x, blocks):

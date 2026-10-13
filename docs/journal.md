@@ -1791,3 +1791,9 @@ four DELETEs typed after "NONE", three took effect, so the next name was
 "NCE2". When one key is pressed several times, the OS counts a new press
 only after it has seen the key released. frontcheck's `type` left
 0.05s between presses, enough until the timing moved. It leaves 0.1s now.
+
+The menu now says "M IN GAME: MUSIC ON/OFF" on row 21, which is free in
+the original's layout. Matt asked for it so that nobody is surprised by
+music the original never had. The line only appears when the sideways
+RAM edition is the one P plays, and `make front` checks that it isn't
+there for CE2S.

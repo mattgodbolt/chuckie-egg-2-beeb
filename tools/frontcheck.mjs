@@ -305,8 +305,10 @@ try {
     await b.call("reset", { session_id: b.session_id, hard: false });
     check(await menuReady(), "BREAK: the menu");
     if ((await screen()).includes("D TO PLAY FROM DISC")) {
+        check((await screen()).includes("M IN GAME: MUSIC ON/OFF"), "sideways RAM: the menu mentions M for the music");
         await hold("D", 0.1);
         check(await waitText("FROM DISC: D FOR RAM", 10), "D: the streaming edition chosen");
+        check(!(await screen()).includes("MUSIC"), "... which has none, so no mention of it");
         await b.run(0.5);
         await hold("P", 0.1);
         await b.run(10);
@@ -322,6 +324,7 @@ try {
         check(r.stopped_reason === "breakpoint", "... P plays CE2");
     } else {
         check(!(await screen()).includes("FROM DISC"), "no sideways RAM: no choice of edition");
+        check(!(await screen()).includes("MUSIC"), "... and no music to mention");
     }
 } finally {
     await b.close();

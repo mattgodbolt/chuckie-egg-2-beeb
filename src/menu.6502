@@ -518,6 +518,8 @@ CAT_BUF = MB_XFER               ; (free until run_game)
     EQUS "1" : EQUB 0
     EQUB &FF
 .edition_ram
+    \ (Only the sideways RAM edition has music: decision 46.)
+    EQUB 21, 2, 7, 0 : EQUS "M IN GAME: MUSIC ON/OFF" : EQUB 0
     EQUB 22, 2, 7, 0 : EQUS "D TO PLAY FROM DISC" : EQUB 0
     EQUB &FF
 .edition_disc

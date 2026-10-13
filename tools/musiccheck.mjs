@@ -7,8 +7,9 @@
 // borrows it), a voice in MU_BLIPS an octave up for a note's first frame
 // and then at its pitch. Then M: the music off (silent, and it stays where it was)
 // and on again. Then the life-lost tune, with the music on: the music
-// plays it (music + MU_DEATH, harmonised), and then carries on from where
-// it was.
+// plays it (music + MU_DEATH, harmonised), its last chord ringing on
+// after the game's frozen time, and then after MU_GAP frames' silence
+// carries on from where it was.
 //
 //   node tools/musiccheck.mjs [seconds]
 //
@@ -22,6 +23,7 @@ if (edition("build/test.json") !== "build/test.json") {
     process.exit(0);
 }
 const data = readFileSync("src/data/music.bin");
+let mudeath;
 
 // The player's position, from the machine.
 async function state(b) {
@@ -62,7 +64,8 @@ function play(s, frames, base, out, divider, blips) {
                 s.left = byte();
                 s.ret = s.ptr;
                 s.ptr = base + at;
-            } else { s.ptr = base; s.left = 0; }
+            } else if (s.ptr > base + mudeath) { s.resumed = true; break; }   // the tune's end
+            else { s.ptr = base; s.left = 0; }
         }
     }
     return s;
@@ -73,6 +76,7 @@ let failed = false;
 const fail = (msg) => { console.log(`DIFFERS: ${msg}`); failed = true; };
 try {
     const base = b.addr("music");
+    mudeath = b.addr("MU_DEATH");
     const latch = await b.read("music_latch", b.addr("music_data") - b.addr("music_latch"));
     const dataTab = await b.read("music_data", latch.length);
 
@@ -152,7 +156,7 @@ try {
     const before = await state(b);
     await b.call("start_sound_capture", { session_id: b.session_id });
     const v0 = await b.peek("vsyncs");
-    r = await b.runUntil("music_death_end", 5);
+    r = await b.runUntil("music_resume", 10);
     if (r.stopped_reason !== "breakpoint") fail("the life-lost tune didn't end");
     const dframes = ((await b.peek("vsyncs")) - v0 + 256) & 255;
     const dlog = (await b.call("stop_sound_capture", { session_id: b.session_id, max_entries: 1e6 })).content[0].text;
@@ -163,21 +167,21 @@ try {
         if (w & 0x80 && !(w & 0x10) && (ch === 0 || ch === 2)) dseen[ch].push(((dwrites[i + 1] & 0x3f) << 4) | (w & 15));
     }
     const dnotes = [];
-    const silent = { ptr: base + b.addr("MU_DEATH"), ret: 0, left: 0, wait: 0, blip: 0, note: [255, 255, 255] };
-    play(silent, dframes, base, dnotes, divider, b.addr("MU_BLIPS"));
+    const silent = { ptr: base + mudeath, ret: 0, left: 0, wait: 0, blip: 0, note: [255, 255, 255] };
+    // (music_resume is in the last frame's tick: vsyncs counted it.)
+    const ended = play(silent, dframes, base, dnotes, divider, b.addr("MU_BLIPS"));
+    if (!ended.resumed) fail(`the life-lost tune ended at frame ${dframes}, its data runs on`);
     for (const ch of [0, 2]) {
         const a = dseen[ch].join(","), e = dnotes.filter(([c]) => c === ch).map(([, d]) => d).join(",");
         if (a !== e) fail(`life-lost tune, channel ${ch}:\n  seen ${a}\n  want ${e}`);
     }
-    // Then the music from where it was: some frames on from there.
-    await b.runUntil("game_loop", 10);
+    // Then the music from where it was (its repeat's count too), after a gap.
+    await b.runUntil("music_tick", 1);
     const after = await state(b);
-    let k = 0;
-    for (; k < 200; k++) {
-        const s = play(before, k, base, [], divider, b.addr("MU_BLIPS"));
-        if (s.ptr === after.ptr && s.left === after.left && s.wait === after.wait) break;
-    }
-    if (k === 200) fail("after the life-lost tune the music isn't where it was");
+    const gap = b.addr("MU_GAP");
+    if (after.ptr !== before.ptr || after.ret !== before.ret || after.left !== before.left
+        || after.wait !== before.wait + gap - 1)
+        fail(`after the life-lost tune the music isn't where it was, MU_GAP on: ${JSON.stringify(before)} then ${JSON.stringify(after)}`);
     console.log(`life-lost tune: ${dframes} frames, ${dnotes.length} dividers${failed === was ? ", the music's, then the music again" : ""}`);
 } finally {
     await b.close();

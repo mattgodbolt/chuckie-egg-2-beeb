@@ -141,9 +141,14 @@ ASSERT mu_wait = mu_ptr + MU_PLACE - 1
     JMP read
 .not_note
     CMP #&FE : BCC wait : BEQ repeat
-    \ &FF: from the start again.
+    \ &FF: from the start again; or the life-lost tune's, past the music's.
+    LDA mu_ptr : CMP #LO(music + MU_DEATH + 1)
+    LDA mu_ptr+1 : SBC #HI(music + MU_DEATH + 1) : BCS tune_end
     JSR music_init.from_start
     JMP read
+.tune_end
+    JSR music_resume
+    JMP frame_done
 .wait
     SBC #&BF                        ; (carry clear) the frames less one
     STA mu_wait
@@ -306,10 +311,15 @@ ASSERT mu_wait = mu_ptr + MU_PLACE - 1
 
 \ The life-lost tune (sound.6502's death_tune): the music's place kept,
 \ every voice silent, and the player on to the tune's events (music +
-\ MU_DEATH: tools/mkmusic.py), which it plays from the next VSync.
+\ MU_DEATH: tools/mkmusic.py), which it plays from the next VSync. They
+\ end in an &FF, which puts the music back (music_resume) once the last
+\ chord has rung, the game going on meanwhile. A life lost before then
+\ plays the tune again, and the place kept is still the music's.
 .music_death
 {
     INC mu_busy                     ; (the interrupt out until it's set up)
+    LDA mu_ptr : CMP #LO(music + MU_DEATH)
+    LDA mu_ptr+1 : SBC #HI(music + MU_DEATH) : BCS dying
     LDX #MU_PLACE - 1
 .keep
     LDA mu_ptr,X : STA mu_place,X
@@ -318,25 +328,20 @@ ASSERT mu_wait = mu_ptr + MU_PLACE - 1
 .keep_notes
     LDA mu_note,X : STA mu_notes,X
     DEX : BPL keep_notes
+.dying
     LDA #LO(music + MU_DEATH) : STA mu_ptr
     LDA #HI(music + MU_DEATH) : STA mu_ptr+1
-.silence
-    \ (and music_death_end's)
-    JSR music_quiet
-    LDX #3
-.voice
-    LDA #0 : STA mu_pos,X : STA mu_cnt,X    ; mu_envs's silence
-    DEX : BPL voice
-    LDA #0 : STA mu_left : STA mu_wait : STA mu_owed : STA mu_blip : STA mu_dirty
+    LDA #0 : STA mu_left : STA mu_wait : STA mu_owed
+    JSR mu_silence
     DEC mu_busy
     RTS
 }
 
-\ ... and after it: the music where it was, its voices silent until their
-\ next notes.
-.music_death_end
+\ The tune's &FF (music_tick's): the music where it was, after MU_GAP
+\ frames of silence, its voices silent until their next notes.
+MU_GAP = 15                         ; frames between the tune and the music
+.music_resume
 {
-    INC mu_busy
     LDX #MU_PLACE - 1
 .back
     LDA mu_place,X : STA mu_ptr,X
@@ -345,7 +350,22 @@ ASSERT mu_wait = mu_ptr + MU_PLACE - 1
 .back_notes
     LDA mu_notes,X : STA mu_note,X
     DEX : BPL back_notes
-    JMP music_death.silence         ; (which lets the interrupt back)
+    JSR mu_silence
+    LDA mu_wait : CLC : ADC #MU_GAP - 1 : STA mu_wait     ; (this frame the first)
+    RTS
+}
+
+\ Every voice silent, at mu_envs's silence, nothing owed to the chip.
+.mu_silence
+{
+    JSR music_quiet
+    LDX #3
+    LDA #0
+.voice
+    STA mu_pos,X : STA mu_cnt,X
+    DEX : BPL voice
+    STA mu_blip : STA mu_dirty
+    RTS
 }
 
 \ Silence the music's voices: the life-lost tune takes them, or M

@@ -33,15 +33,16 @@ string's does.
 The life-lost tune (sound.6502's death_tune; decision 49) is the
 original's 16 notes, with their lengths, for the tune's voice an octave
 up (no room for a bass under them otherwise), over a harmony and a bass
-written for it. Its events follow the music's and end in waits: the game
-plays it for the original's time and then puts the music back.
+written for it. Its events follow the music's: the game is frozen for
+the original's time, the last chord rings on for DEATH_RING frames, and
+an FF then puts the music back (music.6502's music_resume).
 
 The events:
     00-BF   a note: the pitch table's entry
     C0-FD   the next events are (byte - &BF) frames on
     FE      lo hi len: play the len bytes at music + (hi lo), then carry on
             after the FE's three (a repeat: never nested)
-    FF      back to the start
+    FF      back to the start (after the life-lost tune's: the music back)
 """
 import argparse
 import bisect
@@ -66,6 +67,7 @@ DEATH_TUNE = [(55, 202), (57, 102), (55, 202), (53, 100), (52, 203), (48, 103),
 # under the run up, the seventh falling to E: (tune's note, harmony, bass).
 DEATH_UNDER = [(0, 64, 48), (2, 62, 47), (4, 55, 48), (6, 53, 50), (8, 55, 48),
                (9, 53, 47), (15, 52, 48)]
+DEATH_RING = 50     # frames the last chord rings for before the music's back
 
 
 def death_events():
@@ -283,8 +285,8 @@ def main():
     assert expand(data) == raw
     assert all(b < 0xFE for b in raw)
     # The life-lost tune, after the music: no repeats (they're the music's),
-    # and waits enough after it that the player never reads past them.
-    death_raw = encode(death, table, gap=2 * (0xFE - 0xC0))
+    # its last chord let ring, then the FF that puts the music back.
+    death_raw = encode(death, table, gap=DEATH_RING) + [0xFF]
     open("src/data/music.bin", "wb").write(data + bytes(death_raw))
     with open("src/data/music.6502", "w") as f:
         f.write(f"\\ Made by tools/mkmusic.py from {args.midi}: don't edit.\n")

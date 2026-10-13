@@ -70,7 +70,8 @@ ENDIF
 
 \ The life-lost tune (&A2EB): 16 notes, 2.16s, everything else frozen.
 \ With the music on, the music plays it, harmonised (music_death,
-\ decision 49), and this keeps only its time.
+\ decision 49), and this keeps only its time: the music lets its last
+\ chord ring on after.
 .death_tune
 {
     \ X counts up to 0 through the notes, from 256 less their length.
@@ -105,7 +106,7 @@ ENDIF
 .tune_done
 IF MUSIC
     LDA mu_on : BPL quiet
-    JMP music_death_end
+    RTS
 .quiet
 ENDIF
     LDA #&9F : JMP sound_write

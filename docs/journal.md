@@ -1813,3 +1813,18 @@ changed.
 the bass's dividers are the tune's events, and that the music carries on
 from where it stopped. A build that didn't put the music's place back
 failed it.
+
+Matt heard the tune's last chord cut short, and the music coming straight
+back after it "a bit much". The freeze ended on the last note's first
+frames, and `death_tune` put the music back there and then. Now the
+tune's events go on past the freeze: the last chord rings while the game
+carries on, and an `&FF` at their end has the player put the music back
+(`music_resume`), after `MU_GAP` frames of silence. The `&FF` that
+restarts the music is the one just before the tune's events, so the
+player tells them apart by where it is. Putting the place back used to
+clear the repeat count it had just restored: had the tune come in a
+repeat, the music would have read on past the repeat's bytes. A life
+lost while the chord rings plays the tune again and keeps the music's
+place, not the tune's. `make music` checks the place comes back, the
+repeat count with it, `MU_GAP` frames on; a build without the gap failed
+it.

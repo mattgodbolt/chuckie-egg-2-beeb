@@ -312,8 +312,9 @@ IF DEFINED(STREAM)
 ENDIF
 
     \ What the game needn't save, in LowState's spare bytes (memory.6502),
-    \ out of main RAM.
-    SECTION LowSpare, org = low_state_end, guard = &0D9F, virtual = TRUE
+    \ out of main RAM: LowState reopened, past low_state_end, so that
+    \ whatever else is claimed there comes after these, under its guard.
+    SECTION LowState
 .rg_first   SKIP GROUPS_MAX     ; (rooms.6502's room_load; rg_end and the rest: above)
 IF DEFINED(STREAM)
 .fx_gfx     SKIP 2              ; (room_load: the graphics only the room's fixed things show)

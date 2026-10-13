@@ -146,6 +146,7 @@ SECTION LowState, org = NMI_AREA + &20, guard = &0D9F, virtual = TRUE
 .lives      SKIP 1          ; (&A3FA; MENU reads it in the state block)
 \ (carrying_name, cheat, mon_limit and dog_sat are in zero page, above.)
 .low_state_end
+\ (The bytes after it aren't saved: LowState is reopened for them, main.6502.)
 ENDSECTION
 \ The three 32 x 24 maps the room drawer fills, one byte a cell, indexed by
 \ cell = row * 32 + column, as the original's at &5D00, &6000 and &6300.

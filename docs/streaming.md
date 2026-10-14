@@ -228,13 +228,14 @@ compromise a numbered decision.
 3. **The cache and reading ahead** (decisions 31, 34 and 35). Done, and
    then made bigger by later decisions that moved data out of main RAM
    (36-45).
-4. **The splits.** Not done: the glitch with reads in flight hasn't been
-   measured (`tools/screencmp.mjs` can't see it, though a scan-line probe
-   in jsbeeb could), and none of the mitigations above is in.
+4. **The splits.** Accepted as they are (decision 50). The NMI does now and
+   then glitch a split while a read is in flight, but Matt found it very
+   hard to spot, so none of the mitigations above went in.
 5. **The drive's behaviour and errors.** Partly done, as above: the drive
    rests, reads are retried, and the 8271's not-ready and lost-head cases
    recover. There is no message for a disc taken out.
 6. **Real hardware.** The 1770 reader waits after each command because a
    real WD1770's status isn't valid straight away, which jsbeeb doesn't
    model (decision 34). CE2 has run on Matt's real Master (the journal's
-   "On a real Master"); this file has no record of CE2S on real hardware.
+   "On a real Master"). CE2S hasn't been run on real hardware yet: a
+   test that counts needs a mechanical drive, and Matt's is broken.

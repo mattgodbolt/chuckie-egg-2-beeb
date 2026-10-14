@@ -12,6 +12,9 @@ and none of it is planned.
 
 ## If anyone picks it up again
 
+- **CE2S on a real drive.** It has only been tested in jsbeeb, which is
+  kinder than a real 8271 or 1770 (`docs/streaming.md`). A real machine
+  with a mechanical drive is the test that counts.
 - **More pass-by-pass coverage.** `make fuzz` runs random walks in random
   rooms on both machines. More seeds would help, and so would variants
   that start Harry carrying things or with the factory's flags set, so

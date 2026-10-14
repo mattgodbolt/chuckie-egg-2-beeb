@@ -1844,3 +1844,10 @@ streaming.md describes CE2S as built and not as a plan, and the memory
 map's picture is drawn from the build (`tools/guide/memmap.py`) so it
 can't drift again. The menu's screenshot was retaken, with the M and D
 lines.
+
+### CE2S on hardware, and the splits
+
+Matt hasn't run CE2S on real hardware yet: a fair test needs a mechanical
+drive, and the one Matt has is broken. The NMI does glitch a palette split now and
+then, but it's very hard to spot and Matt thinks it acceptable, so the
+splits stay as they are (decision 50). streaming.md and next-steps.md say so.

@@ -115,7 +115,7 @@ pick it up again.
 
 ## Building
 
-Needs [baron](https://github.com/waitingforvsync/baron) 0.5.3 (looked for at
+Needs [baron](https://github.com/waitingforvsync/baron) 0.6.0 (looked for at
 `../baron/build/src/baron`, else on the PATH), node, and for the Python tools
 [uv](https://github.com/astral-sh/uv).
 

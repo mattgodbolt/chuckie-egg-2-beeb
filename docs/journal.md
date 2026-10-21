@@ -1851,3 +1851,10 @@ Matt hasn't run CE2S on real hardware yet: a fair test needs a mechanical
 drive, and the one Matt has is broken. The NMI does glitch a palette split now and
 then, but it's very hard to spot and Matt thinks it acceptable, so the
 splits stay as they are (decision 50). streaming.md and next-steps.md say so.
+
+### Baron 0.6.0
+
+Baron moved to 0.6.0 (section transforms, loops in `FUNCTION`s, and the
+fixes for the issues Starglider's port raised), in CI too. Every disc
+(both editions' release and test discs, and the viewer) is byte for byte
+what 0.5.3 made, built with the same stamp.
